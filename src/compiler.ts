@@ -1,0 +1,340 @@
+import fs from "node:fs";
+import path from "node:path";
+import matter from "gray-matter";
+import type {
+  SpandrelNode,
+  SpandrelEdge,
+  SpandrelGraph,
+  ValidationWarning,
+} from "./types.js";
+
+const INLINE_LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/g;
+
+export function compile(rootDir: string): SpandrelGraph {
+  const nodes = new Map<string, SpandrelNode>();
+  const edges: SpandrelEdge[] = [];
+  const warnings: ValidationWarning[] = [];
+
+  walkTree(rootDir, rootDir, nodes, edges, warnings);
+  validate(nodes, edges, warnings);
+
+  return { nodes, edges, warnings };
+}
+
+export function recompileNode(
+  graph: SpandrelGraph,
+  rootDir: string,
+  filePath: string
+): void {
+  const nodePath = filePathToNodePath(rootDir, filePath);
+
+  // Remove old node and its edges
+  graph.nodes.delete(nodePath);
+  graph.edges = graph.edges.filter(
+    (e) => e.from !== nodePath && e.to !== nodePath
+  );
+
+  // Re-parse if file still exists
+  const fullPath = path.join(rootDir, ...nodePath.split("/").filter(Boolean));
+  const indexPath = findIndexMd(fullPath);
+  if (indexPath) {
+    const node = parseNode(rootDir, fullPath, indexPath);
+    graph.nodes.set(node.path, node);
+    extractEdges(node, graph.edges);
+
+    // Rebuild hierarchy edges for this node
+    if (node.parent) {
+      graph.edges.push({
+        from: node.parent,
+        to: node.path,
+        type: "hierarchy",
+      });
+    }
+  }
+
+  // Rebuild children lists
+  rebuildChildren(graph);
+
+  // Re-validate
+  graph.warnings = [];
+  validate(graph.nodes, graph.edges, graph.warnings);
+}
+
+function filePathToNodePath(rootDir: string, filePath: string): string {
+  let rel = path.relative(rootDir, filePath);
+  // Strip index.md from end
+  rel = rel.replace(/\/index\.md$/, "").replace(/^index\.md$/, "");
+  // If it's a directory path to index.md, get the directory
+  if (rel.endsWith("/index.md")) {
+    rel = path.dirname(rel);
+  }
+  const nodePath = "/" + rel.split(path.sep).filter(Boolean).join("/");
+  return nodePath === "/" ? "/" : nodePath;
+}
+
+function walkTree(
+  rootDir: string,
+  currentDir: string,
+  nodes: Map<string, SpandrelNode>,
+  edges: SpandrelEdge[],
+  warnings: ValidationWarning[]
+): void {
+  const indexPath = findIndexMd(currentDir);
+  const nodePath = dirToNodePath(rootDir, currentDir);
+
+  if (indexPath) {
+    const node = parseNode(rootDir, currentDir, indexPath);
+    nodes.set(node.path, node);
+    extractEdges(node, edges);
+  } else if (nodePath !== "/") {
+    // Directory without index.md — create a minimal node
+    const children = getContentSubdirs(currentDir);
+    const generatedDesc = children.length > 0
+      ? `Contains: ${children.map((c) => path.basename(c)).join(", ")}`
+      : "Empty directory";
+
+    const node: SpandrelNode = {
+      path: nodePath,
+      name: path.basename(currentDir),
+      description: generatedDesc,
+      nodeType: children.length > 0 ? "composite" : "leaf",
+      depth: nodePath.split("/").filter(Boolean).length,
+      parent: parentPath(nodePath),
+      children: [],
+      content: "",
+      frontmatter: {},
+      created: null,
+      updated: null,
+      author: null,
+    };
+    nodes.set(node.path, node);
+
+    warnings.push({
+      path: nodePath,
+      type: "missing_index",
+      message: `Directory ${nodePath} has no index.md`,
+    });
+  }
+
+  // Build hierarchy edge
+  if (nodePath !== "/") {
+    const parent = parentPath(nodePath);
+    if (parent !== null) {
+      edges.push({ from: parent, to: nodePath, type: "hierarchy" });
+    }
+  }
+
+  // Recurse into subdirectories
+  const subdirs = getContentSubdirs(currentDir);
+  for (const subdir of subdirs) {
+    walkTree(rootDir, subdir, nodes, edges, warnings);
+  }
+
+  // After recursion, set children on this node
+  const node = nodes.get(nodePath);
+  if (node) {
+    node.children = subdirs.map((d) => dirToNodePath(rootDir, d));
+    if (node.children.length > 0) {
+      node.nodeType = "composite";
+    }
+  }
+}
+
+function findIndexMd(dir: string): string | null {
+  const indexPath = path.join(dir, "index.md");
+  if (fs.existsSync(indexPath)) return indexPath;
+  // Check if dir itself is an index.md (for root)
+  if (dir.endsWith("index.md") && fs.existsSync(dir)) return dir;
+  return null;
+}
+
+function getContentSubdirs(dir: string): string[] {
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return [];
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter(
+      (d) =>
+        d.isDirectory() &&
+        !d.name.startsWith("_") &&
+        !d.name.startsWith(".") &&
+        d.name !== "node_modules" &&
+        d.name !== "dist" &&
+        d.name !== "src"
+    )
+    .map((d) => path.join(dir, d.name))
+    .sort();
+}
+
+function dirToNodePath(rootDir: string, dir: string): string {
+  const rel = path.relative(rootDir, dir);
+  if (rel === "" || rel === ".") return "/";
+  return "/" + rel.split(path.sep).join("/");
+}
+
+function parentPath(nodePath: string): string | null {
+  if (nodePath === "/") return null;
+  const parts = nodePath.split("/").filter(Boolean);
+  if (parts.length <= 1) return "/";
+  return "/" + parts.slice(0, -1).join("/");
+}
+
+function parseNode(
+  rootDir: string,
+  dir: string,
+  indexPath: string
+): SpandrelNode {
+  const raw = fs.readFileSync(indexPath, "utf-8");
+  const { data, content } = matter(raw);
+  const nodePath = dirToNodePath(rootDir, dir);
+  const subdirs = getContentSubdirs(dir);
+
+  return {
+    path: nodePath,
+    name: (data.name as string) || path.basename(dir),
+    description: (data.description as string) || "",
+    nodeType: subdirs.length > 0 ? "composite" : "leaf",
+    depth: nodePath === "/" ? 0 : nodePath.split("/").filter(Boolean).length,
+    parent: parentPath(nodePath),
+    children: [], // filled in after recursion
+    content: content.trim(),
+    frontmatter: data,
+    created: null, // filled in by git integration
+    updated: null,
+    author: (data.author as string) || null,
+  };
+}
+
+function extractEdges(node: SpandrelNode, edges: SpandrelEdge[]): void {
+  // Link edges from frontmatter
+  const links = node.frontmatter.links;
+  if (Array.isArray(links)) {
+    for (const link of links) {
+      if (link && typeof link === "object" && "to" in link) {
+        edges.push({
+          from: node.path,
+          to: link.to as string,
+          type: "link",
+          linkType: (link.type as string) || undefined,
+          description: (link.description as string) || undefined,
+        });
+      }
+    }
+  }
+
+  // Authored_by edge from author field
+  if (node.author) {
+    edges.push({
+      from: node.path,
+      to: node.author,
+      type: "authored_by",
+    });
+  }
+
+  // Inline markdown links to internal paths
+  const matches = node.content.matchAll(INLINE_LINK_RE);
+  for (const match of matches) {
+    const href = match[2];
+    // Only extract links that look like internal paths (start with / or are relative .md refs)
+    if (href.startsWith("/")) {
+      edges.push({
+        from: node.path,
+        to: href,
+        type: "link",
+        description: match[1] || undefined,
+      });
+    }
+  }
+}
+
+function rebuildChildren(graph: SpandrelGraph): void {
+  // Clear all children
+  for (const node of graph.nodes.values()) {
+    node.children = [];
+  }
+
+  // Rebuild from hierarchy edges
+  for (const edge of graph.edges) {
+    if (edge.type === "hierarchy") {
+      const parent = graph.nodes.get(edge.from);
+      if (parent && !parent.children.includes(edge.to)) {
+        parent.children.push(edge.to);
+      }
+    }
+  }
+
+  // Update nodeType based on children
+  for (const node of graph.nodes.values()) {
+    node.nodeType = node.children.length > 0 ? "composite" : "leaf";
+  }
+}
+
+function validate(
+  nodes: Map<string, SpandrelNode>,
+  edges: SpandrelEdge[],
+  warnings: ValidationWarning[]
+): void {
+  for (const node of nodes.values()) {
+    if (!node.frontmatter.name) {
+      warnings.push({
+        path: node.path,
+        type: "missing_name",
+        message: `Node ${node.path} is missing 'name' in frontmatter`,
+      });
+    }
+    if (!node.description) {
+      warnings.push({
+        path: node.path,
+        type: "missing_description",
+        message: `Node ${node.path} is missing 'description' in frontmatter`,
+      });
+    }
+  }
+
+  // Check for broken links
+  for (const edge of edges) {
+    if (edge.type === "link" && !nodes.has(edge.to)) {
+      // Only flag internal paths, not external URLs
+      if (!edge.to.startsWith("http")) {
+        warnings.push({
+          path: edge.from,
+          type: "broken_link",
+          message: `Node ${edge.from} links to ${edge.to} which does not exist`,
+        });
+      }
+    }
+  }
+
+  // Check for unlisted children
+  for (const node of nodes.values()) {
+    if (node.nodeType === "composite" && node.content) {
+      for (const childPath of node.children) {
+        const childNode = nodes.get(childPath);
+        if (childNode) {
+          const childName = childNode.name;
+          const childBasename = path.basename(childPath);
+          // Check if the child is mentioned in the parent's content
+          if (
+            !node.content.includes(childPath) &&
+            !node.content.includes(childName) &&
+            !node.content.includes(childBasename)
+          ) {
+            warnings.push({
+              path: node.path,
+              type: "unlisted_child",
+              message: `Node ${node.path} has child ${childPath} not mentioned in its content`,
+            });
+          }
+        }
+      }
+    }
+  }
+}
+
+export function addGitMetadata(
+  graph: SpandrelGraph,
+  rootDir: string
+): Promise<void> {
+  // Deferred — will use simple-git to pull created/updated dates
+  // For now, this is a no-op
+  return Promise.resolve();
+}
