@@ -3,8 +3,15 @@
   "version": "0.1.0",
   "description": "A protocol for governed context exchange between actors",
   "type": "module",
+  "bin": {
+    "spandrel": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "dev": "tsx src/cli.ts dev",
     "test": "vitest run",
     "test:watch": "vitest"

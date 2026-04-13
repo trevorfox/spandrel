@@ -1,6 +1,7 @@
+#!/usr/bin/env node
 import path from "node:path";
 import { createServer } from "node:http";
-import { compile } from "./compiler.js";
+import { compile, addGitMetadata, getHistory } from "./compiler.js";
 import { createSchema } from "./schema.js";
 import { createMcpServer } from "./mcp.js";
 import { watchTree } from "./watcher.js";
@@ -27,9 +28,10 @@ Commands:
   process.exit(1);
 }
 
-function dev(rootDir: string) {
+async function dev(rootDir: string) {
   console.log(`[spandrel] Compiling ${rootDir}...`);
   const graph = compile(rootDir);
+  await addGitMetadata(graph, rootDir);
   console.log(
     `[spandrel] Compiled: ${graph.nodes.size} nodes, ${graph.edges.length} edges, ${graph.warnings.length} warnings`
   );
@@ -41,7 +43,7 @@ function dev(rootDir: string) {
     }
   }
 
-  const schema = createSchema(graph);
+  const schema = createSchema(graph, { rootDir, getHistory });
 
   // GraphQL server
   const yoga = createYoga({ schema });
@@ -73,7 +75,8 @@ async function mcp(rootDir: string) {
     `[spandrel] Compiled: ${graph.nodes.size} nodes, ${graph.edges.length} edges`
   );
 
-  const schema = createSchema(graph);
+  await addGitMetadata(graph, rootDir);
+  const schema = createSchema(graph, { rootDir, getHistory });
   const mcpServer = createMcpServer(schema);
   const transport = new StdioServerTransport();
   await mcpServer.connect(transport);

@@ -239,6 +239,8 @@ Two kinds of edges (compiled from the file system and frontmatter):
 1. **Hierarchy edges** — parent/child relationships. The tree. Implicit from the directory structure.
 2. **Link edges** — declared in frontmatter `links`. Lateral connections across the tree. Each has a path, optional type (freeform, user-defined), and optional description. Link types are arbitrary — they don't change how the graph works, they just describe the relationship for consumers.
 
+**Edges are bidirectional at query time.** Link edges are declared in one direction (from the node that declares them), but the system exposes both outgoing references (links FROM this node) and incoming references (links TO this node, aka backlinks). This is critical for navigation — without backlinks, half the graph is invisible from any given node. An agent landing on `/conventions/frontmatter` needs to discover that `/primitives/things` depends on it, even though the link is declared on Things, not on Frontmatter.
+
 access/governance edges are a separate concern — defers to established access control patterns (RBAC, ABAC, IAM). Design deferred.
 
 ### Graph Compilation
@@ -297,12 +299,19 @@ access/governance edges are a separate concern — defers to established access 
 
 **MCP tool surface:**
 
-- `get_node(path, depth?)` — returns name, description, node type, children, links, parent. With optional depth for wider structural view. The progressive disclosure entry point.
-- `get_content(path)` — returns full markdown body. Use when you've found the right node.
-- `get_children(path, depth?)` — returns subtree to N levels, names + descriptions only.
-- `get_references(path)` — returns all link edges from this node with their types and descriptions.
-- `search(query)` — full-text search across all nodes. Returns paths, names, descriptions, and a content snippet for relevance. The escape hatch from tree traversal.
+MCP tools are optimized for how agents actually navigate, not as 1:1 mirrors of GraphQL queries. GraphQL is a flexible query language where the client controls the shape; MCP tools are fixed operations where the server controls the shape for the agent's benefit.
+
+*Core navigation tools (agent-facing):*
+
+- `get_node(path, depth?, includeContent?)` — returns name, description, node type, children, links (outgoing), referenced_by (incoming backlinks), parent. Optional `includeContent` returns the markdown body inline (avoids a second round-trip for leaf nodes). The progressive disclosure entry point.
+- `get_content(path)` — returns full markdown body. Use when you want content without structural metadata, or when you already have the structure from `get_node`.
+- `context(path)` — the "tell me everything" tool. Returns the node, its full content, all outgoing references with target names/descriptions, and all incoming references (backlinks) with source names/descriptions. One call to fully understand a Thing and its place in the graph. This is the natural unit of agent work.
+- `get_references(path, direction?)` — returns link edges. Direction: `outgoing` (default), `incoming` (backlinks), or `both`. Includes the name and description of the linked node for context.
+- `search(query, path?)` — full-text search across all nodes, optionally scoped to a subtree. Returns paths, names, descriptions, and a content snippet. Results ranked by relevance (exact name match > description match > content match). The escape hatch from tree traversal.
 - `get_graph(path?, depth?)` — returns nodes + typed edges for visualization or broad orientation.
+
+*Builder tools (context engineer-facing):*
+
 - `validate(path?)` — returns inconsistencies at or below a given node. Broken links, unlisted children, missing descriptions.
 - `get_history(path)` — returns version history from git. List of commits with dates, authors, and messages. Audit trail for any node.
 
@@ -643,14 +652,13 @@ The tests ARE the spec in executable form. Any implementation that passes all te
 ### 3. GraphQL Tests
 
 **Schema:**
-- A `node` query accepting `path` and optional `depth` returns the correct node with name, description, nodeType, children, links, parent
+- A `node` query accepting `path` and optional `depth` returns the correct node with name, description, nodeType, children, links (outgoing), referencedBy (incoming backlinks), parent
 - With `depth=0`, only the node itself is returned (no children details)
 - With `depth=1`, children are returned with their names and descriptions
 - With `depth=2`, children and grandchildren are returned
 - A `content` query accepting `path` returns the full markdown body
-- A `children` query accepting `path` and optional `depth` returns the subtree (names + descriptions only)
-- A `references` query accepting `path` returns all link edges from that node
-- A `search` query accepting a search string returns matching nodes with path, name, description, and content snippet
+- A `references` query accepting `path` and optional `direction` returns link edges — outgoing, incoming (backlinks), or both
+- A `search` query accepting a search string and optional `path` (subtree scope) returns matching nodes with path, name, description, and content snippet, ranked by relevance
 - A `graph` query accepting optional `path` and `depth` returns serializable nodes + typed edges
 - A `history` query accepting `path` returns git commit history (date, author, message)
 - A `validate` query accepting optional `path` returns validation warnings
@@ -662,12 +670,16 @@ The tests ARE the spec in executable form. Any implementation that passes all te
 ### 4. MCP Tests
 
 **Tool registration:**
-- The MCP server exposes exactly 8 tools: `get_node`, `get_content`, `get_children`, `get_references`, `search`, `get_graph`, `validate`, `get_history`
-- Each tool has correct input schema matching the GraphQL queries
+- The MCP server exposes exactly 8 tools: `get_node`, `get_content`, `context`, `get_references`, `search`, `get_graph`, `validate`, `get_history`
+- Each tool has correct input schema
 
 **Tool execution:**
-- Each MCP tool call produces the same result as the equivalent GraphQL query
-- MCP is a wrapper around GraphQL — never an independent data path
+- Each MCP tool call is backed by GraphQL — never an independent data path
+- MCP tools are agent-optimized: they may combine multiple GraphQL queries into a single tool call (e.g., `context` combines node, content, outgoing references, and incoming backlinks)
+- `get_node` with `includeContent: true` returns content inline
+- `context` returns the node, content, outgoing references with target names, and incoming backlinks with source names
+- `get_references` with `direction: "incoming"` returns backlinks
+- `search` with `path` parameter scopes results to a subtree
 
 ### 5. Validation Tests
 

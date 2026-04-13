@@ -6,6 +6,7 @@ import type {
   SpandrelEdge,
   SpandrelGraph,
   ValidationWarning,
+  HistoryEntry,
 } from "./types.js";
 
 const INLINE_LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/g;
@@ -330,11 +331,57 @@ function validate(
   }
 }
 
-export function addGitMetadata(
+export async function addGitMetadata(
   graph: SpandrelGraph,
   rootDir: string
 ): Promise<void> {
-  // Deferred — will use simple-git to pull created/updated dates
-  // For now, this is a no-op
-  return Promise.resolve();
+  const { simpleGit } = await import("simple-git");
+  const git = simpleGit(rootDir);
+
+  // Check if this is a git repo
+  const isRepo = await git.checkIsRepo().catch(() => false);
+  if (!isRepo) return;
+
+  for (const node of graph.nodes.values()) {
+    const filePath = node.path === "/"
+      ? "index.md"
+      : node.path.slice(1) + "/index.md";
+
+    try {
+      const log = await git.log({ file: filePath });
+      if (log.all.length > 0) {
+        node.created = log.all[log.all.length - 1].date;
+        node.updated = log.all[0].date;
+      }
+    } catch {
+      // File might not be tracked yet
+    }
+  }
+}
+
+export async function getHistory(
+  rootDir: string,
+  nodePath: string
+): Promise<HistoryEntry[]> {
+  const { simpleGit } = await import("simple-git");
+  const git = simpleGit(rootDir);
+
+  const isRepo = await git.checkIsRepo().catch(() => false);
+  if (!isRepo) return [];
+
+  const filePath = nodePath === "/"
+    ? "index.md"
+    : nodePath.slice(1) + "/index.md";
+
+  try {
+    const log = await git.log({ file: filePath });
+    return log.all.map((entry) => ({
+      hash: entry.hash,
+      date: entry.date,
+      author: entry.author_name,
+      message: entry.message,
+    }));
+  } catch {
+    return [];
+  }
 }

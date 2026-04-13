@@ -54,7 +54,11 @@ describe("MCP Server", () => {
       links: [{ to: "/projects/alpha", type: "project" }],
     }, "Acme details here.");
     writeIndex(path.join(root, "projects"), { name: "Projects", description: "All projects" }, "Projects list.");
-    writeIndex(path.join(root, "projects", "alpha"), { name: "Alpha", description: "The alpha project" }, "Alpha is ongoing.");
+    writeIndex(path.join(root, "projects", "alpha"), {
+      name: "Alpha",
+      description: "The alpha project",
+      links: [{ to: "/clients/acme", type: "client" }],
+    }, "Alpha is ongoing.");
 
     const graph = compile(root);
     const schema = createSchema(graph);
@@ -78,7 +82,7 @@ describe("MCP Server", () => {
     expect(result.tools.length).toBe(8);
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual([
-      "get_children",
+      "context",
       "get_content",
       "get_graph",
       "get_history",
@@ -89,13 +93,26 @@ describe("MCP Server", () => {
     ]);
   });
 
-  it("get_node returns correct node data", async () => {
-    const result = await client.callTool({ name: "get_node", arguments: { path: "/" } });
+  it("get_node returns correct node data with backlinks", async () => {
+    const result = await client.callTool({ name: "get_node", arguments: { path: "/clients/acme" } });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const node = JSON.parse(text);
-    expect(node.path).toBe("/");
-    expect(node.name).toBe("Root");
-    expect(node.nodeType).toBe("composite");
+    expect(node.path).toBe("/clients/acme");
+    expect(node.name).toBe("Acme Corp");
+    // Has outgoing links
+    expect(node.links.length).toBeGreaterThan(0);
+    // Has incoming backlinks
+    expect(node.referencedBy.some((b: { to: string }) => b.to === "/projects/alpha")).toBe(true);
+  });
+
+  it("get_node with includeContent returns content inline", async () => {
+    const result = await client.callTool({
+      name: "get_node",
+      arguments: { path: "/clients/acme", includeContent: true },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const node = JSON.parse(text);
+    expect(node.content).toContain("Acme details");
   });
 
   it("get_content returns markdown body", async () => {
@@ -104,26 +121,48 @@ describe("MCP Server", () => {
     expect(text).toContain("Acme details");
   });
 
-  it("get_children returns child nodes", async () => {
-    const result = await client.callTool({ name: "get_children", arguments: { path: "/" } });
+  it("context returns everything in one call", async () => {
+    const result = await client.callTool({ name: "context", arguments: { path: "/clients/acme" } });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    const children = JSON.parse(text);
-    expect(children.length).toBe(2);
+    const ctx = JSON.parse(text);
+    expect(ctx.name).toBe("Acme Corp");
+    expect(ctx.content).toContain("Acme details");
+    // Outgoing: acme -> alpha
+    expect(ctx.outgoing.some((r: { path: string }) => r.path === "/projects/alpha")).toBe(true);
+    expect(ctx.outgoing[0].name).toBe("Alpha"); // Includes target name
+    // Incoming: alpha -> acme
+    expect(ctx.incoming.some((r: { path: string }) => r.path === "/projects/alpha")).toBe(true);
   });
 
-  it("get_references returns link edges", async () => {
-    const result = await client.callTool({ name: "get_references", arguments: { path: "/clients/acme" } });
+  it("get_references with direction=incoming returns backlinks", async () => {
+    const result = await client.callTool({
+      name: "get_references",
+      arguments: { path: "/clients/acme", direction: "incoming" },
+    });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const refs = JSON.parse(text);
-    expect(refs.length).toBe(1);
-    expect(refs[0].to).toBe("/projects/alpha");
+    expect(refs.some((r: { path: string }) => r.path === "/projects/alpha")).toBe(true);
+    expect(refs[0].direction).toBe("incoming");
   });
 
-  it("search finds nodes by query", async () => {
+  it("search finds nodes by query with ranking", async () => {
     const result = await client.callTool({ name: "search", arguments: { query: "alpha" } });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const results = JSON.parse(text);
     expect(results.length).toBeGreaterThan(0);
+    // Alpha (name match) should be first
+    expect(results[0].path).toBe("/projects/alpha");
+  });
+
+  it("search scopes to subtree", async () => {
+    const result = await client.callTool({
+      name: "search",
+      arguments: { query: "alpha", path: "/clients" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const results = JSON.parse(text);
+    // Should not include /projects/alpha
+    expect(results.every((r: { path: string }) => r.path.startsWith("/clients"))).toBe(true);
   });
 
   it("get_graph returns nodes and edges", async () => {

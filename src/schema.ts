@@ -4,10 +4,17 @@ import {
   GraphQLString,
   GraphQLList,
   GraphQLInt,
+  GraphQLBoolean,
   GraphQLNonNull,
   GraphQLEnumType,
 } from "graphql";
 import type { SpandrelGraph } from "./types.js";
+import type { HistoryEntry } from "./types.js";
+
+export type SchemaContext = {
+  rootDir?: string;
+  getHistory?: (rootDir: string, nodePath: string) => Promise<HistoryEntry[]>;
+};
 
 const NodeTypeEnum = new GraphQLEnumType({
   name: "NodeType",
@@ -23,6 +30,15 @@ const EdgeTypeEnum = new GraphQLEnumType({
     hierarchy: { value: "hierarchy" },
     link: { value: "link" },
     authored_by: { value: "authored_by" },
+  },
+});
+
+const DirectionEnum = new GraphQLEnumType({
+  name: "Direction",
+  values: {
+    outgoing: { value: "outgoing" },
+    incoming: { value: "incoming" },
+    both: { value: "both" },
   },
 });
 
@@ -53,6 +69,19 @@ const EdgeObjectType = new GraphQLObjectType({
     type: { type: new GraphQLNonNull(EdgeTypeEnum) },
     linkType: { type: GraphQLString },
     description: { type: GraphQLString },
+  },
+});
+
+// Rich reference — includes the linked node's name and description
+const RichReferenceType = new GraphQLObjectType({
+  name: "RichReference",
+  fields: {
+    path: { type: new GraphQLNonNull(GraphQLString) },
+    name: { type: new GraphQLNonNull(GraphQLString) },
+    description: { type: new GraphQLNonNull(GraphQLString) },
+    linkType: { type: GraphQLString },
+    linkDescription: { type: GraphQLString },
+    direction: { type: new GraphQLNonNull(GraphQLString) },
   },
 });
 
@@ -90,6 +119,8 @@ const NodeDetailType = new GraphQLObjectType({
       type: new GraphQLList(new GraphQLNonNull(NodeSummaryType)),
     },
     links: { type: new GraphQLList(new GraphQLNonNull(LinkType)) },
+    referencedBy: { type: new GraphQLList(new GraphQLNonNull(LinkType)) },
+    content: { type: GraphQLString },
     created: { type: GraphQLString },
     updated: { type: GraphQLString },
     author: { type: GraphQLString },
@@ -103,6 +134,7 @@ const SearchResultType = new GraphQLObjectType({
     name: { type: new GraphQLNonNull(GraphQLString) },
     description: { type: new GraphQLNonNull(GraphQLString) },
     snippet: { type: GraphQLString },
+    score: { type: new GraphQLNonNull(GraphQLInt) },
   },
 });
 
@@ -114,7 +146,27 @@ const GraphResultType = new GraphQLObjectType({
   },
 });
 
-export function createSchema(graph: SpandrelGraph): GraphQLSchema {
+// Context result — the "tell me everything" type
+const ContextResultType = new GraphQLObjectType({
+  name: "ContextResult",
+  fields: {
+    path: { type: new GraphQLNonNull(GraphQLString) },
+    name: { type: new GraphQLNonNull(GraphQLString) },
+    description: { type: new GraphQLNonNull(GraphQLString) },
+    nodeType: { type: new GraphQLNonNull(NodeTypeEnum) },
+    depth: { type: new GraphQLNonNull(GraphQLInt) },
+    parent: { type: GraphQLString },
+    content: { type: GraphQLString },
+    children: { type: new GraphQLList(new GraphQLNonNull(NodeSummaryType)) },
+    outgoing: { type: new GraphQLList(new GraphQLNonNull(RichReferenceType)) },
+    incoming: { type: new GraphQLList(new GraphQLNonNull(RichReferenceType)) },
+    created: { type: GraphQLString },
+    updated: { type: GraphQLString },
+    author: { type: GraphQLString },
+  },
+});
+
+export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQLSchema {
   return new GraphQLSchema({
     query: new GraphQLObjectType({
       name: "Query",
@@ -124,9 +176,10 @@ export function createSchema(graph: SpandrelGraph): GraphQLSchema {
           args: {
             path: { type: new GraphQLNonNull(GraphQLString) },
             depth: { type: GraphQLInt },
+            includeContent: { type: GraphQLBoolean },
           },
-          resolve: (_root, args: { path: string; depth?: number }) => {
-            return resolveNode(graph, args.path, args.depth);
+          resolve: (_root, args: { path: string; depth?: number; includeContent?: boolean }) => {
+            return resolveNode(graph, args.path, args.depth, args.includeContent);
           },
         },
 
@@ -138,6 +191,16 @@ export function createSchema(graph: SpandrelGraph): GraphQLSchema {
           resolve: (_root, args: { path: string }) => {
             const node = graph.nodes.get(args.path);
             return node?.content ?? null;
+          },
+        },
+
+        context: {
+          type: ContextResultType,
+          args: {
+            path: { type: new GraphQLNonNull(GraphQLString) },
+          },
+          resolve: (_root, args: { path: string }) => {
+            return resolveContext(graph, args.path);
           },
         },
 
@@ -153,18 +216,13 @@ export function createSchema(graph: SpandrelGraph): GraphQLSchema {
         },
 
         references: {
-          type: new GraphQLList(new GraphQLNonNull(LinkType)),
+          type: new GraphQLList(new GraphQLNonNull(RichReferenceType)),
           args: {
             path: { type: new GraphQLNonNull(GraphQLString) },
+            direction: { type: DirectionEnum },
           },
-          resolve: (_root, args: { path: string }) => {
-            return graph.edges
-              .filter((e) => e.from === args.path && e.type === "link")
-              .map((e) => ({
-                to: e.to,
-                type: e.linkType ?? null,
-                description: e.description ?? null,
-              }));
+          resolve: (_root, args: { path: string; direction?: string }) => {
+            return resolveReferences(graph, args.path, args.direction ?? "outgoing");
           },
         },
 
@@ -172,9 +230,10 @@ export function createSchema(graph: SpandrelGraph): GraphQLSchema {
           type: new GraphQLList(new GraphQLNonNull(SearchResultType)),
           args: {
             query: { type: new GraphQLNonNull(GraphQLString) },
+            path: { type: GraphQLString },
           },
-          resolve: (_root, args: { query: string }) => {
-            return resolveSearch(graph, args.query);
+          resolve: (_root, args: { query: string; path?: string }) => {
+            return resolveSearch(graph, args.query, args.path);
           },
         },
 
@@ -217,8 +276,10 @@ export function createSchema(graph: SpandrelGraph): GraphQLSchema {
           args: {
             path: { type: new GraphQLNonNull(GraphQLString) },
           },
-          resolve: () => {
-            // Git history integration — returns empty for now
+          resolve: async (_root, args: { path: string }) => {
+            if (ctx?.getHistory && ctx?.rootDir) {
+              return ctx.getHistory(ctx.rootDir, args.path);
+            }
             return [];
           },
         },
@@ -227,21 +288,93 @@ export function createSchema(graph: SpandrelGraph): GraphQLSchema {
   });
 }
 
-function resolveNode(
-  graph: SpandrelGraph,
-  nodePath: string,
-  depth?: number
-) {
-  const node = graph.nodes.get(nodePath);
-  if (!node) return null;
-
-  const links = graph.edges
+function getOutgoingLinks(graph: SpandrelGraph, nodePath: string) {
+  return graph.edges
     .filter((e) => e.from === nodePath && e.type === "link")
     .map((e) => ({
       to: e.to,
       type: e.linkType ?? null,
       description: e.description ?? null,
     }));
+}
+
+function getIncomingLinks(graph: SpandrelGraph, nodePath: string) {
+  return graph.edges
+    .filter((e) => e.to === nodePath && e.type === "link")
+    .map((e) => ({
+      to: e.from,
+      type: e.linkType ?? null,
+      description: e.description ?? null,
+    }));
+}
+
+function resolveReferences(
+  graph: SpandrelGraph,
+  nodePath: string,
+  direction: string
+): Array<{
+  path: string;
+  name: string;
+  description: string;
+  linkType: string | null;
+  linkDescription: string | null;
+  direction: string;
+}> {
+  const results: Array<{
+    path: string;
+    name: string;
+    description: string;
+    linkType: string | null;
+    linkDescription: string | null;
+    direction: string;
+  }> = [];
+
+  if (direction === "outgoing" || direction === "both") {
+    for (const edge of graph.edges) {
+      if (edge.from === nodePath && edge.type === "link") {
+        const target = graph.nodes.get(edge.to);
+        results.push({
+          path: edge.to,
+          name: target?.name ?? edge.to,
+          description: target?.description ?? "",
+          linkType: edge.linkType ?? null,
+          linkDescription: edge.description ?? null,
+          direction: "outgoing",
+        });
+      }
+    }
+  }
+
+  if (direction === "incoming" || direction === "both") {
+    for (const edge of graph.edges) {
+      if (edge.to === nodePath && edge.type === "link") {
+        const source = graph.nodes.get(edge.from);
+        results.push({
+          path: edge.from,
+          name: source?.name ?? edge.from,
+          description: source?.description ?? "",
+          linkType: edge.linkType ?? null,
+          linkDescription: edge.description ?? null,
+          direction: "incoming",
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
+function resolveNode(
+  graph: SpandrelGraph,
+  nodePath: string,
+  depth?: number,
+  includeContent?: boolean
+) {
+  const node = graph.nodes.get(nodePath);
+  if (!node) return null;
+
+  const links = getOutgoingLinks(graph, nodePath);
+  const referencedBy = getIncomingLinks(graph, nodePath);
 
   const children =
     depth !== undefined && depth > 0
@@ -258,8 +391,7 @@ function resolveNode(
                 children: child.children,
               }
             : null;
-        }).filter(Boolean)
-      ;
+        }).filter(Boolean);
 
   return {
     path: node.path,
@@ -270,6 +402,48 @@ function resolveNode(
     parent: node.parent,
     children,
     links,
+    referencedBy,
+    content: includeContent ? node.content : null,
+    created: node.created,
+    updated: node.updated,
+    author: node.author,
+  };
+}
+
+function resolveContext(graph: SpandrelGraph, nodePath: string) {
+  const node = graph.nodes.get(nodePath);
+  if (!node) return null;
+
+  const outgoing = resolveReferences(graph, nodePath, "outgoing");
+  const incoming = resolveReferences(graph, nodePath, "incoming");
+
+  const children = node.children
+    .map((cp) => {
+      const child = graph.nodes.get(cp);
+      return child
+        ? {
+            path: child.path,
+            name: child.name,
+            description: child.description,
+            nodeType: child.nodeType,
+            depth: child.depth,
+            children: child.children,
+          }
+        : null;
+    })
+    .filter(Boolean);
+
+  return {
+    path: node.path,
+    name: node.name,
+    description: node.description,
+    nodeType: node.nodeType,
+    depth: node.depth,
+    parent: node.parent,
+    content: node.content,
+    children,
+    outgoing,
+    incoming,
     created: node.created,
     updated: node.updated,
     author: node.author,
@@ -320,21 +494,35 @@ function resolveChildren(
   }>;
 }
 
-function resolveSearch(graph: SpandrelGraph, query: string) {
+function resolveSearch(graph: SpandrelGraph, query: string, scopePath?: string) {
   const q = query.toLowerCase();
   const results: Array<{
     path: string;
     name: string;
     description: string;
     snippet: string | null;
+    score: number;
   }> = [];
 
   for (const node of graph.nodes.values()) {
+    // Scope to subtree if path provided
+    if (scopePath && !node.path.startsWith(scopePath) && node.path !== scopePath) {
+      continue;
+    }
+
+    const nameExact = node.name.toLowerCase() === q;
     const nameMatch = node.name.toLowerCase().includes(q);
     const descMatch = node.description.toLowerCase().includes(q);
     const contentMatch = node.content.toLowerCase().includes(q);
 
     if (nameMatch || descMatch || contentMatch) {
+      // Relevance ranking: exact name > name contains > description > content
+      let score = 0;
+      if (nameExact) score = 100;
+      else if (nameMatch) score = 75;
+      else if (descMatch) score = 50;
+      else if (contentMatch) score = 25;
+
       let snippet: string | null = null;
       if (contentMatch) {
         const idx = node.content.toLowerCase().indexOf(q);
@@ -349,9 +537,13 @@ function resolveSearch(graph: SpandrelGraph, query: string) {
         name: node.name,
         description: node.description,
         snippet,
+        score,
       });
     }
   }
+
+  // Sort by score descending
+  results.sort((a, b) => b.score - a.score);
 
   return results;
 }

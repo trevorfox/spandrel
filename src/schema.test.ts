@@ -52,28 +52,27 @@ describe("GraphQL Schema", () => {
       author: "/people/jane",
     }, "Acme Corporation is a key account.");
     writeIndex(path.join(root, "projects"), { name: "Projects", description: "All projects" }, "Current projects.");
-    writeIndex(path.join(root, "projects", "alpha"), { name: "Project Alpha", description: "The alpha project" }, "Alpha is in progress.");
+    writeIndex(path.join(root, "projects", "alpha"), {
+      name: "Project Alpha",
+      description: "The alpha project",
+      links: [{ to: "/clients/acme", type: "client", description: "Client for this project" }],
+    }, "Alpha is in progress.");
   });
 
   afterEach(() => {
     rmrf(root);
   });
 
-  function query(source: string) {
+  function query(source: string, variables?: Record<string, unknown>) {
     const graph = compile(root);
     const schema = createSchema(graph);
-    return graphql({ schema, source });
+    return graphql({ schema, source, variableValues: variables });
   }
 
   it("node query returns correct node with name, description, nodeType", async () => {
     const result = await query(`{
       node(path: "/") {
-        path
-        name
-        description
-        nodeType
-        depth
-        parent
+        path name description nodeType depth parent
       }
     }`);
     expect(result.errors).toBeUndefined();
@@ -89,11 +88,7 @@ describe("GraphQL Schema", () => {
   it("node query returns children with names and descriptions", async () => {
     const result = await query(`{
       node(path: "/") {
-        children {
-          path
-          name
-          description
-        }
+        children { path name description }
       }
     }`);
     expect(result.errors).toBeUndefined();
@@ -102,32 +97,23 @@ describe("GraphQL Schema", () => {
     expect(children.map((c: { name: string }) => c.name).sort()).toEqual(["Clients", "Projects"]);
   });
 
-  it("node query with depth=2 returns children and grandchildren paths", async () => {
+  it("node query with depth=2 returns grandchild paths", async () => {
     const result = await query(`{
       node(path: "/", depth: 2) {
-        children {
-          path
-          name
-          children
-        }
+        children { path name children }
       }
     }`);
     expect(result.errors).toBeUndefined();
     const children = result.data!.node.children;
     const clients = children.find((c: { name: string }) => c.name === "Clients");
     expect(clients).toBeDefined();
-    // With depth=2, children of children should include grandchild paths
     expect(clients.children).toContain("/clients/acme");
   });
 
-  it("node query returns links", async () => {
+  it("node query returns outgoing links", async () => {
     const result = await query(`{
       node(path: "/clients/acme") {
-        links {
-          to
-          type
-          description
-        }
+        links { to type description }
       }
     }`);
     expect(result.errors).toBeUndefined();
@@ -135,6 +121,36 @@ describe("GraphQL Schema", () => {
     expect(links).toHaveLength(1);
     expect(links[0].to).toBe("/projects/alpha");
     expect(links[0].type).toBe("active_project");
+  });
+
+  it("node query returns incoming backlinks (referencedBy)", async () => {
+    const result = await query(`{
+      node(path: "/clients/acme") {
+        referencedBy { to type description }
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const backlinks = result.data!.node.referencedBy;
+    // /projects/alpha links to /clients/acme
+    expect(backlinks.some((b: { to: string }) => b.to === "/projects/alpha")).toBe(true);
+  });
+
+  it("node query with includeContent returns content inline", async () => {
+    const result = await query(`{
+      node(path: "/clients/acme", includeContent: true) {
+        name content
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    expect(result.data!.node.content).toContain("key account");
+  });
+
+  it("node query without includeContent returns null content", async () => {
+    const result = await query(`{
+      node(path: "/clients/acme") { content }
+    }`);
+    expect(result.errors).toBeUndefined();
+    expect(result.data!.node.content).toBeNull();
   });
 
   it("content query returns full markdown body", async () => {
@@ -145,59 +161,110 @@ describe("GraphQL Schema", () => {
     expect(result.data!.content).toContain("Acme Corporation is a key account");
   });
 
-  it("content query returns null for nonexistent path", async () => {
+  it("context query returns everything in one call", async () => {
     const result = await query(`{
-      content(path: "/nonexistent")
-    }`);
-    expect(result.errors).toBeUndefined();
-    expect(result.data!.content).toBeNull();
-  });
-
-  it("children query returns subtree names and descriptions", async () => {
-    const result = await query(`{
-      children(path: "/") {
-        path
-        name
-        description
+      context(path: "/clients/acme") {
+        path name description content
+        outgoing { path name linkType direction }
+        incoming { path name linkType direction }
       }
     }`);
     expect(result.errors).toBeUndefined();
-    expect(result.data!.children.length).toBe(2);
+    const ctx = result.data!.context;
+    expect(ctx.name).toBe("Acme Corp");
+    expect(ctx.content).toContain("key account");
+    // Outgoing: acme -> alpha
+    expect(ctx.outgoing.some((r: { path: string }) => r.path === "/projects/alpha")).toBe(true);
+    expect(ctx.outgoing[0].direction).toBe("outgoing");
+    // Incoming: alpha -> acme
+    expect(ctx.incoming.some((r: { path: string }) => r.path === "/projects/alpha")).toBe(true);
+    expect(ctx.incoming[0].direction).toBe("incoming");
   });
 
-  it("references query returns link edges from a node", async () => {
+  it("context query includes target node names", async () => {
+    const result = await query(`{
+      context(path: "/clients/acme") {
+        outgoing { path name description }
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const outgoing = result.data!.context.outgoing;
+    const alpha = outgoing.find((r: { path: string }) => r.path === "/projects/alpha");
+    expect(alpha.name).toBe("Project Alpha");
+    expect(alpha.description).toBe("The alpha project");
+  });
+
+  it("references query defaults to outgoing", async () => {
     const result = await query(`{
       references(path: "/clients/acme") {
-        to
-        type
-        description
+        path name direction
       }
     }`);
     expect(result.errors).toBeUndefined();
-    expect(result.data!.references).toHaveLength(1);
-    expect(result.data!.references[0].to).toBe("/projects/alpha");
+    const refs = result.data!.references;
+    expect(refs.every((r: { direction: string }) => r.direction === "outgoing")).toBe(true);
   });
 
-  it("search query finds nodes by name", async () => {
+  it("references query with direction=incoming returns backlinks", async () => {
+    const result = await query(`{
+      references(path: "/clients/acme", direction: incoming) {
+        path name direction
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const refs = result.data!.references;
+    expect(refs.some((r: { path: string }) => r.path === "/projects/alpha")).toBe(true);
+    expect(refs.every((r: { direction: string }) => r.direction === "incoming")).toBe(true);
+  });
+
+  it("references query with direction=both returns all links", async () => {
+    const result = await query(`{
+      references(path: "/clients/acme", direction: both) {
+        path direction
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const refs = result.data!.references;
+    expect(refs.some((r: { direction: string }) => r.direction === "outgoing")).toBe(true);
+    expect(refs.some((r: { direction: string }) => r.direction === "incoming")).toBe(true);
+  });
+
+  it("search ranks name matches above content matches", async () => {
     const result = await query(`{
       search(query: "Acme") {
-        path
-        name
-        description
+        path name score
       }
     }`);
     expect(result.errors).toBeUndefined();
-    expect(result.data!.search.length).toBeGreaterThan(0);
-    const acme = result.data!.search.find((r: { path: string }) => r.path === "/clients/acme");
+    const results = result.data!.search;
+    expect(results.length).toBeGreaterThan(0);
+    // Acme Corp (name contains "Acme") should rank higher than Clients (content mentions "Acme")
+    const acme = results.find((r: { path: string }) => r.path === "/clients/acme");
+    const clients = results.find((r: { path: string }) => r.path === "/clients");
     expect(acme).toBeDefined();
+    if (clients) {
+      expect(acme.score).toBeGreaterThan(clients.score);
+    }
   });
 
-  it("search query finds nodes by content and returns snippets", async () => {
+  it("search scopes to subtree with path parameter", async () => {
+    const result = await query(`{
+      search(query: "Alpha", path: "/projects") {
+        path name
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const results = result.data!.search;
+    expect(results.length).toBeGreaterThan(0);
+    for (const r of results) {
+      expect(r.path.startsWith("/projects")).toBe(true);
+    }
+  });
+
+  it("search returns content snippets", async () => {
     const result = await query(`{
       search(query: "key account") {
-        path
-        name
-        snippet
+        path snippet
       }
     }`);
     expect(result.errors).toBeUndefined();
@@ -208,15 +275,8 @@ describe("GraphQL Schema", () => {
   it("graph query returns nodes and edges", async () => {
     const result = await query(`{
       graph {
-        nodes {
-          path
-          name
-        }
-        edges {
-          from
-          to
-          type
-        }
+        nodes { path name }
+        edges { from to type }
       }
     }`);
     expect(result.errors).toBeUndefined();
@@ -227,9 +287,7 @@ describe("GraphQL Schema", () => {
   it("graph query with path scopes to subtree", async () => {
     const result = await query(`{
       graph(path: "/clients", depth: 1) {
-        nodes {
-          path
-        }
+        nodes { path }
       }
     }`);
     expect(result.errors).toBeUndefined();
@@ -241,23 +299,16 @@ describe("GraphQL Schema", () => {
 
   it("validate query returns warnings", async () => {
     const result = await query(`{
-      validate {
-        path
-        type
-        message
-      }
+      validate { path type message }
     }`);
     expect(result.errors).toBeUndefined();
-    // Should have at least some warnings (e.g., broken link to /people/jane)
     expect(result.data!.validate.length).toBeGreaterThan(0);
   });
 
-  it("validate query with path scopes to that subtree", async () => {
+  it("validate query with path scopes to subtree", async () => {
     const result = await query(`{
       validate(path: "/clients") {
-        path
-        type
-        message
+        path type message
       }
     }`);
     expect(result.errors).toBeUndefined();
@@ -266,14 +317,9 @@ describe("GraphQL Schema", () => {
     }
   });
 
-  it("history query returns empty array (git not wired yet)", async () => {
+  it("history query returns empty array (git not wired in tests)", async () => {
     const result = await query(`{
-      history(path: "/") {
-        hash
-        date
-        author
-        message
-      }
+      history(path: "/") { hash date author message }
     }`);
     expect(result.errors).toBeUndefined();
     expect(result.data!.history).toEqual([]);
@@ -281,12 +327,17 @@ describe("GraphQL Schema", () => {
 
   it("node query returns null for nonexistent path", async () => {
     const result = await query(`{
-      node(path: "/does/not/exist") {
-        path
-        name
-      }
+      node(path: "/does/not/exist") { path name }
     }`);
     expect(result.errors).toBeUndefined();
     expect(result.data!.node).toBeNull();
+  });
+
+  it("content query returns null for nonexistent path", async () => {
+    const result = await query(`{
+      content(path: "/nonexistent")
+    }`);
+    expect(result.errors).toBeUndefined();
+    expect(result.data!.content).toBeNull();
   });
 });

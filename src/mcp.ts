@@ -10,26 +10,34 @@ export function createMcpServer(schema: GraphQLSchema): McpServer {
     version: "0.1.0",
   });
 
+  // Helper: run a parameterized GraphQL query safely
+  async function gql(source: string, variables: Record<string, unknown> = {}) {
+    return graphql({ schema, source, variableValues: variables });
+  }
+
+  // --- Core navigation tools (agent-facing) ---
+
   server.tool(
     "get_node",
-    "Get a node by path. Returns name, description, nodeType, children, links, parent. Use depth for wider structural view.",
+    "Get a node by path. Returns name, description, nodeType, children, outgoing links, incoming backlinks, parent. Use includeContent to get the markdown body inline.",
     {
       path: z.string().describe("Path to the node (e.g. '/' or '/clients/acme')"),
       depth: z.number().optional().describe("How many levels of children to include"),
+      includeContent: z.boolean().optional().describe("Include the full markdown content inline"),
     },
-    async ({ path: nodePath, depth }) => {
-      const depthArg = depth !== undefined ? `, depth: ${depth}` : "";
-      const result = await graphql({
-        schema,
-        source: `{
-          node(path: "${nodePath}"${depthArg}) {
+    async ({ path: nodePath, depth, includeContent }) => {
+      const result = await gql(`
+        query GetNode($path: String!, $depth: Int, $includeContent: Boolean) {
+          node(path: $path, depth: $depth, includeContent: $includeContent) {
             path name description nodeType depth parent
             children { path name description nodeType depth children }
             links { to type description }
+            referencedBy { to type description }
+            content
             created updated author
           }
-        }`,
-      });
+        }
+      `, { path: nodePath, depth, includeContent: includeContent ?? false });
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result.data?.node ?? null, null, 2) }],
       };
@@ -38,15 +46,16 @@ export function createMcpServer(schema: GraphQLSchema): McpServer {
 
   server.tool(
     "get_content",
-    "Get the full markdown content of a node.",
+    "Get the full markdown content of a node. Use when you just need the content without structural metadata.",
     {
       path: z.string().describe("Path to the node"),
     },
     async ({ path: nodePath }) => {
-      const result = await graphql({
-        schema,
-        source: `{ content(path: "${nodePath}") }`,
-      });
+      const result = await gql(`
+        query GetContent($path: String!) {
+          content(path: $path)
+        }
+      `, { path: nodePath });
       const text = typeof result.data?.content === "string" ? result.data.content : "Node not found";
       return {
         content: [{ type: "text" as const, text }],
@@ -55,43 +64,45 @@ export function createMcpServer(schema: GraphQLSchema): McpServer {
   );
 
   server.tool(
-    "get_children",
-    "Get children of a node (names and descriptions only). Use depth to go deeper.",
+    "context",
+    "Get everything about a node in one call — its content, all outgoing references (with target names), and all incoming backlinks (with source names). The natural unit of agent work.",
     {
-      path: z.string().describe("Path to the parent node"),
-      depth: z.number().optional().describe("How many levels deep"),
+      path: z.string().describe("Path to the node"),
     },
-    async ({ path: nodePath, depth }) => {
-      const depthArg = depth !== undefined ? `, depth: ${depth}` : "";
-      const result = await graphql({
-        schema,
-        source: `{
-          children(path: "${nodePath}"${depthArg}) {
-            path name description nodeType depth children
+    async ({ path: nodePath }) => {
+      const result = await gql(`
+        query GetContext($path: String!) {
+          context(path: $path) {
+            path name description nodeType depth parent
+            content
+            children { path name description nodeType depth }
+            outgoing { path name description linkType linkDescription direction }
+            incoming { path name description linkType linkDescription direction }
+            created updated author
           }
-        }`,
-      });
+        }
+      `, { path: nodePath });
       return {
-        content: [{ type: "text" as const, text: JSON.stringify(result.data?.children ?? [], null, 2) }],
+        content: [{ type: "text" as const, text: JSON.stringify(result.data?.context ?? null, null, 2) }],
       };
     }
   );
 
   server.tool(
     "get_references",
-    "Get all link edges from a node — relationships to other nodes.",
+    "Get link edges for a node. Direction: outgoing (default), incoming (backlinks), or both. Includes the name and description of linked nodes.",
     {
       path: z.string().describe("Path to the node"),
+      direction: z.enum(["outgoing", "incoming", "both"]).optional().describe("Which direction of links to return"),
     },
-    async ({ path: nodePath }) => {
-      const result = await graphql({
-        schema,
-        source: `{
-          references(path: "${nodePath}") {
-            to type description
+    async ({ path: nodePath, direction }) => {
+      const result = await gql(`
+        query GetReferences($path: String!, $direction: Direction) {
+          references(path: $path, direction: $direction) {
+            path name description linkType linkDescription direction
           }
-        }`,
-      });
+        }
+      `, { path: nodePath, direction: direction ?? "outgoing" });
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result.data?.references ?? [], null, 2) }],
       };
@@ -100,19 +111,19 @@ export function createMcpServer(schema: GraphQLSchema): McpServer {
 
   server.tool(
     "search",
-    "Full-text search across all nodes. Returns paths, names, descriptions, and content snippets.",
+    "Full-text search across all nodes. Results ranked by relevance (exact name > name contains > description > content). Optionally scope to a subtree.",
     {
       query: z.string().describe("Search query string"),
+      path: z.string().optional().describe("Scope search to this subtree path"),
     },
-    async ({ query: q }) => {
-      const result = await graphql({
-        schema,
-        source: `{
-          search(query: "${q.replace(/"/g, '\\"')}") {
-            path name description snippet
+    async ({ query: q, path: scopePath }) => {
+      const result = await gql(`
+        query Search($query: String!, $path: String) {
+          search(query: $query, path: $path) {
+            path name description snippet score
           }
-        }`,
-      });
+        }
+      `, { query: q, path: scopePath });
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result.data?.search ?? [], null, 2) }],
       };
@@ -127,41 +138,36 @@ export function createMcpServer(schema: GraphQLSchema): McpServer {
       depth: z.number().optional().describe("How many levels deep"),
     },
     async ({ path: nodePath, depth }) => {
-      const pathArg = nodePath ? `path: "${nodePath}"` : "";
-      const depthArg = depth !== undefined ? `depth: ${depth}` : "";
-      const args = [pathArg, depthArg].filter(Boolean).join(", ");
-      const argsStr = args ? `(${args})` : "";
-      const result = await graphql({
-        schema,
-        source: `{
-          graph${argsStr} {
+      const result = await gql(`
+        query GetGraph($path: String, $depth: Int) {
+          graph(path: $path, depth: $depth) {
             nodes { path name description nodeType depth }
             edges { from to type linkType description }
           }
-        }`,
-      });
+        }
+      `, { path: nodePath, depth });
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result.data?.graph ?? null, null, 2) }],
       };
     }
   );
 
+  // --- Builder tools (context engineer-facing) ---
+
   server.tool(
     "validate",
-    "Check graph health. Returns warnings about broken links, missing descriptions, unlisted children.",
+    "Check graph health. Returns warnings about broken links, missing descriptions, unlisted children. Primarily for context engineers.",
     {
       path: z.string().optional().describe("Scope validation to a subtree"),
     },
     async ({ path: nodePath }) => {
-      const pathArg = nodePath ? `(path: "${nodePath}")` : "";
-      const result = await graphql({
-        schema,
-        source: `{
-          validate${pathArg} {
+      const result = await gql(`
+        query Validate($path: String) {
+          validate(path: $path) {
             path type message
           }
-        }`,
-      });
+        }
+      `, { path: nodePath });
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result.data?.validate ?? [], null, 2) }],
       };
@@ -170,19 +176,18 @@ export function createMcpServer(schema: GraphQLSchema): McpServer {
 
   server.tool(
     "get_history",
-    "Get version history for a node from git.",
+    "Get version history for a node from git. Primarily for context engineers and analysts.",
     {
       path: z.string().describe("Path to the node"),
     },
     async ({ path: nodePath }) => {
-      const result = await graphql({
-        schema,
-        source: `{
-          history(path: "${nodePath}") {
+      const result = await gql(`
+        query GetHistory($path: String!) {
+          history(path: $path) {
             hash date author message
           }
-        }`,
-      });
+        }
+      `, { path: nodePath });
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result.data?.history ?? [], null, 2) }],
       };
