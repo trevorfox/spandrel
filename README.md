@@ -1,8 +1,8 @@
 # Spandrel
 
-Spandrel turns a directory of markdown files into a navigable, queryable, access-controlled knowledge graph served via GraphQL and MCP.
+Old technologies, new structure. Markdown files, git repos, YAML frontmatter, GraphQL — none of these are new. But assembled in the right configuration, something emerges from the spaces between them: a navigable, governed knowledge graph that both humans and agents can traverse.
 
-Named after the [architectural byproduct](https://en.wikipedia.org/wiki/Spandrel_(biology)) that Gould & Lewontin argued becomes more interesting than the structure it emerged from. The knowledge graph structure here emerges from the practical necessity of organizing files for LLM consumption. Progressive disclosure emerges from the constraint of finite context windows. The governance layer emerges from the need to share knowledge across boundaries. The framework itself wasn't the goal — the knowledge was. But the structure you build to hold it becomes its own thing worth having.
+Named after the [architectural byproduct](https://en.wikipedia.org/wiki/Spandrel_(biology)) that Gould & Lewontin argued becomes more interesting than the structure it emerged from. File systems weren't designed for knowledge graphs. Git wasn't designed for editorial workflow. Markdown wasn't designed for progressive disclosure. But put them together and the structure you build to hold knowledge becomes its own thing worth having.
 
 ## Quick Start
 
@@ -12,23 +12,23 @@ Tell your coding agent:
 Clone https://github.com/trevorfox/spandrel.git then read BOOTSTRAP.md and follow its instructions to set up my knowledge graph.
 ```
 
-The agent clones the repo, reads `BOOTSTRAP.md`, and guides you through a conversation to design your graph: what it's for, what collections you need, how to structure your content. It creates the knowledge repo, compiles it, and validates the result.
+The agent clones the repo, reads `BOOTSTRAP.md`, and guides you through designing your graph: what it's for, what collections you need, how to structure your content. It creates the knowledge repo, compiles it, and validates the result.
 
-## What Spandrel Does
+## What It Does
 
-You write markdown files with YAML frontmatter. Spandrel compiles them into an in-memory graph with nodes, edges, and progressive disclosure. Then it serves that graph through:
+You write markdown files with YAML frontmatter. Spandrel compiles them into an in-memory graph with nodes, edges, and progressive disclosure — then serves that graph through GraphQL and MCP.
 
-- **GraphQL** — the universal query interface and single enforcement point for access control
-- **MCP** — 11 agent-optimized tools for navigation, search, and write operations
-- **CLI** — compile, dev server, MCP server
+An agent doesn't get everything dumped into its context window. It reads the root description, picks a direction, reads that level, picks again, and arrives at exactly what it needs. Hundreds of tokens on navigation instead of tens of thousands on loading everything. That's progressive disclosure, and it's what makes this different from search-based retrieval.
+
+## Three Beliefs
+
+**Structure is the interface.** If knowledge is organized well, navigation becomes self-evident. The shape of the structure teaches you where things are and how they relate — for humans and agents equally.
+
+**Context engineering is a build step, not a conversation.** Every token spent orienting or maintaining context is a token not spent on actual work. The system handles coherence and relationships so actors can focus on using knowledge, not managing it.
+
+**Governed exchange is the default.** Knowledge moves between people, teams, and agents. Every piece of knowledge has clear boundaries around who can see it, who can change it, and how much of it they can access.
 
 ## Setup
-
-```bash
-npx spandrel init my-knowledge
-```
-
-Or install globally:
 
 ```bash
 npm install -g spandrel
@@ -115,3 +115,13 @@ npm test
 ```
 
 Tests create temporary knowledge repos, compile them, and validate the full stack — compiler, GraphQL, MCP, access layer, and write operations. No external fixtures required.
+
+## What Spandrel Is Not
+
+It's not a vector database. It's not a RAG pipeline. It's not a CMS. It's not Obsidian.
+
+It's a way to take knowledge you already have — or need to build — and make it navigable, governed, and consumable by any agent or tool that speaks GraphQL or MCP. Using technologies you already understand.
+
+## License
+
+MIT
