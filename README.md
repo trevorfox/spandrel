@@ -1,18 +1,18 @@
 # Spandrel
 
-Named after the [architectural byproduct](https://en.wikipedia.org/wiki/Spandrel_(biology)) that Gould & Lewontin argued becomes more interesting than the structure it emerged from. The knowledge graph structure here emerges from the practical necessity of organizing files for LLM consumption. Progressive disclosure emerges from the constraint of finite context windows. The governance layer emerges from the need to share knowledge across boundaries. The framework itself wasn't the goal — the knowledge was. But the structure you build to hold it becomes its own thing worth having.
-
 Spandrel turns a directory of markdown files into a navigable, queryable, access-controlled knowledge graph served via GraphQL and MCP.
+
+Named after the [architectural byproduct](https://en.wikipedia.org/wiki/Spandrel_(biology)) that Gould & Lewontin argued becomes more interesting than the structure it emerged from. The knowledge graph structure here emerges from the practical necessity of organizing files for LLM consumption. Progressive disclosure emerges from the constraint of finite context windows. The governance layer emerges from the need to share knowledge across boundaries. The framework itself wasn't the goal — the knowledge was. But the structure you build to hold it becomes its own thing worth having.
 
 ## Quick Start
 
-Clone this repo, then tell your coding agent:
+Tell your coding agent:
 
 ```
-Read BOOTSTRAP.md and follow its instructions to set up my knowledge graph.
+Clone https://github.com/trevorfox/spandrel.git then read BOOTSTRAP.md and follow its instructions to set up my knowledge graph.
 ```
 
-The agent reads `BOOTSTRAP.md` and guides you through a conversation to design your graph: what it's for, what collections you need, how to structure your content. It creates the knowledge repo, compiles it, and validates the result.
+The agent clones the repo, reads `BOOTSTRAP.md`, and guides you through a conversation to design your graph: what it's for, what collections you need, how to structure your content. It creates the knowledge repo, compiles it, and validates the result.
 
 ## What Spandrel Does
 
