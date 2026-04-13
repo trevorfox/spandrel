@@ -1,13 +1,28 @@
 {
   "name": "spandrel",
   "version": "0.1.0",
-  "description": "A protocol for governed context exchange between actors",
+  "description": "Turn markdown file trees into navigable, queryable knowledge graphs served via GraphQL and MCP",
   "type": "module",
+  "license": "MIT",
   "bin": {
     "spandrel": "dist/cli.js"
   },
+  "files": [
+    "dist",
+    "patterns",
+    "BOOTSTRAP.md",
+    "README.md"
+  ],
+  "keywords": [
+    "knowledge-graph",
+    "mcp",
+    "graphql",
+    "markdown",
+    "model-context-protocol"
+  ],
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "dev": "tsx src/cli.ts dev",
     "test": "vitest run",
     "test:watch": "vitest"
