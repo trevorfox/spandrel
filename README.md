@@ -1,6 +1,8 @@
 # Spandrel
 
-A protocol for governed context exchange between actors. Spandrel turns a directory of markdown files into a navigable, queryable, access-controlled knowledge graph served via GraphQL and MCP.
+Named after the [architectural byproduct](https://en.wikipedia.org/wiki/Spandrel_(biology)) that Gould & Lewontin argued becomes more interesting than the structure it emerged from. The knowledge graph structure here emerges from the practical necessity of organizing files for LLM consumption. Progressive disclosure emerges from the constraint of finite context windows. The governance layer emerges from the need to share knowledge across boundaries. The framework itself wasn't the goal — the knowledge was. But the structure you build to hold it becomes its own thing worth having.
+
+Spandrel turns a directory of markdown files into a navigable, queryable, access-controlled knowledge graph served via GraphQL and MCP.
 
 ## Quick Start
 
@@ -23,13 +25,14 @@ You write markdown files with YAML frontmatter. Spandrel compiles them into an i
 ## Setup
 
 ```bash
-git clone <repo-url> && cd spandrel
-npm install
-npm run build
-npm link
+npx spandrel init my-knowledge
 ```
 
-Now `spandrel` is available globally.
+Or install globally:
+
+```bash
+npm install -g spandrel
+```
 
 ## Usage
 
@@ -105,12 +108,10 @@ Markdown files → Compiler → In-memory graph → GraphQL schema → MCP / HTT
 
 The compiler walks the file tree, parses frontmatter, builds nodes and edges, validates. The schema serves queries with per-request access filtering. Write mutations go through GraphQL, write to the filesystem, and trigger synchronous recompilation.
 
-## Dogfooding
-
-Spandrel describes itself. The `spandrel-v2` sibling directory is a knowledge graph about Spandrel, compiled and tested by Spandrel. The e2e test suite runs against it.
+## Testing
 
 ```bash
-npm test                              # unit + integration + e2e against spandrel-v2
-spandrel compile ../spandrel-v2       # compile the reference instance
-spandrel dev ../spandrel-v2           # serve it locally
+npm test
 ```
+
+Tests create temporary knowledge repos, compile them, and validate the full stack — compiler, GraphQL, MCP, access layer, and write operations. No external fixtures required.

@@ -2,3 +2,5 @@ node_modules/
 dist/
 *.tsbuildinfo
 .claude/
+context-hub-architecture-notes.md
+ROADMAP.md

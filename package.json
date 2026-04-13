@@ -4,6 +4,15 @@
   "description": "Turn markdown file trees into navigable, queryable knowledge graphs served via GraphQL and MCP",
   "type": "module",
   "license": "MIT",
+  "author": "Trevor Fox",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/trevorfox/spandrel.git"
+  },
+  "homepage": "https://github.com/trevorfox/spandrel",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "bin": {
     "spandrel": "dist/cli.js"
   },

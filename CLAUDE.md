@@ -11,11 +11,6 @@ The Spandrel framework — a compiler, GraphQL server, MCP server, and access la
 - `BOOTSTRAP.md` — Agent-guided setup for new knowledge graphs
 - `context-hub-architecture-notes.md` — Full architecture spec
 
-## Sibling directories
-
-- `../spandrel-v1/` — v1 reference instance (Spandrel-on-Spandrel, 35 nodes)
-- `../spandrel-v2/` — v2 reference instance (37 nodes, includes access + write docs)
-
 ## Running
 
 ```bash
