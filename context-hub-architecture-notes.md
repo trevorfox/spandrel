@@ -40,29 +40,46 @@ The aspiration is that Spandrel becomes a shared convention — a protocol, not 
 
 ## Principles
 
-The principles sit between philosophy and architecture. They're concrete enough to guide decisions but abstract enough to survive implementation changes.
+The principles sit between philosophy and architecture. They're constraints on how the system must work — ordered from most fundamental to most operational.
 
-### Core Principles
+**1. The graph configures its own consumption.** *(v2)* How actors interact with the graph is defined by content within the graph itself. Design.md files, guide content, and conventions are Things that shape behavior. The system describes itself using itself.
 
-**Convention over configuration.** Spandrel is opinionated by default. The tree structure, the index convention, the compilation pattern — these are decisions already made so that every instance is legible to anyone who knows the standard. You can override, but the defaults work.
+**2. Progressive disclosure everywhere.** Start with the summary, let the actor choose to go deeper. Never front-load complexity.
 
-**Progressive disclosure everywhere.** At every level — file structure, UI, MCP responses, onboarding — start with the summary and let the actor choose to go deeper. Never front-load complexity.
+**3. Every node is the same type.** A Thing at the root and a Thing five levels deep are the same primitive.
 
-**The graph is the source of truth for relationships.** Links between Things are declared in frontmatter. The compiler builds the graph from these declarations. References resolve at read time, so changes propagate without cascading rebuilds.
+**4. Governance is a layer, not a primitive.** *(v2)* Access controls overlay the tree. Change access without restructuring. Restructure without rethinking access.
 
-**Automation at the edges, humans at the center.** Pipelines, compilation, and graph maintenance are automated. Judgment calls about structure, meaning, and governance are human. The system handles the mechanical work so people can focus on the semantic work.
+**5. Convention over configuration.** Opinionated defaults so every instance is legible to anyone who knows the standard.
 
-**Every node is the same type.** A Thing at the root and a Thing five levels deep are the same primitive. This uniformity is what makes the system legible — you never encounter a node that behaves differently than you expect.
+**6. Paths are addresses.** Every node is identified by its path relative to the knowledge repo root. Same address in the file system, MCP, web UI, and GraphQL.
 
-**Governance is a layer, not a primitive.** Access controls are a governance overlay on the tree, not a structural element within it. This separation means you can reorganize knowledge without rethinking access, and change access without restructuring knowledge.
+**7. The graph is the source of truth for relationships.** Links are declared in frontmatter. The compiler builds the graph. References resolve at read time.
 
-**The repo is the product.** Everything needed to run Spandrel lives in the repo — skills, hooks, scripts, pipeline stubs, onboarding docs, `design.md` files. If it's not in the repo, it doesn't exist yet.
+**8. GraphQL is the universal interface.** Every consumer accesses the graph through GraphQL. MCP, web, CLI — all wrap GraphQL.
 
-**Paths are addresses.** Every node is identified by its path relative to the repo root. `/clients/acme-corp` is the address — in the file system, in the MCP tools, in the web UI URL, everywhere. No custom URI schemes, no UUIDs, no indirection. If the system is hosted, paths become URL paths (`https://your-spandrel.com/clients/acme-corp`). If it's local, they're just file paths. References between nodes use these paths. This convention means addresses are human-readable, portable, and work the same way in every interface.
+**9. The repo is the product.** Everything needed to run Spandrel lives in the repos. If it's not there, it doesn't exist yet.
 
-**Underscore means system, not content.** Files and directories prefixed with `_` are system infrastructure — skills, hooks, scripts, templates, implementation details. The compiler skips them when building the graph. Content that should be navigable in the graph never gets an underscore prefix.
+## Patterns
 
-**GraphQL is the universal interface.** GraphQL is not one of several interfaces — it's the central layer through which every consumer accesses the graph. MCP wraps GraphQL. The web UI queries GraphQL. The CLI queries GraphQL. Any future interface queries GraphQL. The only thing that varies is what sits behind GraphQL (in-memory graph or SQLite) and what sits in front of it (MCP, HTTP, CLI). GraphQL is the single point of access to the compiled graph.
+Proven ways to use the system. These live in the framework repo's `patterns/` directory and are referenced by BOOTSTRAP.md and design.md files.
+
+- **Roles are skills, skills serve roles.** *(v2)* Context engineer, information architect, and analyst are roles. Each role has a corresponding skill that loads the relevant context so any agent — human or autonomous — behaves according to the role.
+- **Placement** — the more central a Thing is (more frequently linked), the higher it should live in the tree.
+- **Collections** — top-level directories are your nouns. Decide them upfront during bootstrap.
+- **Linking** — if you find yourself creating deep nesting to show a relationship, use a link instead.
+- **Ingestion** — different source types need different strategies. Embed, cluster, propose, classify, validate.
+- **Progressive disclosure writing** — write descriptions as if the reader will decide whether to go deeper based solely on this one line.
+
+## Conventions
+
+Specific choices that could have gone differently but are standardized for consistency.
+
+- **Editor-agnostic:** *(v2)* `AGENT.md` is the standard entry point for any LLM-assisted tool. Not Claude-specific, not Cursor-specific.
+- **Separate framework from content:** *(v2)* Two repos. The knowledge repo is pure content.
+- **Only `index.md` creates nodes.** Everything else in the knowledge repo is supporting content, not graph nodes.
+- **`design.md` is guidance, not content.** The compiler skips it. It's consumed by builders and LLMs during construction.
+- **Automation at the edges, humans at the center.** Compilation and pipelines are automated. Judgment calls are human. The level of involvement is configurable.
 
 ### Borrowed Principles
 
@@ -159,6 +176,24 @@ Access controls are not a third primitive — they're a **governance overlay** t
 - Restructuring the tree (how knowledge is organized) doesn't require rethinking governance
 - This mirrors established patterns: resources and resource groups vs. IAM policies; tables and schemas vs. grants
 
+**Access spec (v2 — must be true when access layer is implemented):**
+
+1. Every GraphQL query is filtered by the actor's permissions before returning results
+2. Nodes the actor can't access are absent from responses, not redacted — unless the actor has partial access (exists/description level), in which case only the permitted depth of information is returned
+3. The filtering happens at the GraphQL layer — the compiler and graph don't know about access
+4. A single function — `canAccess(actor, path, metadata)` — is the enforcement point, returning an access level (none, exists, description, content, traverse) rather than a boolean
+5. All interfaces (MCP, web, CLI) resolve to the same access check — the transport is different but the access is identical
+
+**Access levels (granularity of disclosure):**
+
+- **None** — the node is invisible, the actor doesn't know it exists
+- **Exists** — the actor can see the node's path and name only
+- **Description** — the actor can see name, description, and link metadata
+- **Content** — the actor can read the full markdown body
+- **Traverse** — the actor can follow links from this node to others
+
+These levels are progressive disclosure applied to governance — you control not just what actors can see, but how much of it they can see. Configuration of identity, roles, policies, and access levels is described in `access/design.md` in the framework repo.
+
 ### How They Relate
 
 - Things compose into Collections (structural/semantic)
@@ -229,8 +264,7 @@ Every node in the graph is a Thing. A node has:
 - **Depth** — its level in the hierarchy (root = 0)
 - **Parent** — the node above it (null for root)
 - **Children** — nodes below it (only for composite nodes)
-- **References** — links to related nodes elsewhere in the graph (from frontmatter: path + short description)
-- **Dependencies** — upstream nodes this Thing depends on (from frontmatter: path + relationship)
+- **References** — links to related nodes elsewhere in the graph (from frontmatter `links`: path, type, description)
 
 ### Edges
 
@@ -239,8 +273,6 @@ Two kinds of edges (compiled from the file system and frontmatter):
 1. **Hierarchy edges** — parent/child relationships. The tree. Implicit from the directory structure.
 2. **Link edges** — declared in frontmatter `links`. Lateral connections across the tree. Each has a path, optional type (freeform, user-defined), and optional description. Link types are arbitrary — they don't change how the graph works, they just describe the relationship for consumers.
 
-**Edges are bidirectional at query time.** Link edges are declared in one direction (from the node that declares them), but the system exposes both outgoing references (links FROM this node) and incoming references (links TO this node, aka backlinks). This is critical for navigation — without backlinks, half the graph is invisible from any given node. An agent landing on `/conventions/frontmatter` needs to discover that `/primitives/things` depends on it, even though the link is declared on Things, not on Frontmatter.
-
 access/governance edges are a separate concern — defers to established access control patterns (RBAC, ABAC, IAM). Design deferred.
 
 ### Graph Compilation
@@ -248,8 +280,8 @@ access/governance edges are a separate concern — defers to established access 
 **Change detection:** Git provides diffs between commits. A file watcher (fswatch, chokidar) catches changes in real time for a running server. The compiler only re-parses files that changed and updates their nodes/edges in the in-memory graph.
 
 **On startup:**
-1. Walks the file tree (skipping `_` prefixed directories — system files, not content)
-2. Reads every `index.md` frontmatter and content
+1. Walks the knowledge repo file tree — every directory is a potential Thing
+2. Reads every `index.md` frontmatter and content (all other files are ignored)
 3. Builds nodes (path, name, description, node type, depth)
 4. Builds hierarchy edges from directory structure
 5. Builds link edges from frontmatter `links`
@@ -299,19 +331,12 @@ access/governance edges are a separate concern — defers to established access 
 
 **MCP tool surface:**
 
-MCP tools are optimized for how agents actually navigate, not as 1:1 mirrors of GraphQL queries. GraphQL is a flexible query language where the client controls the shape; MCP tools are fixed operations where the server controls the shape for the agent's benefit.
-
-*Core navigation tools (agent-facing):*
-
-- `get_node(path, depth?, includeContent?)` — returns name, description, node type, children, links (outgoing), referenced_by (incoming backlinks), parent. Optional `includeContent` returns the markdown body inline (avoids a second round-trip for leaf nodes). The progressive disclosure entry point.
-- `get_content(path)` — returns full markdown body. Use when you want content without structural metadata, or when you already have the structure from `get_node`.
-- `context(path)` — the "tell me everything" tool. Returns the node, its full content, all outgoing references with target names/descriptions, and all incoming references (backlinks) with source names/descriptions. One call to fully understand a Thing and its place in the graph. This is the natural unit of agent work.
-- `get_references(path, direction?)` — returns link edges. Direction: `outgoing` (default), `incoming` (backlinks), or `both`. Includes the name and description of the linked node for context.
-- `search(query, path?)` — full-text search across all nodes, optionally scoped to a subtree. Returns paths, names, descriptions, and a content snippet. Results ranked by relevance (exact name match > description match > content match). The escape hatch from tree traversal.
+- `get_node(path, depth?)` — returns name, description, node type, children, links, parent. With optional depth for wider structural view. The progressive disclosure entry point.
+- `get_content(path)` — returns full markdown body. Use when you've found the right node.
+- `get_children(path, depth?)` — returns subtree to N levels, names + descriptions only.
+- `get_references(path)` — returns all link edges from this node with their types and descriptions.
+- `search(query)` — full-text search across all nodes. Returns paths, names, descriptions, and a content snippet for relevance. The escape hatch from tree traversal.
 - `get_graph(path?, depth?)` — returns nodes + typed edges for visualization or broad orientation.
-
-*Builder tools (context engineer-facing):*
-
 - `validate(path?)` — returns inconsistencies at or below a given node. Broken links, unlisted children, missing descriptions.
 - `get_history(path)` — returns version history from git. List of commits with dates, authors, and messages. Audit trail for any node.
 
@@ -334,222 +359,490 @@ Changes are simple because references resolve at read time:
 
 ## `design.md` Files
 
-Every folder (Thing) can contain a `design.md` alongside its `index.md`. Where `index.md` is the face of the Thing (what it is, what it contains), `design.md` is the guidance for how the Thing should be designed, built out, and maintained.
+> **Note:** With the repo separation, `design.md` files live in two places: in the Spandrel framework repo (for system components like compiler, search, access) and in the knowledge repo (for content collections like clients, projects, people).
+
+Every folder can contain a `design.md` alongside its `index.md`. Where `index.md` is the face of the Thing (what it is, what it contains), `design.md` is the guidance for how the Thing should be designed, built out, and maintained.
 
 **What a `design.md` contains:**
 - Design criteria and considerations for making this part of the graph useful and effective
 - Guidance on what should be considered when building out this Thing or its children
 - How this Thing conforms to the broader Spandrel structure and principles
 - For Collections: what shape instances should take, what a well-formed child looks like
-- For complex domains: how to complete this part of the graph (e.g., building out a CRM section, task management, organizational structure for people)
+- For complex domains: how to complete this part of the graph
 
-**`design.md` files are stubs for things to be built out.** They capture how things have been designed or how they should be designed — high-level parametric guidance that helps people (or LLMs) progressively build the structure in a way that's good for the system.
+**`design.md` files are stubs for things to be built out.** They capture how things have been designed or how they should be designed — high-level parametric guidance that helps people (or LLMs) progressively build the structure.
 
-**Examples:**
-- `/clients/design.md` — describes what a well-formed client Thing looks like, what sub-Things to create, what links to establish
-- `/guide/design.md` — describes how the guide section should be organized and what topics to cover
-- `/_web-ui/design.md` — describes the interfaces the web UI could be built on, how it would be used, what it needs to conform to from the architectural spec
-- `/_search/design.md` — describes search implementation considerations, options (in-memory string matching vs. SQLite FTS), and the spec requirements it must meet
+**In the knowledge repo:**
+- `/clients/design.md` — describes what a well-formed client Thing looks like
+- `/guide/design.md` — describes how the guide section should be organized
 
-**`design.md` files are not compiled into the graph as nodes.** They live alongside `index.md` but are consumed by builders and LLMs during construction, not by consumers during navigation. The compiler ignores them for graph purposes.
+**In the framework repo:**
+- `web-ui/design.md` — describes the interfaces the web UI could be built on
+- `search/design.md` — describes search implementation options
+- `access/design.md` — describes the access layer (already written)
 
-**Key insight:** `design.md` files are how the system remains configurable and extendable. The architectural spec defines what must be true (the interfaces, the data model, the compilation). The `design.md` files describe how to build things that meet that spec in whatever way suits the builder.
+**`design.md` files in the knowledge repo are not compiled into the graph as nodes.** The compiler ignores them. They're consumed by builders and LLMs during construction, not by consumers during navigation.
 
 ---
 
 ## Conventions
 
-### The `_` Prefix Convention
+### Knowledge Repo Is Pure Content
 
-Directories and files prefixed with `_` are system-level, not content. The compiler skips them when building the graph.
-
-- `_skills/`, `_hooks/`, `_scripts/`, `_templates/` — system infrastructure
-- `_web-ui/`, `_search/` — implementation concerns with their own `design.md` files
-- Files like `_notes.md` or `_archive/` within a Thing — internal working files, not graph nodes
-
-The `/guide/` directory does NOT have an underscore — it's content about the system that should be navigable in the graph.
+> **Recent design decision:** With separate repos, the knowledge repo contains only content — no system files, no special prefixes. Every directory is a Thing. Every file is either an `index.md`, a `design.md`, or supporting content. The compiler treats the entire tree as the graph.
 
 ### Directories Without `index.md`
 
-The validator warns if a directory lacks an `index.md`. The compiler still creates a node for it (it exists in the file tree, so it exists in the graph) but dynamically generates a minimal representation — essentially an `llms.txt`-style listing of the directory's children with their names, descriptions, and paths. This means the graph is always complete, even if some nodes are thin.
+The validator warns if a directory lacks an `index.md`. The compiler still creates a node for it but dynamically generates a minimal representation — an `llms.txt`-style listing of the directory's children with their names, descriptions, and paths. The graph is always complete, even if some nodes are thin.
+
+### `design.md` Is Not a Graph Node
+
+The compiler skips `design.md` files when building nodes. They're guidance, not content. Only `index.md` files create nodes.
+
+### Only `index.md` Creates Nodes
+
+The compiler walks the knowledge repo and only looks at `index.md` files. Everything else — `design.md`, images, PDFs, supporting documents — exists in the file system but not in the graph. These files are part of a Thing's body, accessible if you know the path, but not compiled as graph nodes.
 
 ---
 
-## External Data Pipelines
+# V2 Design (post-v1 additions)
 
-- Pipelines pull from MCPs, scripts, APIs (Slack, email, etc.)
-- They write markdown files with frontmatter into the appropriate location in the tree
-- The file watcher or git hook detects the new/changed files and recompiles
+> Everything below this line was designed after v1 was built. It represents the next layer of the system — access control, ingestion pipelines, repo separation, roles, patterns, and the refined delivery mechanism. The v1 core (compiler, GraphQL, MCP, test suite) works without any of this.
+
+---
+
+## Skills
+
+### Skills as Things
+
+Skills are Things in the graph. They have `index.md` files, they're discoverable via progressive disclosure, they show up in the compiled graph. An agent can `get_node("/skills/context-engineer")` to understand what the role does before loading it.
+
+Skills live in the top-level `/skills/` directory of the knowledge repo, following the standard agent skills convention. Subtree-specific skills (loaded only when working within a particular branch of the graph) are a valid pattern but not the default — Spandrel's core roles live at the top level.
+
+### Archetypes as Design Docs
+
+The Spandrel framework repo ships **skill design docs** — not finished skills, but `design.md` files that describe what each role should do, what context it should load, what behaviors it should enable, and how it relates to the knowledge graph.
+
+No `SKILL.md` files in the framework. Just design docs that describe the intent. During bootstrap, the agent reads those design docs, looks at the specific knowledge repo it just built, and generates instance-specific `SKILL.md` files that reference the actual paths, collections, and conventions of that graph.
+
+This follows the same pattern as everything else in Spandrel: the design.md describes the shape, the bootstrap creates the instance.
+
+### `index.md` as Nucleus
+
+Conceptually, `index.md` is the nucleus of every Thing — the core that everything else orbits around. The file stays named `index.md` because it's an existing convention (web servers, static site generators, documentation tools) that anyone instantly recognizes as "the entry point for this directory."
+
+### Directory Structure
+
+```
+my-knowledge/
+├── .claude/
+│   └── commands/               # Slash commands that reference skills
+├── skills/
+│   ├── index.md                # "Available roles for this knowledge graph"
+│   ├── context-engineer/
+│   │   ├── index.md            # Description of the role, what it does, when to use it
+│   │   └── SKILL.md            # The operational file the coding agent loads
+│   ├── information-architect/
+│   │   ├── index.md            # Description of the IA role
+│   │   └── SKILL.md            # Loaded during design/restructuring phases
+│   └── analyst/
+│       ├── index.md            # Description of the analyst role
+│       └── SKILL.md            # Loaded during exploration/querying
+```
+
+- `index.md` makes the skill a Thing in the graph — discoverable, describable
+- `SKILL.md` is the actual instruction file the coding agent reads, following agent skills conventions
+- The `.claude/commands/` directory (or equivalent for other tools) provides slash commands that load the appropriate skill
+
+### The Three Core Roles
+
+**Information Architect** — works during design phases. Bootstrap is an IA activity. Reshape is an IA activity. The IA checks whether the graph's representation of knowledge matches reality and whether the structure serves the repo's purpose via its external interfaces and pipeline inputs. The IA sees the forest — loads principles, patterns, full graph structure at a high level, and design.md files. Asks: "is this the right structure?"
+
+**Context Engineer** — works during maintenance. Adding Things, running validation, configuring pipelines, updating stale descriptions. Often loaded by an autonomous agent operating continuously. The CE sees the trees — loads validation results, recent changes, graph health, and the specific design.md for wherever they're working. Asks: "is this structure working?"
+
+**Analyst** — works during exploration. Queries the graph at different depths, follows links, searches, reviews history. The analyst loads the graph structure and uses the query tools. Asks: "what does this graph tell me?"
+
+### Skill Loading
+
+Each skill's `SKILL.md` specifies what to load into context:
+
+- **IA skill:** Spandrel principles, patterns, the root index, all top-level collection design.md files, the full graph structure at depth 2-3
+- **CE skill:** Validation results, recent git changes, the specific subtree they're working in, the relevant design.md files, pipeline status
+- **Analyst skill:** Graph structure overview, available query tools, search capabilities
+
+The skills read from the graph using the same MCP tools as any consumer — they're not special. They just know which nodes to load first.
+
+---
+
+## Pipelines and Ingestion
+
+### What a Pipeline Is
+
+A pipeline is any process that writes markdown files with frontmatter into the knowledge repo. It could be a script that pulls from Slack, a cron job that fetches email digests, a manual process of copying files into a staging area, or an LLM-assisted workflow that converts unstructured content into structured Things.
+
+The pipeline's job is to produce valid `index.md` files with `name`, `description`, and `links` in frontmatter, placed in the right location in the tree. The compiler picks it up from there.
+
+### Ongoing Pipelines
+
+- Pull from MCPs, scripts, APIs (Slack, email, etc.)
+- Write markdown files with frontmatter into the appropriate location in the knowledge repo
+- The file watcher or git hook detects new/changed files and recompiles
 - Pipeline-authored content uses `author: /systems/pipeline-name` to distinguish from human-authored content
-- Pipelines are themselves Things (e.g., `/systems/slack-digest-pipeline/`) so they're referenceable and describable
+- Pipeline systems can be described as Things in the knowledge repo (e.g., `/systems/slack-digest-pipeline/`)
+
+### Initial Ingestion Pipeline (opinionated)
+
+> **Recent design decision:** The ingestion pipeline is opinionated — it ships with Spandrel as a default workflow, not as a design.md to be figured out later. This is critical for adoption. The steps are fixed but the level of human involvement at each checkpoint is configurable.
+
+For bringing in large quantities of existing unstructured data (text files, documents, transcripts, exports, websites):
+
+**Step 1: Stage.** Collect all source material into a flat staging area. Each source document becomes a markdown file with whatever metadata can be extracted automatically — filename, date, source type. No hierarchy yet.
+
+**Step 2: Embed and cluster.** Run embeddings on all documents. Cluster semantically to discover the major topics and groupings in the corpus. This gives a machine-generated sense of the space without anyone reading everything.
+
+**Checkpoint:** Show the clusters. "Here are the groupings I'm seeing. Does this match your understanding? What's missing?" The human (or supervising agent) adjusts.
+
+**Step 3: Propose structure.** Based on the clusters and the user's input, propose top-level collections. Reference `patterns/collections.md` and `patterns/placement.md` for conventions.
+
+**Checkpoint:** The human approves or adjusts the proposed collections before anything is created.
+
+**Step 4: Classify and place.** For each document, assign it to a collection and generate frontmatter — name, description, and links to semantically related documents.
+
+**Checkpoint:** Review a sample. "Here's how I classified 10 representative documents. Does this feel right?" Then proceed with the full corpus.
+
+**Step 5: Consolidate.** Multiple documents about the same Thing get merged into one Thing with richer content. Duplicates get resolved.
+
+**Checkpoint:** Review proposed merges before executing.
+
+**Step 6: Generate indexes.** For each collection and sub-grouping, generate `index.md` files that summarize what's inside.
+
+**Step 7: Validate and refine.** Run the compiler, run validation, show the graph. The human reviews the full structure and adjusts.
+
+The checkpoints are configurable — a hands-on context engineer might review at every step, while an autonomous agent might only pause at Steps 3 and 7. The default is to checkpoint at every step.
+
+### Three Intake Modes
+
+All three modes can target any path — the root of the knowledge repo or any subtree.
+
+**1. Bootstrap** (`spandrel intake --mode bootstrap --source ./raw-data --target ./my-knowledge`)
+No structure exists. The intake figures out the structure from the content using the seven-step pipeline above. Used once at the start, or when adding an entirely new domain.
+
+**2. Intake** (`spandrel intake --source ./new-data --target /clients/acme`)
+Structure exists. New content arrives and gets shaped to fit the existing schema. The pipeline reads the `design.md` at the target path (or nearest parent) and the compiled graph to understand what's already there. New content is classified, given frontmatter, and placed to match the existing structure.
+
+**3. Reshape** (`spandrel reshape --target /clients`)
+Structure exists but needs reorganization. The input IS the existing content. The pipeline reads the subgraph at the target path, proposes a new structure (merge, split, condense, reformat, reorganize), and rewrites the files. The rest of the graph is untouched. Git diff shows exactly what changed. The validator catches any links from outside the subtree that broke.
+
+Use cases for reshape:
+- A collection got too big — split it
+- Two collections overlap — merge them
+- Descriptions are stale or verbose — condense them
+- Frontmatter doesn't match updated conventions — reformat
+- Your understanding of the domain evolved — reorganize
+- Pointing Spandrel at itself to improve the framework repo's own structure
 
 ---
 
-## What Ships: The Open Source Repo
+## What Ships: Two Repos
 
-### File System Layout
+> **Recent design decision:** The Spandrel framework and the user's knowledge content are separate repos. The framework is a tool you install. The knowledge repo is pure content — no system files, no underscores, no compiler code. This eliminates the `_` prefix problem and cleanly separates concerns.
+
+### Spandrel Framework Repo
 
 ```
 spandrel/
-├── STARTUP.md                          # Entry point — follow this first
-├── CLAUDE.md                           # Claude Code instructions for this instance
-├── index.md                            # Root Thing — the top-level entry point
-│
-├── guide/                              # Content: how to use Spandrel (IN the graph)
-│   ├── index.md
-│   ├── design.md
-│   ├── for-builders.md
-│   ├── for-analysts.md
-│   └── for-consumers.md
-│
-├── _skills/                            # System: skills for interacting with the system
-│   ├── bootstrap/                      # The bootstrap skill
-│   ├── system/                         # System skills (validate, compile, navigate)
-│   └── content/                        # Content skills (generated at bootstrap)
-│
-├── _hooks/                             # System: editor and git hook stubs
+├── BOOTSTRAP.md                        # Instructions for the coding agent to guide setup
+├── README.md                           # What Spandrel is, how to get started
+├── compiler/                           # The graph compiler
+│   └── design.md
+├── graphql/                            # GraphQL schema and resolvers
+│   └── design.md
+├── mcp/                                # MCP server wrapping GraphQL
+│   └── design.md
+├── server/                             # Server mode (SQLite + GraphQL)
+│   └── design.md
+├── search/                             # Search implementation
+│   └── design.md
+├── access/                             # Access layer (design.md already written)
+│   └── design.md
+├── web-ui/                             # Graph visualization interface
+│   └── design.md
+├── skills/                             # Skill design docs (archetypes, not finished skills)
+│   ├── design.md                       # How skills work in Spandrel
+│   ├── context-engineer/
+│   │   └── design.md                   # What the CE skill should do
+│   ├── information-architect/
+│   │   └── design.md                   # What the IA skill should do
+│   └── analyst/
+│       └── design.md                   # What the analyst skill should do
+├── hooks/                              # Editor and git hook stubs
 │   ├── claude-code/
 │   ├── cursor/
 │   └── git/
-│
-├── _compiler/                          # System: the graph compiler
-│   ├── design.md                       # How the compiler works, how to extend it
-│   └── ...
-│
-├── _server/                            # System: server mode (SQLite + GraphQL)
-│   ├── design.md                       # Server architecture, deployment options
-│   └── ...
-│
-├── _web-ui/                            # System: graph visualization interface
-│   ├── design.md                       # UI framework, rendering, hosting options
-│   └── ...
-│
-├── _search/                            # System: search implementation
-│   ├── design.md                       # In-memory vs SQLite FTS, result ranking
-│   └── ...
-│
-├── _access/                            # System: governance / access control
-│   ├── design.md                       # RBAC/ABAC/IAM patterns, implementation
-│   └── ...
-│
-├── _pipelines/                         # System: external data pipeline templates
-│   ├── design.md                       # How to build connectors
-│   └── _templates/
-│
-├── _templates/                         # System: templates for new Things
+├── pipelines/                          # Pipeline templates for data ingestion
+│   └── design.md
+├── templates/                          # Templates for new Things and Collections
 │   ├── thing/
 │   │   ├── index.md
 │   │   └── design.md
 │   └── collection/
 │       ├── index.md
 │       └── design.md
-│
-└── [user-defined content lives here]
-    ├── clients/
-    │   ├── index.md
-    │   ├── design.md                   # What a client Thing looks like
-    │   ├── acme-corp/
-    │   │   ├── index.md
-    │   │   └── ...
-    │   └── globex/
-    │       ├── index.md
-    │       └── ...
-    └── projects/
-        ├── index.md
-        ├── design.md
-        └── project-alpha/
-            ├── index.md
-            └── ...
+├── patterns/                           # Documented patterns and conventions
+│   ├── index.md
+│   ├── placement.md                    # Where Things should live in the tree
+│   ├── collections.md                  # How to design top-level collections
+│   ├── linking.md                      # When and how to link Things
+│   ├── ingestion.md                    # How to bring in unstructured data
+│   └── progressive-disclosure.md       # How to write good descriptions
+└── package.json
 ```
 
-### Two Deployment Modes (strong opinions)
+### Knowledge Repo (what the user creates)
+
+```
+my-knowledge/
+├── index.md                            # Root Thing — top-level entry point
+├── AGENT.md                           # Agent instructions for this graph
+├── skills/                             # Instance-specific skills (generated from archetypes)
+│   ├── index.md                        # Discoverable in the graph
+│   ├── context-engineer/
+│   │   ├── index.md
+│   │   └── SKILL.md
+│   ├── information-architect/
+│   │   ├── index.md
+│   │   └── SKILL.md
+│   └── analyst/
+│       ├── index.md
+│       └── SKILL.md
+├── guide/                              # How to use this knowledge graph
+│   ├── index.md
+│   ├── design.md
+│   ├── for-builders.md
+│   ├── for-analysts.md
+│   └── for-consumers.md
+├── people/                             # Top-level collection
+│   ├── index.md
+│   ├── design.md
+│   └── jane/
+│       └── index.md
+├── clients/                            # Top-level collection
+│   ├── index.md
+│   ├── design.md
+│   └── acme-corp/
+│       └── index.md
+└── projects/                           # Top-level collection
+    ├── index.md
+    ├── design.md
+    └── project-alpha/
+        └── index.md
+```
+
+Pure content. No system files. The compiler points at this directory from outside. The entire tree is the graph.
+
+### Delivery and Setup
+
+> **Recent design decision:** The entry point is a single prompt pasted into any coding agent (Claude Code, Cursor, etc.). The agent runs the install command and then follows `BOOTSTRAP.md` to guide the user through setup.
+
+The user pastes something like:
+
+```
+Clone https://github.com/spandrel/spandrel.git then read BOOTSTRAP.md and follow its instructions to set up my knowledge graph.
+```
+
+One sentence. The agent clones the repo, reads `BOOTSTRAP.md`, and starts the guided conversation.
+
+### BOOTSTRAP.md
+
+> **Recent design decision:** The bootstrap process follows progressive disclosure — it starts abstract and gets more specific as it learns about the user's needs. It's not a script. It's a document that teaches the coding agent how to guide setup.
+
+`BOOTSTRAP.md` is structured in progressive phases. Each phase reveals more detail based on what was learned in the previous phase:
+
+**Phase 1: Purpose (abstract)**
+- What is this knowledge graph for?
+- Who will use it?
+- What's the most important thing it needs to do?
+
+Based on the answers, the bootstrap directs the agent into more specific guidance — linking to relevant pattern docs in `patterns/` as they become relevant.
+
+**Phase 2: Inventory (what do you already have?)**
+- Do you have existing content? What form is it in?
+  - Unstructured text files, random documents
+  - An existing Obsidian vault or wiki
+  - Websites, documentation sites
+  - Call transcripts, meeting notes
+  - Slack exports, email archives
+  - Spreadsheets, CSVs
+  - Nothing yet — starting from scratch
+- The agent reads `patterns/ingestion.md` and follows the appropriate ingestion strategy for each source type
+
+**Phase 3: Structure (what are your nouns?)**
+- What are the major entity types that cross-cut everything? (People, clients, projects, decisions, systems)
+- These become top-level collections — the agent reads `patterns/collections.md` and `patterns/placement.md`
+- For each collection: what does a well-formed Thing in this collection look like?
+- What links exist between collections?
+
+**Phase 4: Build**
+- Creates the knowledge repo directory structure
+- Generates `index.md` and `design.md` at each level
+- If existing data was identified in Phase 2: runs ingestion to populate the graph
+- Writes `AGENT.md` with navigation instructions specific to this graph
+- Creates `/guide/` with persona-specific onboarding
+- Runs the compiler to validate
+
+**Phase 5: Verify**
+- Runs validation — checks for broken links, missing descriptions, unlisted children
+- Shows the user the graph structure
+- Asks if anything needs adjustment
+
+The key insight: the bootstrap doesn't just ask questions to build an empty structure. It also takes on existing unstructured data and shapes it into the Spandrel structure. The ingestion phase is where most of the value is for people who already have content scattered across files, tools, and systems.
+
+### Patterns and Conventions
+
+> **Recent design decision:** Patterns live in the Spandrel framework repo in a `patterns/` directory. They're referenced by `BOOTSTRAP.md` and `design.md` files as needed. They document proven ways to use the primitives.
+
+**Placement pattern** (`patterns/placement.md`):
+- The more central a Thing is (more frequently linked to, referenced from more branches), the higher it should live in the tree
+- Things referenced from multiple branches should be top-level collections (e.g., `/people/`, `/decisions/`)
+- Things relevant only within one context nest inside that context
+- If you're unsure, start high — it's easier to nest later than to promote
+
+**Collections pattern** (`patterns/collections.md`):
+- Top-level collections are your nouns — the major entity types in your world
+- Decide these upfront during bootstrap — they establish the vocabulary of your graph
+- Common collections by use case:
+  - Consulting: `/clients/`, `/projects/`, `/people/`, `/deliverables/`, `/decisions/`
+  - Engineering: `/services/`, `/teams/`, `/decisions/`, `/incidents/`, `/docs/`
+  - CRM: `/contacts/`, `/companies/`, `/deals/`, `/communications/`
+- Each collection's `design.md` describes what a well-formed member looks like
+
+**Linking pattern** (`patterns/linking.md`):
+- Link types are freeform — use whatever describes the relationship
+- If you find yourself creating deep nesting to show a relationship, use a link instead
+- Cross-collection links are the graph — they're what makes the system more than a file tree
+
+**Ingestion pattern** (`patterns/ingestion.md`):
+
+> **Recent design decision:** Ingesting unstructured data is a multi-phase process. You can't just classify content into a structure — you need to understand the whole space first. This is where semantic search earns its place in the framework.
+
+**Phase 1: Sense-making** — before any structure exists, analyze the unstructured content. The framework provides an opinionated tool for this: `spandrel analyze --path ./my-unstructured-data/` which:
+  - Loads all content into a temporary SQLite database with vector embeddings
+  - Runs clustering to find natural groupings
+  - Surfaces major themes, entities, and relationships
+  - Produces a report: "here are the 8 themes I found, here are the key entities, here's how they relate"
+  - This informs the bootstrap structure conversation — the agent says "I found these clusters, here's how I'd suggest organizing them" instead of asking abstract questions
+
+**Phase 2: Structure design** — informed by the analysis, the user and agent decide on collections and hierarchy
+
+**Phase 3: Classification and placement** — with structure decided, each piece of content gets:
+  - LLM-assisted extraction of name and description for frontmatter
+  - Entity extraction to identify links to other Things
+  - Placement in the correct location in the tree
+  - Guided by the `design.md` files that describe what a well-formed Thing looks like in each collection
+
+**Phase 4: Validation** — compile, validate, iterate
+
+Source-specific strategies:
+- Unstructured text: LLM-assisted extraction into Things with descriptions and links
+- Existing markdown/wiki: map existing structure to Spandrel conventions, add frontmatter
+- Transcripts/notes: summarize into Things, extract entities as links to collections
+- Slack/email: pipeline that continuously extracts relevant content into appropriate hubs
+- Websites: scrape and convert to markdown Things with frontmatter
+- The goal is always: structured markdown with `name`, `description`, and `links` in frontmatter, placed in the right location in the tree
+
+**Progressive disclosure pattern** (`patterns/progressive-disclosure.md`):
+- Write descriptions as if the reader will decide whether to go deeper based solely on this one line
+- Index files should summarize what's below, not just list it
+- Good: "Acme Corporation — enterprise SaaS client, onboarded Q2 2025, primary account lead is Jane"
+- Bad: "Client files for Acme"
+
+### Two Deployment Modes
 
 **Local / Development Mode:**
-- Files → compiler → in-memory graph → MCP tools
+- Files → compiler → in-memory graph → GraphQL → MCP tools
 - The compiler watches files and incrementally updates the graph
-- GraphQL runs on the in-memory graph (lightweight, no persistence)
-- MCP server wraps GraphQL — all external consumers go through MCP
 - Used by context engineers and analysts
-- Start with `spandrel dev` or equivalent
+- Start with `spandrel dev --path ./my-knowledge`
 
 **Server / Production Mode:**
 - Files → compiler → SQLite → GraphQL → MCP/web/CLI
-- Git push triggers CI (GitHub Action) which recompiles into SQLite
-- GraphQL runs on SQLite (persistent, queryable, deployable)
-- MCP server wraps GraphQL — same interface as local mode
-- Web UI queries the same GraphQL
+- Git push triggers CI which recompiles into SQLite
 - Used by consumers who don't have the repo locally
+- All interfaces consume the same GraphQL
 
 **The invariant:** GraphQL is always the interface layer. Every external consumer — MCP, web UI, CLI, anything — goes through GraphQL. The only thing that changes between modes is what's behind GraphQL (in-memory graph vs. SQLite).
 
-### Bootstrap Skill (first pass)
+### Skills as Context Loaders
 
-The bootstrap is a skill that guides initial setup. It's a design conversation, not a form.
+> **Recent design decision:** Skills are not just command sets — they're context loaders. When a context engineer or analyst activates a skill, it reads the knowledge repo's structural files into context so the LLM operates with full awareness of how this specific graph is designed.
 
-**Phase 1: Purpose and Shape**
-- What is this knowledge graph for? (e.g., client management, engineering docs, consulting practice)
-- Who are the actors? (builders, analysts, consumers, external partners)
-- What are the major domains? (e.g., clients, projects, people, decisions)
+**Context Engineer skill:**
+- Loads: root `index.md`, top-level collection `design.md` files, graph shape (via `get_graph`), validation status
+- The LLM now knows: what collections exist, what conventions are established, what needs attention
+- Enables: intentional modification of the graph's structure, conventions, and design files
+- The modifications become the new context for next time — the feedback loop
 
-**Phase 2: Structure**
-- For each domain: what does a Thing in this collection look like?
-- What links exist between domains? (e.g., clients link to projects, projects link to people)
-- What external sources feed in? (Slack, email, docs, APIs)
+**Analyst skill:**
+- Loads: root `index.md`, top-level descriptions, link patterns, graph structure at depth 2-3
+- The LLM now knows: what's in the graph, how it's organized, where to explore
+- Enables: deep exploration, cross-cutting queries, pattern discovery
 
-**Phase 3: Build**
-- Creates the directory structure with `index.md` and `design.md` at each level
-- Generates `CLAUDE.md` with instance-specific navigation instructions
-- Creates persona-specific onboarding docs in `/guide/`
-- Sets up pipeline stubs for identified data sources
-- Runs initial compilation to validate the graph
+**Consumer skill (via MCP):**
+- Loads: minimal — just the root description and available tools
+- The LLM navigates progressively from there
+- Doesn't need structural awareness — just follows the graph
 
-**Phase 4: Onboard**
-- Generates onboarding paths for each persona
-- Context engineers get builder docs
-- Analysts get exploration docs
-- Consumers get navigation docs
-
-The bootstrap skill is reusable — run it again to extend or reshape the architecture.
+Skills are instance-specific. The bootstrap generates their configuration based on the graph it created. A skill for a CRM graph loads different structural context than one for engineering docs.
 
 ### Content Skills
 
-Content skills are use-case specific — generated during bootstrap based on what the knowledge graph is for. They're described by a `design.md` in `_skills/content/` that explains the level of abstraction: what jobs need to be done, what the skills should accomplish, and how they should interact with the graph.
+Content skills are use-case specific — generated during bootstrap based on what the knowledge graph is for. They're described by a `design.md` in the Spandrel framework's `skills/` directory. Content skills are about interacting with the knowledge (e.g., "draft a client brief from this hub"), not about managing the system.
 
-The actual skills are built to match the user's needs. The `design.md` provides the guidance for building them.
+### `design.md` Files
 
-### `design.md` Files Throughout
-
-Every `_` system directory and every content collection includes a `design.md`. These files are the interface between the core spec and the user's customization:
+Every component in the Spandrel framework and every collection in the knowledge repo includes a `design.md`. These files are the interface between the core spec and customization:
 - They explain what's fixed (must meet the architectural spec) and what's flexible
-- They provide guidance for building that part of the system
-- They serve both humans and LLMs during the construction process
-- They're stubs until someone builds them out — capturing considerations, not implementations
+- They provide guidance for building or extending that component
+- They serve both humans and LLMs during construction
+- In the knowledge repo, they describe how to design Things within a collection
+- In the framework repo, they describe how to build or modify system components
 
-### CLAUDE.md and Editor Integration
+### AGENT.md and Editor Integration
 
-- Pre-configured `CLAUDE.md` teaches Claude Code how to navigate the graph, use progressive disclosure, and call MCP tools
+- Pre-configured `AGENT.md` lives in the knowledge repo — it teaches Claude Code how to navigate this specific graph
+- Generated during bootstrap, specific to the graph's structure
+- References the Spandrel framework's patterns and conventions as needed
 - Cursor equivalent for Cursor users
-- Editor-agnostic `design.md` explains how to adapt to other tools
 
 ---
 
 ## User Journeys
 
-### 1. The Context Engineer
+### 1. The Information Architect *(v2)*
 
-Builds and maintains the system. Works with files locally.
+Designs the structure. Works during bootstrap and reshape phases.
 
-1. Sets up the tree — designs the directory hierarchy, writes `index.md` and `design.md` files
-2. Configures pipelines — wires up connectors to pull from Slack, email, APIs
-3. Runs the compiler locally — sees the graph in real time as they build
-4. Uses `validate` to check graph health — broken links, unlisted children, missing descriptions
-5. Uses `get_graph` to see the overall structure and spot gaps
-6. Iterates — refactors, splits or merges directories, updates links
-7. Pushes via git — server mode recompiles, consumers see changes
-8. Writes `design.md` files — captures how things should be designed for others to build out
-9. Maintains `/guide/` — keeps onboarding and patterns current
+1. Runs bootstrap — guides the initial design conversation, decides top-level collections
+2. Reviews the graph shape — uses `get_graph` at various depths to see if the structure matches reality
+3. Checks if the representation serves the purpose — are the interfaces getting what they need? Are pipelines feeding the right places?
+4. Decides on restructuring — uses reshape to reorganize subtrees that aren't working
+5. Updates design.md files — refines the schema for collections based on what's learned
+6. Reviews and evolves skills — ensures the CE and analyst skills still match the graph's current shape
 
-### 2. The Analyst
+### 2. The Context Engineer
+
+Maintains the system. Works with files locally. Often an autonomous agent.
+
+1. Configures pipelines — wires up connectors to pull from Slack, email, APIs
+2. Runs the compiler locally — sees the graph in real time
+3. Uses `validate` to check graph health — broken links, unlisted children, missing descriptions
+4. Uses `get_graph` to see the overall structure and spot gaps
+5. Iterates — adds Things, updates descriptions, fixes links
+6. Pushes via git — server mode recompiles, consumers see changes
+7. Writes `design.md` files — captures how things should be designed for others to build out
+8. Maintains `/guide/` — keeps onboarding and patterns current
+
+### 3. The Analyst
 
 Explores and uses the context with more depth than a consumer. May work locally or via MCP.
 
@@ -561,7 +854,7 @@ Explores and uses the context with more depth than a consumer. May work locally 
 6. Opens the web UI for visual orientation — sees the graph, clicks into nodes
 7. Flags gaps or stale content for the context engineer
 
-### 3. The MCP Consumer
+### 4. The MCP Consumer
 
 Doesn't have the repo locally. Hits the server via MCP.
 
@@ -579,12 +872,15 @@ Doesn't have the repo locally. Hits the server via MCP.
 
 ### Covered by `design.md` files (customizable, not core spec):
 
-- **Search implementation** (`_search/design.md`) — must meet the `search` tool spec; how it works internally is a design decision
-- **Web UI** (`_web-ui/design.md`) — must consume GraphQL; framework, rendering, hosting are design decisions
-- **Pipeline connectors** (`_pipelines/design.md`) — must write valid markdown with frontmatter; how they connect to sources is a design decision
-- **Content skills** (`_skills/content/design.md`) — entirely use-case dependent
+- **Search implementation** (`search/design.md` in framework repo) — must meet the `search` tool spec; how it works internally is a design decision
+- **Web UI** (`web-ui/design.md` in framework repo) — must consume GraphQL; framework, rendering, hosting are design decisions
+- **Pipeline connectors** (`pipelines/design.md` in framework repo) — must write valid markdown with frontmatter; how they connect to sources is a design decision
+- **Content skills** (`skills/design.md` in framework repo) — entirely use-case dependent
 - **Editorial workflow** — git PRs handle this informally; a `design.md` can describe more formal conventions if needed
-- **Access control / governance** (`_access/design.md`) — the concept exists (a layer that wraps Things and Collections, defers to RBAC/ABAC/IAM patterns); implementation is a design decision
+- **Access control / governance** (`access/design.md` in framework repo, already written) — the concept exists; implementation is a design decision
+- **Reshape checkpoints** — whether reshape requires approval at each step or applies with validation afterward depends on context; configurable per use
+- **Ingestion DB persistence** — whether the ingestion SQLite retains history (ELT-style, reusable) or clears after intake; design decision based on usage patterns
+- **Graph algorithms** — community detection, centrality, bridge nodes (borrowing from obra/knowledge-graph); tool surface depends on use cases discovered in practice
 
 ### V2:
 
@@ -594,6 +890,11 @@ Doesn't have the repo locally. Hits the server via MCP.
 - **Migrations** — rename/move tools that update references across the graph
 - **Typed edge validation** — enforcing relationship conventions
 - **Consumer feedback loop** — structured way for consumers to signal gaps back into the system
+- **Information architect role** — distinct from context engineer; designs the structure rather than maintains it. The bootstrap is an IA activity.
+- **Semantic search via local embeddings** — borrow from obra/knowledge-graph: local embeddings (Xenova/all-MiniLM-L6-v2), sqlite-vec for vector search alongside FTS5
+- **Graph algorithms** — community detection, bridge nodes, centrality analysis (via graphology). Powers the analyst role.
+- **Dual SQLite databases** — separate ingestion DB (embeddings, clusters, proposals) from serving DB (compiled graph). Keeps speculative data out of the clean serving layer.
+- **Ongoing ingestion via SQLite** — the embed-and-cluster pipeline runs continuously, processing unstructured input into proposed placements. The ingestion DB is a persistent sense-making layer, not a one-time bootstrap step.
 
 ### Resolved (no longer gaps):
 
@@ -622,9 +923,8 @@ The tests ARE the spec in executable form. Any implementation that passes all te
 
 **Tree walking:**
 - Given a nested directory structure, the compiler produces correct parent/child hierarchy edges
-- Directories prefixed with `_` are skipped — no nodes created for them
-- `design.md` files are not compiled as nodes
-- Files that are not `index.md` within a directory are not compiled as separate nodes (they're part of the parent Thing's body)
+- Only `index.md` files create graph nodes — all other files (including `design.md`, images, PDFs, supporting docs) are ignored by the compiler
+- The knowledge repo is pure content — no system files to skip. The compiler treats every directory as a potential Thing
 
 **Edge extraction:**
 - Inline markdown links to other nodes in the tree (e.g., `[text](../other-thing/index.md)`) produce link edges
@@ -652,13 +952,14 @@ The tests ARE the spec in executable form. Any implementation that passes all te
 ### 3. GraphQL Tests
 
 **Schema:**
-- A `node` query accepting `path` and optional `depth` returns the correct node with name, description, nodeType, children, links (outgoing), referencedBy (incoming backlinks), parent
+- A `node` query accepting `path` and optional `depth` returns the correct node with name, description, nodeType, children, links, parent
 - With `depth=0`, only the node itself is returned (no children details)
 - With `depth=1`, children are returned with their names and descriptions
 - With `depth=2`, children and grandchildren are returned
 - A `content` query accepting `path` returns the full markdown body
-- A `references` query accepting `path` and optional `direction` returns link edges — outgoing, incoming (backlinks), or both
-- A `search` query accepting a search string and optional `path` (subtree scope) returns matching nodes with path, name, description, and content snippet, ranked by relevance
+- A `children` query accepting `path` and optional `depth` returns the subtree (names + descriptions only)
+- A `references` query accepting `path` returns all link edges from that node
+- A `search` query accepting a search string returns matching nodes with path, name, description, and content snippet
 - A `graph` query accepting optional `path` and `depth` returns serializable nodes + typed edges
 - A `history` query accepting `path` returns git commit history (date, author, message)
 - A `validate` query accepting optional `path` returns validation warnings
@@ -670,16 +971,12 @@ The tests ARE the spec in executable form. Any implementation that passes all te
 ### 4. MCP Tests
 
 **Tool registration:**
-- The MCP server exposes exactly 8 tools: `get_node`, `get_content`, `context`, `get_references`, `search`, `get_graph`, `validate`, `get_history`
-- Each tool has correct input schema
+- The MCP server exposes exactly 8 tools: `get_node`, `get_content`, `get_children`, `get_references`, `search`, `get_graph`, `validate`, `get_history`
+- Each tool has correct input schema matching the GraphQL queries
 
 **Tool execution:**
-- Each MCP tool call is backed by GraphQL — never an independent data path
-- MCP tools are agent-optimized: they may combine multiple GraphQL queries into a single tool call (e.g., `context` combines node, content, outgoing references, and incoming backlinks)
-- `get_node` with `includeContent: true` returns content inline
-- `context` returns the node, content, outgoing references with target names, and incoming backlinks with source names
-- `get_references` with `direction: "incoming"` returns backlinks
-- `search` with `path` parameter scopes results to a subtree
+- Each MCP tool call produces the same result as the equivalent GraphQL query
+- MCP is a wrapper around GraphQL — never an independent data path
 
 ### 5. Validation Tests
 
@@ -714,13 +1011,13 @@ This section is for Claude Code (or any LLM-assisted builder) to use when buildi
 
 ### What to build, in order:
 
-**Step 1: Scaffold the repo**
-Create the directory structure from the File System Layout section. Every `_` directory gets a `design.md` stub. The root gets `STARTUP.md`, `CLAUDE.md`, and `index.md`.
+**Step 1: Scaffold the framework repo**
+Create the Spandrel framework directory structure. Each component directory gets a `design.md` stub. The root gets `BOOTSTRAP.md`, `README.md`, and `package.json`.
 
 **Step 2: Build the compiler**
-- Input: a directory path (the repo root)
+- Input: a directory path (the knowledge repo root)
 - Output: an in-memory graph (nodes + edges)
-- Walk the file tree, skip `_` prefixed directories, parse every `index.md`
+- Walk the file tree, parse every `index.md`, skip `design.md` files
 - Extract frontmatter (name, description, links, author)
 - Build nodes with path, name, description, nodeType, depth, created, updated
 - Build hierarchy edges from directory structure
@@ -743,23 +1040,36 @@ Create the directory structure from the File System Layout section. Every `_` di
 - Use the test suite (MCP tests) to verify
 
 **Step 5: Build change detection (local mode)**
-- File watcher on the repo directory
+- File watcher on the knowledge repo directory
 - On file change: re-parse the changed file, update its node and edges in the in-memory graph
 - Use the test suite (change detection tests) to verify
 
-**Step 6: Build server mode (deferred — design.md)**
+**Step 6: Build the analyze tool**
+- `spandrel analyze --path ./unstructured-data/`
+- Loads content into temporary SQLite with vector embeddings (local embeddings, like obra/knowledge-graph)
+- Runs clustering to find natural groupings
+- Produces a report: themes, entities, relationships, suggested structure
+- Used by BOOTSTRAP.md during the ingestion phase to inform structure decisions
+
+**Step 7: Write BOOTSTRAP.md**
+- The progressive disclosure bootstrap document that guides the coding agent through setup
+- Follows the phases described in the BOOTSTRAP.md section above
+- References pattern docs in `patterns/` as they become relevant during the conversation
+- Handles both greenfield (starting from scratch) and ingestion (existing unstructured data) scenarios
+- For ingestion: runs `spandrel analyze` first, then uses the report to inform structure decisions
+
+**Step 8: Write the pattern docs**
+- `patterns/placement.md`, `patterns/collections.md`, `patterns/linking.md`, `patterns/ingestion.md`, `patterns/progressive-disclosure.md`
+- These are referenced by BOOTSTRAP.md and design.md files
+
+**Step 9: Build server mode (deferred — design.md)**
 - Compiler outputs to SQLite instead of in-memory
 - GraphQL resolvers query SQLite
 - GitHub Action triggers recompilation on push
-- The `_server/design.md` describes this
+- `server/design.md` describes this
 
-**Step 7: Write the bootstrap skill**
-- An interactive skill that asks the questions from the Bootstrap Skill section
-- Generates directory structure, `index.md` files, `design.md` files, and `CLAUDE.md`
-- Runs the compiler and validates the initial graph
-
-**Step 8: Run end-to-end tests**
-- Verify the full flow: scaffold → compile → serve → query → validate
+**Step 9: Run end-to-end tests**
+- Verify the full flow: clone framework → run bootstrap → create knowledge repo → compile → serve → query → validate
 
 ### Key constraints:
 
@@ -770,21 +1080,20 @@ Create the directory structure from the File System Layout section. Every `_` di
 
 ### What the end result looks like:
 
-A user does:
+A user pastes into their coding agent:
+
 ```
-git clone <spandrel-repo>
-cd spandrel
-# follow STARTUP.md
+Clone https://github.com/spandrel/spandrel.git then read BOOTSTRAP.md and follow its instructions to set up my knowledge graph.
 ```
 
-`STARTUP.md` tells them to run the bootstrap skill, which guides them through designing their knowledge graph. After bootstrap:
+The agent clones the framework, reads `BOOTSTRAP.md`, and guides the user through setup. After bootstrap:
 
-- The directory structure exists with `index.md` and `design.md` files
-- The compiler runs and builds the graph
+- A knowledge repo exists as a separate directory, pure content
+- The compiler runs and builds the graph from the knowledge repo
 - The GraphQL server starts
 - The MCP server starts (wrapping GraphQL)
 - They can query the graph via MCP tools, GraphQL directly, or CLI
 - They can validate the graph
-- They can start adding content
+- They can start adding content, or the bootstrap has already ingested their existing data
 
-Everything works out of the box. Everything is customizable via `design.md` files. Everything is testable.
+Everything works from a single prompt. Everything is customizable via `design.md` files. Everything is testable.
