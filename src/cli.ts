@@ -3,8 +3,10 @@ import path from "node:path";
 import { createServer } from "node:http";
 import { compile, addGitMetadata, getHistory } from "./compiler.js";
 import { createSchema } from "./schema.js";
+import type { SchemaContext } from "./schema.js";
 import { createMcpServer } from "./mcp.js";
 import { watchTree } from "./watcher.js";
+import { loadAccessConfig } from "./access.js";
 import { createYoga } from "graphql-yoga";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
@@ -43,10 +45,22 @@ async function dev(rootDir: string) {
     }
   }
 
-  const schema = createSchema(graph, { rootDir, getHistory });
+  const accessConfig = loadAccessConfig(rootDir);
+  if (accessConfig) {
+    console.log(`[spandrel] Access config loaded (${Object.keys(accessConfig.roles).length} roles, ${Object.keys(accessConfig.policies).length} policies)`);
+  }
 
-  // GraphQL server
-  const yoga = createYoga({ schema });
+  const schemaCtx: SchemaContext = { rootDir, getHistory, accessConfig };
+  const schema = createSchema(graph, schemaCtx);
+
+  const yoga = createYoga({
+    schema,
+    context: ({ request }) => {
+      const identity = request.headers.get("x-spandrel-identity");
+      schemaCtx.actor = identity ? { identity } : undefined;
+      return {};
+    },
+  });
   const server = createServer(yoga);
   const port = parseInt(process.env.PORT || "4000", 10);
   server.listen(port, () => {
@@ -76,7 +90,16 @@ async function mcp(rootDir: string) {
   );
 
   await addGitMetadata(graph, rootDir);
-  const schema = createSchema(graph, { rootDir, getHistory });
+  const accessConfig = loadAccessConfig(rootDir);
+  if (accessConfig) {
+    console.error(`[spandrel] Access config loaded (${Object.keys(accessConfig.roles).length} roles)`);
+  }
+
+  // MCP actor from env var
+  const identity = process.env.SPANDREL_IDENTITY;
+  const actor = identity ? { identity } : undefined;
+
+  const schema = createSchema(graph, { rootDir, getHistory, accessConfig, actor });
   const mcpServer = createMcpServer(schema);
   const transport = new StdioServerTransport();
   await mcpServer.connect(transport);

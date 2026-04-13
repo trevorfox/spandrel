@@ -8,12 +8,20 @@ import {
   GraphQLNonNull,
   GraphQLEnumType,
 } from "graphql";
-import type { SpandrelGraph } from "./types.js";
-import type { HistoryEntry } from "./types.js";
+import {
+  GraphQLInputObjectType,
+} from "graphql";
+import nodePath from "node:path";
+import type { SpandrelGraph, HistoryEntry, AccessConfig, Actor, AccessLevel } from "./types.js";
+import { canAccess, canWrite, accessLevelAtLeast } from "./access.js";
+import { createThing, updateThing, deleteThing, resolvePaths } from "./writer.js";
+import { recompileNode } from "./compiler.js";
 
 export type SchemaContext = {
   rootDir?: string;
   getHistory?: (rootDir: string, nodePath: string) => Promise<HistoryEntry[]>;
+  actor?: Actor;
+  accessConfig?: AccessConfig | null;
 };
 
 const NodeTypeEnum = new GraphQLEnumType({
@@ -146,6 +154,25 @@ const GraphResultType = new GraphQLObjectType({
   },
 });
 
+const MutationResultType = new GraphQLObjectType({
+  name: "MutationResult",
+  fields: {
+    success: { type: new GraphQLNonNull(GraphQLBoolean) },
+    path: { type: new GraphQLNonNull(GraphQLString) },
+    message: { type: GraphQLString },
+    warnings: { type: new GraphQLList(new GraphQLNonNull(ValidationWarningType)) },
+  },
+});
+
+const LinkInputType = new GraphQLInputObjectType({
+  name: "LinkInput",
+  fields: {
+    to: { type: new GraphQLNonNull(GraphQLString) },
+    type: { type: GraphQLString },
+    description: { type: GraphQLString },
+  },
+});
+
 // Context result — the "tell me everything" type
 const ContextResultType = new GraphQLObjectType({
   name: "ContextResult",
@@ -167,6 +194,22 @@ const ContextResultType = new GraphQLObjectType({
 });
 
 export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQLSchema {
+  function checkAccess(nodePath: string, metadata: Record<string, unknown> = {}): AccessLevel {
+    if (!ctx?.accessConfig || !ctx?.actor) return "traverse";
+    return canAccess(ctx.accessConfig, ctx.actor, nodePath, metadata);
+  }
+
+  function filterAccessible<T extends { path: string }>(
+    items: (T | null | undefined)[],
+    minLevel: AccessLevel = "exists"
+  ): T[] {
+    return (items.filter(Boolean) as T[]).filter((item) => {
+      const node = graph.nodes.get(item.path);
+      const level = checkAccess(item.path, node?.frontmatter ?? {});
+      return accessLevelAtLeast(level, minLevel);
+    });
+  }
+
   return new GraphQLSchema({
     query: new GraphQLObjectType({
       name: "Query",
@@ -179,7 +222,37 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             includeContent: { type: GraphQLBoolean },
           },
           resolve: (_root, args: { path: string; depth?: number; includeContent?: boolean }) => {
-            return resolveNode(graph, args.path, args.depth, args.includeContent);
+            const node = graph.nodes.get(args.path);
+            if (!node) return null;
+            const level = checkAccess(args.path, node.frontmatter);
+            if (level === "none") return null;
+            const includeContent = args.includeContent && accessLevelAtLeast(level, "content");
+            const result = resolveNode(graph, args.path, args.depth, includeContent);
+            if (!result) return null;
+            // Filter children and links by access
+            if (result.children) {
+              result.children = filterAccessible(result.children);
+            }
+            if (result.links) {
+              result.links = result.links.filter((l: { to: string }) =>
+                accessLevelAtLeast(checkAccess(l.to), "exists")
+              );
+            }
+            if (result.referencedBy) {
+              result.referencedBy = result.referencedBy.filter((l: { to: string }) =>
+                accessLevelAtLeast(checkAccess(l.to), "exists")
+              );
+            }
+            if (!accessLevelAtLeast(level, "description")) {
+              result.description = "";
+              result.children = [];
+              result.links = [];
+              result.referencedBy = [];
+            }
+            if (!accessLevelAtLeast(level, "content")) {
+              result.content = null;
+            }
+            return result;
           },
         },
 
@@ -190,7 +263,10 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
           },
           resolve: (_root, args: { path: string }) => {
             const node = graph.nodes.get(args.path);
-            return node?.content ?? null;
+            if (!node) return null;
+            const level = checkAccess(args.path, node.frontmatter);
+            if (!accessLevelAtLeast(level, "content")) return null;
+            return node.content;
           },
         },
 
@@ -200,7 +276,32 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             path: { type: new GraphQLNonNull(GraphQLString) },
           },
           resolve: (_root, args: { path: string }) => {
-            return resolveContext(graph, args.path);
+            const node = graph.nodes.get(args.path);
+            if (!node) return null;
+            const level = checkAccess(args.path, node.frontmatter);
+            if (level === "none") return null;
+            const result = resolveContext(graph, args.path);
+            if (!result) return null;
+            // Filter by access
+            if (result.children) {
+              result.children = filterAccessible(result.children);
+            }
+            if (result.outgoing) {
+              result.outgoing = filterAccessible(result.outgoing);
+            }
+            if (result.incoming) {
+              result.incoming = filterAccessible(result.incoming);
+            }
+            if (!accessLevelAtLeast(level, "content")) {
+              (result as Record<string, unknown>).content = null;
+            }
+            if (!accessLevelAtLeast(level, "description")) {
+              result.description = "";
+              result.children = [];
+              result.outgoing = [];
+              result.incoming = [];
+            }
+            return result;
           },
         },
 
@@ -211,7 +312,10 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             depth: { type: GraphQLInt },
           },
           resolve: (_root, args: { path: string; depth?: number }) => {
-            return resolveChildren(graph, args.path, args.depth ?? 1);
+            const level = checkAccess(args.path);
+            if (!accessLevelAtLeast(level, "description")) return [];
+            const children = resolveChildren(graph, args.path, args.depth ?? 1);
+            return filterAccessible(children);
           },
         },
 
@@ -222,7 +326,10 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             direction: { type: DirectionEnum },
           },
           resolve: (_root, args: { path: string; direction?: string }) => {
-            return resolveReferences(graph, args.path, args.direction ?? "outgoing");
+            const level = checkAccess(args.path);
+            if (!accessLevelAtLeast(level, "description")) return [];
+            const refs = resolveReferences(graph, args.path, args.direction ?? "outgoing");
+            return filterAccessible(refs);
           },
         },
 
@@ -233,7 +340,8 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             path: { type: GraphQLString },
           },
           resolve: (_root, args: { query: string; path?: string }) => {
-            return resolveSearch(graph, args.query, args.path);
+            const results = resolveSearch(graph, args.query, args.path);
+            return filterAccessible(results, "description");
           },
         },
 
@@ -247,11 +355,17 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             _root,
             args: { path?: string; depth?: number }
           ) => {
-            return resolveGraph(
+            const result = resolveGraph(
               graph,
               args.path ?? "/",
               args.depth ?? 999
             );
+            result.nodes = filterAccessible(result.nodes);
+            const visiblePaths = new Set(result.nodes.map((n) => n.path));
+            result.edges = result.edges.filter(
+              (e) => visiblePaths.has(e.from) && visiblePaths.has(e.to)
+            );
+            return result;
           },
         },
 
@@ -261,13 +375,19 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             path: { type: GraphQLString },
           },
           resolve: (_root, args: { path?: string }) => {
+            // Validate requires at least content-level access
             if (args.path) {
+              const level = checkAccess(args.path);
+              if (!accessLevelAtLeast(level, "content")) return [];
               return graph.warnings.filter(
                 (w) =>
                   w.path === args.path || w.path.startsWith(args.path + "/")
               );
             }
-            return graph.warnings;
+            // Full validate — filter to accessible warnings only
+            return graph.warnings.filter((w) =>
+              accessLevelAtLeast(checkAccess(w.path), "content")
+            );
           },
         },
 
@@ -277,6 +397,8 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             path: { type: new GraphQLNonNull(GraphQLString) },
           },
           resolve: async (_root, args: { path: string }) => {
+            const level = checkAccess(args.path);
+            if (!accessLevelAtLeast(level, "content")) return [];
             if (ctx?.getHistory && ctx?.rootDir) {
               return ctx.getHistory(ctx.rootDir, args.path);
             }
@@ -285,6 +407,85 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
         },
       },
     }),
+    mutation: ctx?.rootDir ? (() => {
+      const rootDir = ctx!.rootDir!;
+
+      function executeMutation(thingPath: string, action: () => void) {
+        if (ctx?.accessConfig && ctx?.actor) {
+          if (!canWrite(ctx.accessConfig, ctx.actor, thingPath)) {
+            return { success: false, path: thingPath, message: "Write access denied", warnings: [] };
+          }
+        }
+        try {
+          action();
+          // Synchronous recompile so the node is immediately queryable
+          const { indexPath } = resolvePaths(rootDir, thingPath);
+          recompileNode(graph, rootDir, indexPath);
+          const warnings = graph.warnings.filter(
+            (w) => w.path === thingPath || w.path.startsWith(thingPath + "/")
+          );
+          return { success: true, path: thingPath, message: null, warnings };
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          return { success: false, path: thingPath, message, warnings: [] };
+        }
+      }
+
+      return new GraphQLObjectType({
+        name: "Mutation",
+        fields: {
+          createThing: {
+            type: MutationResultType,
+            args: {
+              path: { type: new GraphQLNonNull(GraphQLString) },
+              name: { type: new GraphQLNonNull(GraphQLString) },
+              description: { type: new GraphQLNonNull(GraphQLString) },
+              content: { type: GraphQLString },
+              links: { type: new GraphQLList(new GraphQLNonNull(LinkInputType)) },
+              author: { type: GraphQLString },
+              tags: { type: new GraphQLList(new GraphQLNonNull(GraphQLString)) },
+            },
+            resolve: (_root, args) => executeMutation(args.path, () => {
+              createThing(rootDir, args.path, {
+                name: args.name, description: args.description,
+                content: args.content, links: args.links,
+                author: args.author, tags: args.tags,
+              });
+            }),
+          },
+
+          updateThing: {
+            type: MutationResultType,
+            args: {
+              path: { type: new GraphQLNonNull(GraphQLString) },
+              name: { type: GraphQLString },
+              description: { type: GraphQLString },
+              content: { type: GraphQLString },
+              links: { type: new GraphQLList(new GraphQLNonNull(LinkInputType)) },
+              author: { type: GraphQLString },
+              tags: { type: new GraphQLList(new GraphQLNonNull(GraphQLString)) },
+            },
+            resolve: (_root, args) => executeMutation(args.path, () => {
+              updateThing(rootDir, args.path, {
+                name: args.name, description: args.description,
+                content: args.content, links: args.links,
+                author: args.author, tags: args.tags,
+              });
+            }),
+          },
+
+          deleteThing: {
+            type: MutationResultType,
+            args: {
+              path: { type: new GraphQLNonNull(GraphQLString) },
+            },
+            resolve: (_root, args) => executeMutation(args.path, () => {
+              deleteThing(rootDir, args.path);
+            }),
+          },
+        },
+      });
+    })() : undefined,
   });
 }
 

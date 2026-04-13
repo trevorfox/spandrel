@@ -1,44 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { compile } from "./compiler.js";
 import { createSchema } from "./schema.js";
 import { createMcpServer } from "./mcp.js";
-
-function createTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "spandrel-mcp-test-"));
-}
-
-function writeIndex(dir: string, frontmatter: Record<string, unknown>, content = "") {
-  fs.mkdirSync(dir, { recursive: true });
-  const fm = Object.entries(frontmatter)
-    .map(([k, v]) => {
-      if (Array.isArray(v)) {
-        return `${k}:\n${v.map((item) => {
-          if (typeof item === "object") {
-            const entries = Object.entries(item as Record<string, unknown>)
-              .map(([ik, iv]) => `    ${ik}: ${JSON.stringify(iv)}`)
-              .join("\n");
-            return `  -\n${entries}`;
-          }
-          return `  - ${JSON.stringify(item)}`;
-        }).join("\n")}`;
-      }
-      return `${k}: ${JSON.stringify(v)}`;
-    })
-    .join("\n");
-  fs.writeFileSync(
-    path.join(dir, "index.md"),
-    `---\n${fm}\n---\n\n${content}\n`
-  );
-}
-
-function rmrf(dir: string) {
-  fs.rmSync(dir, { recursive: true, force: true });
-}
+import { createTempDir, writeIndex } from "./test-helpers.js";
 
 describe("MCP Server", () => {
   let root: string;
@@ -61,7 +29,7 @@ describe("MCP Server", () => {
     }, "Alpha is ongoing.");
 
     const graph = compile(root);
-    const schema = createSchema(graph);
+    const schema = createSchema(graph, { rootDir: root });
     const mcpServer = createMcpServer(schema);
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -74,21 +42,24 @@ describe("MCP Server", () => {
   });
 
   afterEach(() => {
-    rmrf(root);
+    fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("exposes exactly 8 tools", async () => {
+  it("exposes exactly 11 tools", async () => {
     const result = await client.listTools();
-    expect(result.tools.length).toBe(8);
+    expect(result.tools.length).toBe(11);
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual([
       "context",
+      "create_thing",
+      "delete_thing",
       "get_content",
       "get_graph",
       "get_history",
       "get_node",
       "get_references",
       "search",
+      "update_thing",
       "validate",
     ]);
   });
@@ -185,5 +156,85 @@ describe("MCP Server", () => {
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const history = JSON.parse(text);
     expect(Array.isArray(history)).toBe(true);
+  });
+
+  // --- Write tool tests ---
+
+  it("create_thing creates a new node", async () => {
+    const result = await client.callTool({
+      name: "create_thing",
+      arguments: {
+        path: "/people",
+        name: "People",
+        description: "All people",
+        content: "The people directory.",
+      },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const data = JSON.parse(text);
+    expect(data.success).toBe(true);
+    expect(data.path).toBe("/people");
+
+    // Verify it's queryable
+    const nodeResult = await client.callTool({ name: "get_node", arguments: { path: "/people" } });
+    const nodeText = (nodeResult.content as Array<{ type: string; text: string }>)[0].text;
+    const node = JSON.parse(nodeText);
+    expect(node.name).toBe("People");
+  });
+
+  it("update_thing modifies an existing node", async () => {
+    const result = await client.callTool({
+      name: "update_thing",
+      arguments: {
+        path: "/clients/acme",
+        description: "Updated key client description",
+      },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const data = JSON.parse(text);
+    expect(data.success).toBe(true);
+
+    // Verify the update
+    const nodeResult = await client.callTool({
+      name: "get_node",
+      arguments: { path: "/clients/acme" },
+    });
+    const nodeText = (nodeResult.content as Array<{ type: string; text: string }>)[0].text;
+    const node = JSON.parse(nodeText);
+    expect(node.description).toBe("Updated key client description");
+    expect(node.name).toBe("Acme Corp"); // unchanged
+  });
+
+  it("delete_thing removes a node", async () => {
+    const result = await client.callTool({
+      name: "delete_thing",
+      arguments: { path: "/projects/alpha" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const data = JSON.parse(text);
+    expect(data.success).toBe(true);
+
+    // Verify it's gone
+    const nodeResult = await client.callTool({
+      name: "get_node",
+      arguments: { path: "/projects/alpha" },
+    });
+    const nodeText = (nodeResult.content as Array<{ type: string; text: string }>)[0].text;
+    expect(JSON.parse(nodeText)).toBeNull();
+  });
+
+  it("create_thing fails for duplicate path", async () => {
+    const result = await client.callTool({
+      name: "create_thing",
+      arguments: {
+        path: "/clients",
+        name: "Clients",
+        description: "Already exists",
+      },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const data = JSON.parse(text);
+    expect(data.success).toBe(false);
+    expect(data.message).toContain("already exists");
   });
 });

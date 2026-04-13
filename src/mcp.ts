@@ -194,6 +194,88 @@ export function createMcpServer(schema: GraphQLSchema): McpServer {
     }
   );
 
+  // --- Write tools (context engineer / builder-facing) ---
+
+  server.tool(
+    "create_thing",
+    "Create a new Thing at the given path. Creates the directory and index.md with frontmatter. The parent path must already exist.",
+    {
+      path: z.string().describe("Path for the new Thing (e.g. '/clients/acme')"),
+      name: z.string().describe("Name of the Thing"),
+      description: z.string().describe("Description of the Thing"),
+      content: z.string().optional().describe("Markdown body content"),
+      links: z.array(z.object({
+        to: z.string(),
+        type: z.string().optional(),
+        description: z.string().optional(),
+      })).optional().describe("Links to other Things"),
+      author: z.string().optional().describe("Author path or identifier"),
+      tags: z.array(z.string()).optional().describe("Tags for categorization"),
+    },
+    async ({ path: thingPath, name, description, content, links, author, tags }) => {
+      const result = await gql(`
+        mutation CreateThing($path: String!, $name: String!, $description: String!, $content: String, $links: [LinkInput!], $author: String, $tags: [String!]) {
+          createThing(path: $path, name: $name, description: $description, content: $content, links: $links, author: $author, tags: $tags) {
+            success path message warnings { path type message }
+          }
+        }
+      `, { path: thingPath, name, description, content, links, author, tags });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result.data?.createThing ?? result.errors, null, 2) }],
+      };
+    }
+  );
+
+  server.tool(
+    "update_thing",
+    "Update an existing Thing's frontmatter and/or content. Only specified fields are changed; others are preserved.",
+    {
+      path: z.string().describe("Path to the Thing to update"),
+      name: z.string().optional().describe("New name"),
+      description: z.string().optional().describe("New description"),
+      content: z.string().optional().describe("New markdown body content"),
+      links: z.array(z.object({
+        to: z.string(),
+        type: z.string().optional(),
+        description: z.string().optional(),
+      })).optional().describe("Replace links (full replacement, not merge)"),
+      author: z.string().optional().describe("New author"),
+      tags: z.array(z.string()).optional().describe("Replace tags"),
+    },
+    async ({ path: thingPath, name, description, content, links, author, tags }) => {
+      const result = await gql(`
+        mutation UpdateThing($path: String!, $name: String, $description: String, $content: String, $links: [LinkInput!], $author: String, $tags: [String!]) {
+          updateThing(path: $path, name: $name, description: $description, content: $content, links: $links, author: $author, tags: $tags) {
+            success path message warnings { path type message }
+          }
+        }
+      `, { path: thingPath, name, description, content, links, author, tags });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result.data?.updateThing ?? result.errors, null, 2) }],
+      };
+    }
+  );
+
+  server.tool(
+    "delete_thing",
+    "Delete a Thing and its entire subtree. Cannot delete the root node. Use with caution.",
+    {
+      path: z.string().describe("Path to the Thing to delete"),
+    },
+    async ({ path: thingPath }) => {
+      const result = await gql(`
+        mutation DeleteThing($path: String!) {
+          deleteThing(path: $path) {
+            success path message warnings { path type message }
+          }
+        }
+      `, { path: thingPath });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result.data?.deleteThing ?? result.errors, null, 2) }],
+      };
+    }
+  );
+
   return server;
 }
 

@@ -2,25 +2,34 @@
 
 ## What this is
 
-A knowledge graph built on the Spandrel protocol. The graph is compiled from a file tree of `index.md` files with YAML frontmatter.
+The Spandrel framework — a compiler, GraphQL server, MCP server, and access layer that turns markdown file trees into governed knowledge graphs.
 
-## Navigation
+## Repo structure
 
-- Start at the root `index.md` to understand what this graph contains
-- Use progressive disclosure: read descriptions first, go deeper only when needed
-- `_` prefixed directories are system infrastructure — not content
-- `design.md` files contain build guidance, not navigable content
+- `src/` — TypeScript framework code (compiler, schema, mcp, access, writer, watcher, cli)
+- `_access/design.md` — Access layer design spec
+- `BOOTSTRAP.md` — Agent-guided setup for new knowledge graphs
+- `context-hub-architecture-notes.md` — Full architecture spec
 
-## Key conventions
+## Sibling directories
+
+- `../spandrel-v1/` — v1 reference instance (Spandrel-on-Spandrel, 35 nodes)
+- `../spandrel-v2/` — v2 reference instance (37 nodes, includes access + write docs)
+
+## Running
+
+```bash
+spandrel compile /path/to/knowledge-repo
+spandrel dev /path/to/knowledge-repo
+spandrel mcp /path/to/knowledge-repo
+npm test
+```
+
+## Key conventions for knowledge repos
 
 - Every Thing has an `index.md` with `name` and `description` in frontmatter
 - Links between Things are declared in frontmatter `links` array
 - Paths are addresses — `/clients/acme-corp` is both a file path and a graph address
-- Collections are Things that contain other Things (directories with children)
-
-## When editing content
-
-- Always include `name` and `description` in frontmatter
-- Declare relationships via `links` in frontmatter
-- Don't put dates in frontmatter — git metadata handles timestamps
-- Use `author` field to attribute content (can reference a Thing path like `/people/jane`)
+- `_` prefixed directories are system (not compiled), except `_access/config.yaml` which is read at query time
+- `design.md` files contain build guidance, not navigable content
+- `SKILL.md` files are operational agent instructions, not compiled
