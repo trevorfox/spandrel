@@ -12,7 +12,7 @@ import {
   GraphQLInputObjectType,
 } from "graphql";
 import nodePath from "node:path";
-import type { SpandrelGraph, HistoryEntry } from "../compiler/types.js";
+import type { SpandrelGraph, SpandrelNode, HistoryEntry } from "../compiler/types.js";
 import type { AccessConfig, Actor, AccessLevel } from "./types.js";
 import { canAccess, canWrite, accessLevelAtLeast } from "./access.js";
 import { createThing, updateThing, deleteThing, resolveSourcePath } from "../server/writer.js";
@@ -144,6 +144,29 @@ const SearchResultType = new GraphQLObjectType({
     description: { type: new GraphQLNonNull(GraphQLString) },
     snippet: { type: GraphQLString },
     score: { type: new GraphQLNonNull(GraphQLInt) },
+  },
+});
+
+const NavigateNeighborType = new GraphQLObjectType({
+  name: "NavigateNeighbor",
+  fields: {
+    path: { type: new GraphQLNonNull(GraphQLString) },
+    name: { type: new GraphQLNonNull(GraphQLString) },
+    description: { type: new GraphQLNonNull(GraphQLString) },
+    nodeType: { type: new GraphQLNonNull(NodeTypeEnum) },
+    relation: { type: new GraphQLNonNull(GraphQLString) },   // "child", "outgoing", "incoming"
+    linkType: { type: GraphQLString },
+    linkDescription: { type: GraphQLString },
+  },
+});
+
+const NavigateResultType = new GraphQLObjectType({
+  name: "NavigateResult",
+  fields: {
+    path: { type: new GraphQLNonNull(GraphQLString) },
+    name: { type: new GraphQLNonNull(GraphQLString) },
+    description: { type: new GraphQLNonNull(GraphQLString) },
+    neighbors: { type: new GraphQLList(new GraphQLNonNull(NavigateNeighborType)) },
   },
 });
 
@@ -343,6 +366,23 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
           resolve: (_root, args: { query: string; path?: string }) => {
             const results = resolveSearch(graph, args.query, args.path);
             return filterAccessible(results, "description");
+          },
+        },
+
+        navigate: {
+          type: NavigateResultType,
+          args: {
+            path: { type: new GraphQLNonNull(GraphQLString) },
+            keyword: { type: GraphQLString },
+            edgeType: { type: GraphQLString },
+          },
+          resolve: (_root, args: { path: string; keyword?: string; edgeType?: string }) => {
+            const level = checkAccess(args.path);
+            if (!accessLevelAtLeast(level, "description")) return null;
+            const result = resolveNavigate(graph, args.path, args.keyword, args.edgeType);
+            if (!result) return null;
+            result.neighbors = filterAccessible(result.neighbors);
+            return result;
           },
         },
 
@@ -791,6 +831,120 @@ function resolveSearch(graph: SpandrelGraph, query: string, scopePath?: string) 
   results.sort((a, b) => b.score - a.score);
 
   return results;
+}
+
+function resolveNavigate(
+  graph: SpandrelGraph,
+  nodePath: string,
+  keyword?: string,
+  edgeType?: string
+): {
+  path: string;
+  name: string;
+  description: string;
+  neighbors: Array<{
+    path: string;
+    name: string;
+    description: string;
+    nodeType: string;
+    relation: string;
+    linkType: string | null;
+    linkDescription: string | null;
+  }>;
+} | null {
+  const node = graph.nodes.get(nodePath);
+  if (!node) return null;
+
+  const kw = keyword?.toLowerCase();
+  const neighbors: Array<{
+    path: string;
+    name: string;
+    description: string;
+    nodeType: string;
+    relation: string;
+    linkType: string | null;
+    linkDescription: string | null;
+  }> = [];
+
+  const seen = new Set<string>();
+
+  function matchesKeyword(n: SpandrelNode, edgeDesc?: string): boolean {
+    if (!kw) return true;
+    return (
+      n.name.toLowerCase().includes(kw) ||
+      n.description.toLowerCase().includes(kw) ||
+      (edgeDesc?.toLowerCase().includes(kw) ?? false)
+    );
+  }
+
+  function matchesEdgeType(lt?: string): boolean {
+    if (!edgeType) return true;
+    return lt?.toLowerCase() === edgeType.toLowerCase();
+  }
+
+  // Children (only filtered by keyword, not edgeType — children aren't edges)
+  if (!edgeType) {
+    for (const childPath of node.children) {
+      const child = graph.nodes.get(childPath);
+      if (child && !seen.has(childPath) && matchesKeyword(child)) {
+        seen.add(childPath);
+        neighbors.push({
+          path: child.path,
+          name: child.name,
+          description: child.description,
+          nodeType: child.nodeType,
+          relation: "child",
+          linkType: null,
+          linkDescription: null,
+        });
+      }
+    }
+  }
+
+  // Outgoing links
+  for (const edge of graph.edges) {
+    if (edge.from === nodePath && edge.type === "link") {
+      const target = graph.nodes.get(edge.to);
+      if (target && !seen.has(edge.to) && matchesEdgeType(edge.linkType) && matchesKeyword(target, edge.description)) {
+        seen.add(edge.to);
+        neighbors.push({
+          path: target.path,
+          name: target.name,
+          description: target.description,
+          nodeType: target.nodeType,
+          relation: "outgoing",
+          linkType: edge.linkType ?? null,
+          linkDescription: edge.description ?? null,
+        });
+      }
+    }
+  }
+
+  // Incoming links
+  for (const edge of graph.edges) {
+    if (edge.to === nodePath && edge.type === "link") {
+      const source = graph.nodes.get(edge.from);
+      if (source && !seen.has(edge.from) && matchesEdgeType(edge.linkType) && matchesKeyword(source, edge.description)) {
+        seen.add(edge.from);
+        neighbors.push({
+          path: source.path,
+          name: source.name,
+          description: source.description,
+          nodeType: source.nodeType,
+          relation: "incoming",
+          linkType: edge.linkType ?? null,
+          linkDescription: edge.description ?? null,
+        });
+      }
+    }
+  }
+
+  return {
+    path: node.path,
+    name: node.name,
+    description: node.description,
+    neighbors,
+  };
 }
 
 function resolveGraph(

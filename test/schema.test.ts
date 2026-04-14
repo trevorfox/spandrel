@@ -272,6 +272,59 @@ describe("GraphQL Schema", () => {
     expect(result.data!.search[0].snippet).toContain("key account");
   });
 
+  it("navigate returns children and linked neighbors", async () => {
+    const result = await query(`{
+      navigate(path: "/clients/acme") {
+        path name
+        neighbors { path name relation linkType linkDescription }
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const nav = result.data!.navigate;
+    expect(nav.name).toBe("Acme Corp");
+    // Should have link to alpha (outgoing takes priority, deduplicated)
+    expect(nav.neighbors.some((n: { path: string }) => n.path === "/projects/alpha")).toBe(true);
+    // Alpha appears once (deduped), with linkType from the outgoing edge
+    const alphaNeighbors = nav.neighbors.filter((n: { path: string }) => n.path === "/projects/alpha");
+    expect(alphaNeighbors.length).toBe(1);
+    expect(alphaNeighbors[0].linkType).toBe("active_project");
+  });
+
+  it("navigate filters by edgeType", async () => {
+    const result = await query(`{
+      navigate(path: "/clients/acme", edgeType: "active_project") {
+        neighbors { path linkType relation }
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const neighbors = result.data!.navigate.neighbors;
+    // Only active_project edges, no children
+    expect(neighbors.length).toBeGreaterThan(0);
+    expect(neighbors.every((n: { linkType: string }) => n.linkType === "active_project")).toBe(true);
+    expect(neighbors.every((n: { relation: string }) => n.relation !== "child")).toBe(true);
+  });
+
+  it("navigate filters by keyword", async () => {
+    const result = await query(`{
+      navigate(path: "/", keyword: "project") {
+        neighbors { path name relation }
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const neighbors = result.data!.navigate.neighbors;
+    expect(neighbors.some((n: { path: string }) => n.path === "/projects")).toBe(true);
+  });
+
+  it("navigate returns null for nonexistent path", async () => {
+    const result = await query(`{
+      navigate(path: "/nonexistent") {
+        path
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    expect(result.data!.navigate).toBeNull();
+  });
+
   it("search matches edge linkType", async () => {
     const result = await query(`{
       search(query: "active_project") {

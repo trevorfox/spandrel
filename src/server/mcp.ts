@@ -171,6 +171,29 @@ export function createMcpServer(schema: GraphQLSchema, options?: McpServerOption
   );
 
   server.tool(
+    "navigate",
+    "Filtered traversal from a starting node. Returns children, outgoing links, and incoming links — optionally filtered by keyword (matches node name/description/edge description) and/or edge type (matches linkType). Use for progressive discovery: start broad, narrow by structure. One hop per call — call repeatedly to walk the graph.",
+    {
+      path: z.string().describe("Starting node path (e.g. '/' or '/clients')"),
+      keyword: z.string().optional().describe("Filter neighbors by keyword (matches name, description, or edge description)"),
+      edgeType: z.string().optional().describe("Filter to edges of this type only (e.g. 'owns_client', 'leads_execution')"),
+    },
+    async ({ path: nodePath, keyword, edgeType }) => {
+      const result = await gql(`
+        query Navigate($path: String!, $keyword: String, $edgeType: String) {
+          navigate(path: $path, keyword: $keyword, edgeType: $edgeType) {
+            path name description
+            neighbors { path name description nodeType relation linkType linkDescription }
+          }
+        }
+      `, { path: nodePath, keyword, edgeType });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result.data?.navigate ?? null, null, 2) }],
+      };
+    }
+  );
+
+  server.tool(
     "get_graph",
     "Get the graph structure (nodes + typed edges) for broad orientation or visualization. For focused exploration, prefer context() which gives one node's full neighborhood.",
     {

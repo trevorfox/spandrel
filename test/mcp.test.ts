@@ -45,9 +45,9 @@ describe("MCP Server", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("exposes exactly 11 tools", async () => {
+  it("exposes exactly 12 tools", async () => {
     const result = await client.listTools();
-    expect(result.tools.length).toBe(11);
+    expect(result.tools.length).toBe(12);
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual([
       "context",
@@ -58,6 +58,7 @@ describe("MCP Server", () => {
       "get_history",
       "get_node",
       "get_references",
+      "navigate",
       "search",
       "update_thing",
       "validate",
@@ -144,6 +145,41 @@ describe("MCP Server", () => {
     const refs = JSON.parse(text);
     expect(refs.some((r: { path: string }) => r.path === "/projects/alpha")).toBe(true);
     expect(refs[0].direction).toBe("incoming");
+  });
+
+  it("navigate returns children and linked nodes", async () => {
+    const result = await client.callTool({ name: "navigate", arguments: { path: "/" } });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const nav = JSON.parse(text);
+    expect(nav.name).toBe("Root");
+    expect(nav.neighbors.length).toBeGreaterThan(0);
+    // Root has children (clients, projects)
+    const children = nav.neighbors.filter((n: { relation: string }) => n.relation === "child");
+    expect(children.length).toBe(2);
+  });
+
+  it("navigate filters by edgeType", async () => {
+    const result = await client.callTool({
+      name: "navigate",
+      arguments: { path: "/clients/acme", edgeType: "project" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const nav = JSON.parse(text);
+    // Should only return the project link, not children or other edges
+    expect(nav.neighbors.length).toBeGreaterThan(0);
+    expect(nav.neighbors.every((n: { linkType: string }) => n.linkType === "project")).toBe(true);
+  });
+
+  it("navigate filters by keyword", async () => {
+    const result = await client.callTool({
+      name: "navigate",
+      arguments: { path: "/", keyword: "client" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const nav = JSON.parse(text);
+    // Should match "Clients" collection by name/description
+    const paths = nav.neighbors.map((n: { path: string }) => n.path);
+    expect(paths).toContain("/clients");
   });
 
   it("search finds nodes by query with ranking", async () => {
