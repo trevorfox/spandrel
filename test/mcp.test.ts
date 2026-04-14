@@ -30,7 +30,7 @@ describe("MCP Server", () => {
 
     const graph = compile(root);
     const schema = createSchema(graph, { rootDir: root });
-    const mcpServer = createMcpServer(schema);
+    const mcpServer = createMcpServer(schema, { graph });
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -62,6 +62,36 @@ describe("MCP Server", () => {
       "update_thing",
       "validate",
     ]);
+  });
+
+  it("server provides instructions with graph metadata", async () => {
+    // The server info should include instructions derived from the graph
+    const info = client.getServerCapabilities();
+    // We can't directly access instructions from client API, but we can verify
+    // the server was created with instructions by creating a fresh connection
+    const graph2 = compile(root);
+    const schema2 = createSchema(graph2, { rootDir: root });
+    const mcpServer2 = createMcpServer(schema2, { graph: graph2 });
+
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    const client2 = new Client({ name: "test-client-2", version: "1.0.0" });
+    await Promise.all([
+      client2.connect(ct),
+      mcpServer2.connect(st),
+    ]);
+
+    // The server version and name should be accessible
+    const info2 = client2.getServerVersion();
+    expect(info2?.name).toBe("spandrel");
+
+    // Verify instructions are set by checking the server's initialize response
+    // The MCP SDK exposes instructions via getInstructions() on the client
+    const instructions = client2.getInstructions();
+    expect(instructions).toBeDefined();
+    expect(instructions).toContain("Root");
+    expect(instructions).toContain("Clients");
+    expect(instructions).toContain("Projects");
+    expect(instructions).toContain("context");
   });
 
   it("get_node returns correct node data with backlinks", async () => {

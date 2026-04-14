@@ -3,12 +3,52 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { graphql } from "graphql";
 import { z } from "zod";
 import type { GraphQLSchema } from "graphql";
+import type { SpandrelGraph } from "../compiler/types.js";
 
-export function createMcpServer(schema: GraphQLSchema): McpServer {
-  const server = new McpServer({
-    name: "spandrel",
-    version: "0.1.0",
-  });
+export type McpServerOptions = {
+  /** The compiled graph — used to generate server instructions */
+  graph?: SpandrelGraph;
+};
+
+function buildInstructions(graph?: SpandrelGraph): string {
+  const root = graph?.nodes.get("/");
+  const name = root?.name ?? "Knowledge Graph";
+  const description = root?.description ?? "";
+  const nodeCount = graph?.nodes.size ?? 0;
+  const edgeCount = graph?.edges.filter(e => e.type === "link").length ?? 0;
+
+  // Build a collections summary from root's children
+  const collections: string[] = [];
+  if (root && graph) {
+    for (const childPath of root.children) {
+      const child = graph.nodes.get(childPath);
+      if (child) {
+        collections.push(`${child.name} (${childPath})`);
+      }
+    }
+  }
+
+  const collectionsLine = collections.length > 0
+    ? `\nCollections: ${collections.join(", ")}.`
+    : "";
+
+  return `Spandrel is a structured knowledge graph: "${name}" — ${description}
+${nodeCount} nodes, ${edgeCount} typed edges.${collectionsLine}
+
+How to use:
+- Start with context("/") to orient. Follow edges to discover content.
+- Use context() for traversal and relationship questions — answers live in edges, not keyword matches.
+- Use search() as a fallback when you don't know where to start. Search matches node text only, not edges.
+- For "who owns X" or "what connects to Y", use get_references() or context() — not search.
+
+When to use: Consult this graph proactively for questions about ${collections.length > 0 ? collections.map(c => c.replace(/ \(.*/, "").toLowerCase()).join(", ") : "the domain it covers"}.`;
+}
+
+export function createMcpServer(schema: GraphQLSchema, options?: McpServerOptions): McpServer {
+  const server = new McpServer(
+    { name: "spandrel", version: "0.1.0" },
+    { instructions: buildInstructions(options?.graph) },
+  );
 
   // Helper: run a parameterized GraphQL query safely
   async function gql(source: string, variables: Record<string, unknown> = {}) {
@@ -279,8 +319,8 @@ export function createMcpServer(schema: GraphQLSchema): McpServer {
   return server;
 }
 
-export async function startMcpServer(schema: GraphQLSchema): Promise<void> {
-  const server = createMcpServer(schema);
+export async function startMcpServer(schema: GraphQLSchema, options?: McpServerOptions): Promise<void> {
+  const server = createMcpServer(schema, options);
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

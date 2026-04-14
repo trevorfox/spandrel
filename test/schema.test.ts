@@ -272,6 +272,61 @@ describe("GraphQL Schema", () => {
     expect(result.data!.search[0].snippet).toContain("key account");
   });
 
+  it("search matches edge linkType", async () => {
+    const result = await query(`{
+      search(query: "active_project") {
+        path name score snippet
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const results = result.data!.search;
+    expect(results.length).toBeGreaterThan(0);
+    // Should surface both nodes connected by the edge
+    const paths = results.map((r: { path: string }) => r.path);
+    expect(paths).toContain("/clients/acme");
+    expect(paths).toContain("/projects/alpha");
+  });
+
+  it("search matches edge description", async () => {
+    const result = await query(`{
+      search(query: "Main project") {
+        path name score snippet
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const results = result.data!.search;
+    expect(results.length).toBeGreaterThan(0);
+    // The edge description "Main project" should surface the connected nodes
+    const paths = results.map((r: { path: string }) => r.path);
+    expect(paths).toContain("/clients/acme");
+  });
+
+  it("search edge matches respect subtree scope", async () => {
+    const result = await query(`{
+      search(query: "active_project", path: "/projects") {
+        path name
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const results = result.data!.search;
+    // Should only include the /projects side of the edge
+    expect(results.every((r: { path: string }) => r.path.startsWith("/projects"))).toBe(true);
+  });
+
+  it("search deduplicates when node matches both text and edge", async () => {
+    // "Acme" matches the node name AND appears in edge snippets
+    const result = await query(`{
+      search(query: "Acme") {
+        path name score
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const results = result.data!.search;
+    // No duplicate paths
+    const paths = results.map((r: { path: string }) => r.path);
+    expect(new Set(paths).size).toBe(paths.length);
+  });
+
   it("graph query returns nodes and edges", async () => {
     const result = await query(`{
       graph {

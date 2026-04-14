@@ -706,11 +706,38 @@ function resolveSearch(graph: SpandrelGraph, query: string, scopePath?: string) 
     score: number;
   }> = [];
 
-  for (const node of graph.nodes.values()) {
-    // Scope to subtree if path provided
-    if (scopePath && !node.path.startsWith(scopePath) && node.path !== scopePath) {
-      continue;
+  // Track which paths we've already added so edge matches don't duplicate
+  const seen = new Set<string>();
+
+  function addResult(path: string, score: number, snippet: string | null) {
+    if (seen.has(path)) {
+      // Keep the higher score
+      const existing = results.find(r => r.path === path);
+      if (existing && score > existing.score) {
+        existing.score = score;
+        if (snippet) existing.snippet = snippet;
+      }
+      return;
     }
+    const node = graph.nodes.get(path);
+    if (!node) return;
+    seen.add(path);
+    results.push({
+      path: node.path,
+      name: node.name,
+      description: node.description,
+      snippet,
+      score,
+    });
+  }
+
+  function inScope(path: string): boolean {
+    return !scopePath || path === scopePath || path.startsWith(scopePath + "/");
+  }
+
+  // 1. Match against node text (existing behavior)
+  for (const node of graph.nodes.values()) {
+    if (!inScope(node.path)) continue;
 
     const nameExact = node.name.toLowerCase() === q;
     const nameMatch = node.name.toLowerCase().includes(q);
@@ -718,7 +745,6 @@ function resolveSearch(graph: SpandrelGraph, query: string, scopePath?: string) 
     const contentMatch = node.content.toLowerCase().includes(q);
 
     if (nameMatch || descMatch || contentMatch) {
-      // Relevance ranking: exact name > name contains > description > content
       let score = 0;
       if (nameExact) score = 100;
       else if (nameMatch) score = 75;
@@ -734,13 +760,30 @@ function resolveSearch(graph: SpandrelGraph, query: string, scopePath?: string) 
           node.content.slice(start, end) +
           (end < node.content.length ? "..." : "");
       }
-      results.push({
-        path: node.path,
-        name: node.name,
-        description: node.description,
-        snippet,
-        score,
-      });
+      addResult(node.path, score, snippet);
+    }
+  }
+
+  // 2. Match against edge linkType and description
+  for (const edge of graph.edges) {
+    if (edge.type !== "link") continue;
+
+    const linkTypeMatch = edge.linkType?.toLowerCase().includes(q);
+    const linkDescMatch = edge.description?.toLowerCase().includes(q);
+
+    if (linkTypeMatch || linkDescMatch) {
+      const matchedText = linkTypeMatch
+        ? `Edge type: ${edge.linkType}`
+        : `Edge: ${edge.description}`;
+      const snippet = `${edge.from} —${edge.linkType ?? "link"}→ ${edge.to}: ${edge.description ?? ""}`;
+
+      // Surface both sides of the edge if they're in scope
+      if (inScope(edge.from)) {
+        addResult(edge.from, linkTypeMatch ? 60 : 40, snippet);
+      }
+      if (inScope(edge.to)) {
+        addResult(edge.to, linkTypeMatch ? 60 : 40, snippet);
+      }
     }
   }
 

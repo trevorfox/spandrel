@@ -107,7 +107,7 @@ async function mcp(rootDir: string) {
   const actor = identity ? { identity } : undefined;
 
   const schema = createSchema(graph, { rootDir, getHistory, accessConfig, actor });
-  const mcpServer = createMcpServer(schema);
+  const mcpServer = createMcpServer(schema, { graph });
   const transport = new StdioServerTransport();
   await mcpServer.connect(transport);
   console.error("[spandrel] MCP server running on stdio");
