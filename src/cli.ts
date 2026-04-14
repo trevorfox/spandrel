@@ -2,12 +2,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createServer } from "node:http";
-import { compile, addGitMetadata, getHistory } from "./compiler.js";
-import { createSchema } from "./schema.js";
-import type { SchemaContext } from "./schema.js";
-import { createMcpServer } from "./mcp.js";
-import { watchTree } from "./watcher.js";
-import { loadAccessConfig } from "./access.js";
+import { compile, addGitMetadata, getHistory } from "./compiler/compiler.js";
+import { createSchema } from "./schema/schema.js";
+import type { SchemaContext } from "./schema/schema.js";
+import { createMcpServer } from "./server/mcp.js";
+import { watchTree } from "./compiler/watcher.js";
+import { loadAccessConfig } from "./schema/access.js";
 import { createYoga } from "graphql-yoga";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 

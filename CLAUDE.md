@@ -2,14 +2,22 @@
 
 ## What this is
 
-The Spandrel framework — a compiler, GraphQL server, MCP server, and access layer that turns markdown file trees into governed knowledge graphs.
+A spec with a reference implementation. Spandrel turns markdown file trees into governed knowledge graphs served via GraphQL and MCP.
 
 ## Repo structure
 
-- `src/` — TypeScript framework code (compiler, schema, mcp, access, writer, watcher, cli)
-- `_access/design.md` — Access layer design spec
-- `BOOTSTRAP.md` — Agent-guided setup for new knowledge graphs
-- `ROADMAP.md` — Future work and design gaps
+- `docs/` — Spandrel KG describing the framework itself (compilable with `spandrel dev docs/`)
+- `src/` — Reference implementation organized by subsystem
+  - `src/compiler/` — markdown tree → graph (compiler.ts, types.ts, watcher.ts)
+  - `src/schema/` — GraphQL surface + access control (schema.ts, access.ts, types.ts)
+  - `src/server/` — MCP server + writer (mcp.ts, writer.ts)
+  - `src/storage/` — storage interface (design.md only, memory is inline for now)
+  - `src/cli.ts` — entry point
+- `test/` — conformance tests (verify the spec, not the implementation)
+- `BOOTSTRAP.md` — agent-guided setup for new knowledge graphs
+- `ROADMAP.md` — phased roadmap (serving, authoring, ingestion, intelligence, federation)
+
+Each `src/` subdirectory has a `design.md` companion file — the implementation-agnostic spec for that subsystem.
 
 ## Running
 

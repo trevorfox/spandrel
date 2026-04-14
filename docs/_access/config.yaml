@@ -1,0 +1,11 @@
+roles:
+  public:
+    default: true
+
+policies:
+  public:
+    paths:
+      - "/**"
+    access_level: content
+    operations:
+      - read

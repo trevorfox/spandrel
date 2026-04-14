@@ -6,6 +6,11 @@ Named after the [architectural byproduct](https://en.wikipedia.org/wiki/Spandrel
 
 ## Quick Start
 
+- [Build your own knowledge graph](#build-your-own-knowledge-graph)
+- [Explore the framework via MCP](#explore-the-framework-via-mcp)
+
+### Build your own knowledge graph
+
 Tell your coding agent:
 
 ```
@@ -14,19 +19,39 @@ Clone https://github.com/trevorfox/spandrel.git then read BOOTSTRAP.md and follo
 
 The agent clones the repo, reads `BOOTSTRAP.md`, and guides you through designing your graph: what it's for, what collections you need, how to structure your content. It creates the knowledge repo, compiles it, and validates the result.
 
+### Explore the framework via MCP
+
+This repo describes itself as a Spandrel knowledge graph. Explore the philosophy, content model, architecture, and patterns through MCP:
+
+```bash
+git clone https://github.com/trevorfox/spandrel.git
+cd spandrel && npm install
+npx spandrel mcp docs/
+```
+
+Or add to your MCP config (Claude Desktop, Claude Code, etc.):
+
+```json
+{
+  "mcpServers": {
+    "spandrel-docs": {
+      "command": "npx",
+      "args": ["spandrel", "mcp", "docs/"],
+      "cwd": "/path/to/spandrel"
+    }
+  }
+}
+```
+
+Start with `get_node` at `/` and navigate from there.
+
 ## What It Does
 
-You write markdown files with YAML frontmatter. Spandrel compiles them into an in-memory graph with nodes, edges, and progressive disclosure — then serves that graph through GraphQL and MCP.
+Spandrel is a spec with a reference implementation. You write markdown files with YAML frontmatter. Spandrel compiles them into a graph with nodes, edges, and progressive disclosure — then serves that graph through GraphQL and MCP.
 
 An agent doesn't get everything dumped into its context window. It reads the root description, picks a direction, reads that level, picks again, and arrives at exactly what it needs. Hundreds of tokens on navigation instead of tens of thousands on loading everything. That's progressive disclosure, and it's what makes this different from search-based retrieval.
 
-## Three Beliefs
-
-**Structure is the interface.** If knowledge is organized well, navigation becomes self-evident. The shape of the structure teaches you where things are and how they relate — for humans and agents equally.
-
-**Context engineering is a build step, not a conversation.** Every token spent orienting or maintaining context is a token not spent on actual work. The system handles coherence and relationships so actors can focus on using knowledge, not managing it.
-
-**Governed exchange is the default.** Knowledge moves between people, teams, and agents. Every piece of knowledge has clear boundaries around who can see it, who can change it, and how much of it they can access.
+The [philosophy](docs/philosophy.md) and [content model](docs/content-model/index.md) are documented as a Spandrel knowledge graph in `docs/` — explorable via `spandrel mcp docs/`.
 
 ## Setup
 
@@ -106,13 +131,17 @@ If both exist, the directory wins. `design.md`, `SKILL.md`, `AGENT.md`, and `REA
 ## Architecture
 
 ```
-Markdown files → Compiler → In-memory graph → GraphQL schema → MCP / HTTP
-                                                    ↑
-                                              Access layer
-                                          (canAccess per request)
+Markdown files → Compiler → Storage (in-memory, Postgres, etc.) → GraphQL
+                                                                    ↑
+                                                              Access layer
+                                                          (canAccess per request)
+                                                           ↑          ↑
+                                                          MCP        Web UI
 ```
 
-The compiler walks the file tree, parses frontmatter, builds nodes and edges, validates. The schema serves queries with per-request access filtering. Write mutations go through GraphQL, write to the filesystem, and trigger synchronous recompilation.
+The compiler walks the file tree, parses frontmatter, builds nodes and edges, validates. The storage layer is backend-agnostic — in-memory for local dev, Postgres (Supabase) for production. All clients go through GraphQL, which enforces access control. MCP and web UIs are thin clients of the GraphQL surface.
+
+Each subsystem has a `design.md` companion file in `src/` defining the implementation-agnostic spec. See `docs/architecture/` or explore via MCP for the [full architecture](docs/architecture/index.md).
 
 ## Testing
 
@@ -121,24 +150,6 @@ npm test
 ```
 
 Tests create temporary knowledge repos, compile them, and validate the full stack — compiler, GraphQL, MCP, access layer, and write operations. No external fixtures required.
-
-## Design Influences
-
-Spandrel's conventions are borrowed, not invented.
-
-**Web servers and static site generators** (Hugo, Astro, Next.js) established that `foo.html` and `foo/index.html` both resolve to `/foo` — flat files for simple pages, directory bundles for pages with companions. Spandrel uses the same pattern: `foo.md` for leaf nodes, `foo/index.md` for composite nodes. Directory wins on conflict.
-
-**The Agent Skills specification** ([agentskills.io](https://agentskills.io/specification)) validates directory-as-identity with a required entry file containing `name` and `description` frontmatter, progressive disclosure as an explicit design principle, and companion files that live alongside the entry file but aren't independently addressable. Spandrel's composite nodes follow this pattern exactly.
-
-**obra/knowledge-graph** ([github](https://github.com/obra/knowledge-graph)) demonstrated that markdown files parsed into a graph, combined with local embeddings (Xenova/all-MiniLM-L6-v2), sqlite-vec for vector search, and graphology for graph algorithms, can serve as a practical agent-readable knowledge base. Spandrel's roadmap for semantic search and graph algorithms draws directly from this work.
-
-**dbt** contributed the idea that sources and derived content are distinct, compilation handles transformation, and relationships are explicit declarations. **Rails** contributed scaffold-and-go and convention over configuration. **Graph theory** contributed typed edges and traversal rules.
-
-## What Spandrel Is Not
-
-It's not a vector database. It's not a RAG pipeline. It's not a CMS. It's not Obsidian.
-
-It's a way to take knowledge you already have — or need to build — and make it navigable, governed, and consumable by any agent or tool that speaks GraphQL or MCP. Using technologies you already understand.
 
 ## License
 

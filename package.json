@@ -18,7 +18,7 @@
   },
   "files": [
     "dist",
-    "patterns",
+    "docs",
     "BOOTSTRAP.md",
     "README.md"
   ],
@@ -30,7 +30,7 @@
     "model-context-protocol"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc",
     "prepublishOnly": "npm run build",
     "dev": "tsx src/cli.ts dev",
     "test": "vitest run",
