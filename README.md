@@ -56,24 +56,30 @@ my-knowledge/
 │   └── context-engineer/
 │       ├── index.md          Discoverable node
 │       └── SKILL.md          Operational instructions
-├── clients/                  Your collections...
-│   ├── index.md
+├── clients/                  A collection...
+│   ├── index.md              Collection description
 │   ├── design.md             What a well-formed member looks like
-│   └── acme-corp/
-│       └── index.md
-└── projects/
+│   ├── acme-corp.md          Leaf node — a simple Thing
+│   └── globex/               Directory node — a Thing with children
+│       ├── index.md
+│       └── project-alpha.md
+└── people/
     ├── index.md
-    └── alpha/
-        └── index.md
+    └── jane.md               Leaf node
 ```
 
-Every directory with an `index.md` is a Thing. Frontmatter declares `name`, `description`, and `links`. The directory hierarchy is the graph hierarchy. Links connect across the tree.
+Two ways to create a Thing — matching web server and static site generator conventions:
+
+- **`foo.md`** — a leaf node at `/parent/foo`. Simple, no children.
+- **`foo/index.md`** — a composite node at `/parent/foo`. Can have children.
+
+If both exist, the directory wins. `design.md`, `SKILL.md`, `AGENT.md`, and `README.md` are companion files — never compiled as nodes.
 
 ## Key Concepts
 
-**Things** — the atomic unit. A directory with an `index.md`. Has a name, description, content, and links to other Things.
+**Things** — the atomic unit. Either a `.md` file (leaf) or a directory with an `index.md` (composite). Has a name, description, content, and links to other Things.
 
-**Collections** — Things that contain other Things. A directory with subdirectories.
+**Collections** — Things that contain other Things. A directory with child nodes.
 
 **Progressive Disclosure** — descriptions first, content on demand. An agent reads names to orient, descriptions to decide relevance, content when it needs the details.
 
@@ -115,6 +121,18 @@ npm test
 ```
 
 Tests create temporary knowledge repos, compile them, and validate the full stack — compiler, GraphQL, MCP, access layer, and write operations. No external fixtures required.
+
+## Design Influences
+
+Spandrel's conventions are borrowed, not invented.
+
+**Web servers and static site generators** (Hugo, Astro, Next.js) established that `foo.html` and `foo/index.html` both resolve to `/foo` — flat files for simple pages, directory bundles for pages with companions. Spandrel uses the same pattern: `foo.md` for leaf nodes, `foo/index.md` for composite nodes. Directory wins on conflict.
+
+**The Agent Skills specification** ([agentskills.io](https://agentskills.io/specification)) validates directory-as-identity with a required entry file containing `name` and `description` frontmatter, progressive disclosure as an explicit design principle, and companion files that live alongside the entry file but aren't independently addressable. Spandrel's composite nodes follow this pattern exactly.
+
+**obra/knowledge-graph** ([github](https://github.com/obra/knowledge-graph)) demonstrated that markdown files parsed into a graph, combined with local embeddings (Xenova/all-MiniLM-L6-v2), sqlite-vec for vector search, and graphology for graph algorithms, can serve as a practical agent-readable knowledge base. Spandrel's roadmap for semantic search and graph algorithms draws directly from this work.
+
+**dbt** contributed the idea that sources and derived content are distinct, compilation handles transformation, and relationships are explicit declarations. **Rails** contributed scaffold-and-go and convention over configuration. **Graph theory** contributed typed edges and traversal rules.
 
 ## What Spandrel Is Not
 

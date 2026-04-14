@@ -14,7 +14,7 @@ import {
 import nodePath from "node:path";
 import type { SpandrelGraph, HistoryEntry, AccessConfig, Actor, AccessLevel } from "./types.js";
 import { canAccess, canWrite, accessLevelAtLeast } from "./access.js";
-import { createThing, updateThing, deleteThing, resolvePaths } from "./writer.js";
+import { createThing, updateThing, deleteThing, resolveSourcePath } from "./writer.js";
 import { recompileNode } from "./compiler.js";
 
 export type SchemaContext = {
@@ -419,8 +419,8 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
         try {
           action();
           // Synchronous recompile so the node is immediately queryable
-          const { indexPath } = resolvePaths(rootDir, thingPath);
-          recompileNode(graph, rootDir, indexPath);
+          const { sourcePath } = resolveSourcePath(rootDir, thingPath);
+          recompileNode(graph, rootDir, sourcePath);
           const warnings = graph.warnings.filter(
             (w) => w.path === thingPath || w.path.startsWith(thingPath + "/")
           );

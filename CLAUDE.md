@@ -9,7 +9,7 @@ The Spandrel framework — a compiler, GraphQL server, MCP server, and access la
 - `src/` — TypeScript framework code (compiler, schema, mcp, access, writer, watcher, cli)
 - `_access/design.md` — Access layer design spec
 - `BOOTSTRAP.md` — Agent-guided setup for new knowledge graphs
-- `context-hub-architecture-notes.md` — Full architecture spec
+- `ROADMAP.md` — Future work and design gaps
 
 ## Running
 
@@ -22,9 +22,9 @@ npm test
 
 ## Key conventions for knowledge repos
 
-- Every Thing has an `index.md` with `name` and `description` in frontmatter
+- Two ways to create a Thing: `foo.md` (leaf node) or `foo/index.md` (composite node with children). Directory wins on conflict.
+- Every Thing has `name` and `description` in frontmatter
 - Links between Things are declared in frontmatter `links` array
 - Paths are addresses — `/clients/acme-corp` is both a file path and a graph address
 - `_` prefixed directories are system (not compiled), except `_access/config.yaml` which is read at query time
-- `design.md` files contain build guidance, not navigable content
-- `SKILL.md` files are operational agent instructions, not compiled
+- `design.md`, `SKILL.md`, `AGENT.md`, `README.md` are companion files — never compiled as nodes

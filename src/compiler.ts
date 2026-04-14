@@ -11,6 +11,14 @@ import type {
 
 const INLINE_LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/g;
 
+/** Markdown files that should never become leaf nodes */
+export const EXCLUDED_LEAF_MD_FILES = new Set([
+  "design.md",
+  "SKILL.md",
+  "AGENT.md",
+  "README.md",
+]);
+
 export function compile(rootDir: string): SpandrelGraph {
   const nodes = new Map<string, SpandrelNode>();
   const edges: SpandrelEdge[] = [];
@@ -36,20 +44,28 @@ export function recompileNode(
   );
 
   // Re-parse if file still exists
-  const fullPath = path.join(rootDir, ...nodePath.split("/").filter(Boolean));
-  const indexPath = findIndexMd(fullPath);
-  if (indexPath) {
-    const node = parseNode(rootDir, fullPath, indexPath);
-    graph.nodes.set(node.path, node);
-    extractEdges(node, graph.edges);
+  if (fs.existsSync(filePath)) {
+    const basename = path.basename(filePath);
+    let node: SpandrelNode | null = null;
 
-    // Rebuild hierarchy edges for this node
-    if (node.parent) {
-      graph.edges.push({
-        from: node.parent,
-        to: node.path,
-        type: "hierarchy",
-      });
+    if (basename === "index.md") {
+      const dir = path.dirname(filePath);
+      node = parseNode(rootDir, dir, filePath);
+    } else if (basename.endsWith(".md") && !EXCLUDED_LEAF_MD_FILES.has(basename)) {
+      node = parseLeafNode(rootDir, filePath);
+    }
+
+    if (node) {
+      graph.nodes.set(node.path, node);
+      extractEdges(node, graph.edges);
+
+      if (node.parent) {
+        graph.edges.push({
+          from: node.parent,
+          to: node.path,
+          type: "hierarchy",
+        });
+      }
     }
   }
 
@@ -63,11 +79,12 @@ export function recompileNode(
 
 function filePathToNodePath(rootDir: string, filePath: string): string {
   let rel = path.relative(rootDir, filePath);
-  // Strip index.md from end
-  rel = rel.replace(/\/index\.md$/, "").replace(/^index\.md$/, "");
-  // If it's a directory path to index.md, get the directory
-  if (rel.endsWith("/index.md")) {
-    rel = path.dirname(rel);
+  // Strip index.md from end (directory-based node)
+  if (rel.endsWith(path.sep + "index.md") || rel === "index.md") {
+    rel = rel.replace(/[/\\]?index\.md$/, "");
+  } else if (rel.endsWith(".md")) {
+    // Leaf .md file — strip extension
+    rel = rel.replace(/\.md$/, "");
   }
   const nodePath = "/" + rel.split(path.sep).filter(Boolean).join("/");
   return nodePath === "/" ? "/" : nodePath;
@@ -131,10 +148,24 @@ function walkTree(
     walkTree(rootDir, subdir, nodes, edges, warnings);
   }
 
+  // Process leaf .md files in this directory
+  const leafFiles = getLeafMdFiles(currentDir);
+  for (const leafFile of leafFiles) {
+    const leafNode = parseLeafNode(rootDir, leafFile);
+    nodes.set(leafNode.path, leafNode);
+    extractEdges(leafNode, edges);
+
+    if (leafNode.parent !== null) {
+      edges.push({ from: leafNode.parent, to: leafNode.path, type: "hierarchy" });
+    }
+  }
+
   // After recursion, set children on this node
   const node = nodes.get(nodePath);
   if (node) {
-    node.children = subdirs.map((d) => dirToNodePath(rootDir, d));
+    const subdirChildren = subdirs.map((d) => dirToNodePath(rootDir, d));
+    const leafChildren = leafFiles.map((f) => leafFileToNodePath(rootDir, f));
+    node.children = [...subdirChildren, ...leafChildren];
     if (node.children.length > 0) {
       node.nodeType = "composite";
     }
@@ -164,6 +195,57 @@ function getContentSubdirs(dir: string): string[] {
     )
     .map((d) => path.join(dir, d.name))
     .sort();
+}
+
+function getLeafMdFiles(dir: string): string[] {
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return [];
+  const subdirNames = new Set(
+    fs.readdirSync(dir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name)
+  );
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter(
+      (d) =>
+        d.isFile() &&
+        d.name.endsWith(".md") &&
+        d.name !== "index.md" &&
+        !d.name.startsWith("_") &&
+        !d.name.startsWith(".") &&
+        !EXCLUDED_LEAF_MD_FILES.has(d.name) &&
+        !subdirNames.has(d.name.replace(/\.md$/, ""))
+    )
+    .map((d) => path.join(dir, d.name))
+    .sort();
+}
+
+function leafFileToNodePath(rootDir: string, filePath: string): string {
+  const rel = path.relative(rootDir, filePath);
+  const withoutExt = rel.replace(/\.md$/, "");
+  return "/" + withoutExt.split(path.sep).join("/");
+}
+
+function parseLeafNode(rootDir: string, filePath: string): SpandrelNode {
+  const raw = fs.readFileSync(filePath, "utf-8");
+  const { data, content } = matter(raw);
+  const nodePath = leafFileToNodePath(rootDir, filePath);
+  const stem = path.basename(filePath, ".md");
+
+  return {
+    path: nodePath,
+    name: (data.name as string) || stem,
+    description: (data.description as string) || "",
+    nodeType: "leaf",
+    depth: nodePath.split("/").filter(Boolean).length,
+    parent: parentPath(nodePath),
+    children: [],
+    content: content.trim(),
+    frontmatter: data,
+    created: null,
+    updated: null,
+    author: (data.author as string) || null,
+  };
 }
 
 function dirToNodePath(rootDir: string, dir: string): string {
@@ -331,6 +413,15 @@ function validate(
   }
 }
 
+/** Resolve a node path to its relative source file (index.md or leaf .md) */
+export function resolveNodeSourceFile(rootDir: string, nodePath: string): string {
+  if (nodePath === "/") return "index.md";
+  const rel = nodePath.slice(1);
+  const dirPath = rel + "/index.md";
+  if (fs.existsSync(path.join(rootDir, dirPath))) return dirPath;
+  return rel + ".md";
+}
+
 export async function addGitMetadata(
   graph: SpandrelGraph,
   rootDir: string
@@ -343,9 +434,7 @@ export async function addGitMetadata(
   if (!isRepo) return;
 
   for (const node of graph.nodes.values()) {
-    const filePath = node.path === "/"
-      ? "index.md"
-      : node.path.slice(1) + "/index.md";
+    const filePath = resolveNodeSourceFile(rootDir, node.path);
 
     try {
       const log = await git.log({ file: filePath });
@@ -369,9 +458,7 @@ export async function getHistory(
   const isRepo = await git.checkIsRepo().catch(() => false);
   if (!isRepo) return [];
 
-  const filePath = nodePath === "/"
-    ? "index.md"
-    : nodePath.slice(1) + "/index.md";
+  const filePath = resolveNodeSourceFile(rootDir, nodePath);
 
   try {
     const log = await git.log({ file: filePath });

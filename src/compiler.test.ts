@@ -188,9 +188,11 @@ describe("Compiler — Tree Walking", () => {
     expect(graph.nodes.size).toBe(1); // only root
   });
 
-  it("non-index.md files are not compiled as separate nodes", () => {
+  it("excluded .md files are not compiled as nodes", () => {
     writeIndex(root, { name: "Root", description: "Root" });
-    fs.writeFileSync(path.join(root, "notes.md"), "# Some notes\n");
+    fs.writeFileSync(path.join(root, "SKILL.md"), "---\nname: test\n---\n");
+    fs.writeFileSync(path.join(root, "AGENT.md"), "---\nname: test\n---\n");
+    fs.writeFileSync(path.join(root, "README.md"), "# Readme\n");
 
     const graph = compile(root);
     expect(graph.nodes.size).toBe(1); // only root
@@ -369,5 +371,161 @@ describe("Compiler — Change Detection (recompileNode)", () => {
 
     expect(graph.nodes.has("/newchild")).toBe(true);
     expect(graph.nodes.get("/newchild")!.name).toBe("New");
+  });
+});
+
+describe("Compiler — Leaf .md Files", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = createTempDir();
+  });
+
+  afterEach(() => {
+    rmrf(root);
+  });
+
+  it("leaf .md files become nodes", () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    fs.writeFileSync(
+      path.join(root, "acme.md"),
+      "---\nname: Acme Corp\ndescription: A client\n---\n\nAcme details.\n"
+    );
+
+    const graph = compile(root);
+    const node = graph.nodes.get("/acme");
+    expect(node).toBeDefined();
+    expect(node!.name).toBe("Acme Corp");
+    expect(node!.description).toBe("A client");
+    expect(node!.nodeType).toBe("leaf");
+    expect(node!.parent).toBe("/");
+    expect(node!.children).toHaveLength(0);
+    expect(node!.content).toBe("Acme details.");
+  });
+
+  it("leaf nodes get hierarchy edges", () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    fs.writeFileSync(
+      path.join(root, "acme.md"),
+      "---\nname: Acme\ndescription: A client\n---\n"
+    );
+
+    const graph = compile(root);
+    const hierarchyEdges = graph.edges.filter(
+      (e) => e.type === "hierarchy" && e.to === "/acme"
+    );
+    expect(hierarchyEdges).toHaveLength(1);
+    expect(hierarchyEdges[0].from).toBe("/");
+  });
+
+  it("parent becomes composite when it has leaf children", () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    fs.writeFileSync(
+      path.join(root, "note.md"),
+      "---\nname: Note\ndescription: A note\n---\n"
+    );
+
+    const graph = compile(root);
+    const rootNode = graph.nodes.get("/");
+    expect(rootNode!.nodeType).toBe("composite");
+    expect(rootNode!.children).toContain("/note");
+  });
+
+  it("conflict: directory wins over leaf file", () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    writeIndex(path.join(root, "foo"), { name: "Foo Dir", description: "From directory" });
+    fs.writeFileSync(
+      path.join(root, "foo.md"),
+      "---\nname: Foo File\ndescription: From leaf file\n---\n"
+    );
+
+    const graph = compile(root);
+    const fooNode = graph.nodes.get("/foo");
+    expect(fooNode).toBeDefined();
+    expect(fooNode!.name).toBe("Foo Dir");
+    // Only one /foo node, not two
+    expect([...graph.nodes.keys()].filter((k) => k === "/foo")).toHaveLength(1);
+  });
+
+  it("leaf nodes in nested directories", () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    writeIndex(path.join(root, "dept"), { name: "Dept", description: "Department" });
+    fs.writeFileSync(
+      path.join(root, "dept", "alice.md"),
+      "---\nname: Alice\ndescription: A person\n---\n"
+    );
+
+    const graph = compile(root);
+    const alice = graph.nodes.get("/dept/alice");
+    expect(alice).toBeDefined();
+    expect(alice!.parent).toBe("/dept");
+
+    const dept = graph.nodes.get("/dept");
+    expect(dept!.children).toContain("/dept/alice");
+    expect(dept!.nodeType).toBe("composite");
+  });
+
+  it("links in leaf .md files are extracted", () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    fs.writeFileSync(
+      path.join(root, "acme.md"),
+      "---\nname: Acme\ndescription: Client\nlinks:\n  -\n    to: \"/people/jane\"\n    type: \"account_lead\"\n---\n"
+    );
+
+    const graph = compile(root);
+    const linkEdges = graph.edges.filter(
+      (e) => e.type === "link" && e.from === "/acme"
+    );
+    expect(linkEdges).toHaveLength(1);
+    expect(linkEdges[0].to).toBe("/people/jane");
+    expect(linkEdges[0].linkType).toBe("account_lead");
+  });
+
+  it("leaf name defaults to file stem when frontmatter name is missing", () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    fs.writeFileSync(
+      path.join(root, "my-project.md"),
+      "---\ndescription: A project\n---\n"
+    );
+
+    const graph = compile(root);
+    const node = graph.nodes.get("/my-project");
+    expect(node).toBeDefined();
+    expect(node!.name).toBe("my-project");
+  });
+
+  it("recompileNode handles leaf file changes", () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    fs.writeFileSync(
+      path.join(root, "acme.md"),
+      "---\nname: Acme\ndescription: Original\n---\n"
+    );
+
+    const graph = compile(root);
+    expect(graph.nodes.get("/acme")!.description).toBe("Original");
+
+    fs.writeFileSync(
+      path.join(root, "acme.md"),
+      "---\nname: Acme\ndescription: Updated\n---\n"
+    );
+    recompileNode(graph, root, path.join(root, "acme.md"));
+
+    expect(graph.nodes.get("/acme")!.description).toBe("Updated");
+  });
+
+  it("recompileNode handles leaf file deletion", () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    fs.writeFileSync(
+      path.join(root, "acme.md"),
+      "---\nname: Acme\ndescription: Client\n---\n"
+    );
+
+    const graph = compile(root);
+    expect(graph.nodes.has("/acme")).toBe(true);
+
+    fs.unlinkSync(path.join(root, "acme.md"));
+    recompileNode(graph, root, path.join(root, "acme.md"));
+
+    expect(graph.nodes.has("/acme")).toBe(false);
   });
 });

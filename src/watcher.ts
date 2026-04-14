@@ -1,6 +1,6 @@
 import chokidar from "chokidar";
 import path from "node:path";
-import { recompileNode } from "./compiler.js";
+import { recompileNode, EXCLUDED_LEAF_MD_FILES } from "./compiler.js";
 import type { SpandrelGraph } from "./types.js";
 
 export function watchTree(
@@ -21,10 +21,10 @@ export function watchTree(
   });
 
   const handleChange = (filePath: string) => {
-    // Only react to index.md changes
-    if (!filePath.endsWith("index.md")) return;
-    // Skip design.md (shouldn't match but be safe)
-    if (filePath.endsWith("design.md")) return;
+    const basename = path.basename(filePath);
+    if (!basename.endsWith(".md")) return;
+    if (EXCLUDED_LEAF_MD_FILES.has(basename)) return;
+    if (basename.startsWith(".") || basename.startsWith("_")) return;
 
     console.log(`[spandrel] Change detected: ${path.relative(rootDir, filePath)}`);
     recompileNode(graph, rootDir, filePath);
