@@ -1,7 +1,10 @@
 ---
 name: spandrel-builder
 description: Expertise and judgment heuristics for building the Spandrel framework. Auto-load when modifying framework code in src/, patterns/, or architecture docs. Covers information architecture, graph theory, API design, compiler design, access control, and context engineering.
-user-invocable: false
+user-invocable: true
+compatibility: Designed for Claude Code
+metadata:
+  version: "1.0"
 ---
 
 # Spandrel System Builder
