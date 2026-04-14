@@ -59,7 +59,7 @@ export function createMcpServer(schema: GraphQLSchema, options?: McpServerOption
 
   server.tool(
     "get_node",
-    "Returns a node's metadata, children, and links. Use depth to preview children without separate calls.",
+    "Returns a node's metadata, children, and links. Use depth to preview children. Names and descriptions at each level tell you whether to go deeper.",
     {
       path: z.string().describe("Path to the node (e.g. '/' or '/clients/acme')"),
       depth: z.number().optional().describe("How many levels of children to include"),
@@ -105,7 +105,7 @@ export function createMcpServer(schema: GraphQLSchema, options?: McpServerOption
 
   server.tool(
     "context",
-    "Returns a node's content, children, outgoing links, and incoming backlinks in one call. The primary traversal tool — start at '/' and follow edges.",
+    "Full node context in one call: content, children, outgoing links with target names, incoming backlinks with source names. Start at '/' and follow edges to discover answers.",
     {
       path: z.string().describe("Path to the node"),
     },
@@ -130,7 +130,7 @@ export function createMcpServer(schema: GraphQLSchema, options?: McpServerOption
 
   server.tool(
     "get_references",
-    "Returns typed link edges for a node. Direction: outgoing (default), incoming, or both.",
+    "Returns typed link edges for a node — who owns what, what connects where. Direction: outgoing (default), incoming, or both.",
     {
       path: z.string().describe("Path to the node"),
       direction: z.enum(["outgoing", "incoming", "both"]).optional().describe("Which direction of links to return"),
@@ -151,7 +151,7 @@ export function createMcpServer(schema: GraphQLSchema, options?: McpServerOption
 
   server.tool(
     "search",
-    "Keyword search across node text and edge metadata, ranked by relevance. Use when you don't know where to start; prefer context() for relationship questions.",
+    "Keyword search across node text and edge metadata. Use when you don't know where to look; follow up with context() on results to get the full picture.",
     {
       query: z.string().describe("Search query string"),
       path: z.string().optional().describe("Scope search to this subtree path"),
@@ -172,7 +172,7 @@ export function createMcpServer(schema: GraphQLSchema, options?: McpServerOption
 
   server.tool(
     "navigate",
-    "Returns a node's neighbors (children + linked nodes), optionally filtered by keyword or edge type. One hop per call.",
+    "Filtered one-hop traversal: returns children and linked nodes, optionally narrowed by keyword or edge type (e.g. 'owns_client'). Call repeatedly to walk the graph.",
     {
       path: z.string().describe("Starting node path (e.g. '/' or '/clients')"),
       keyword: z.string().optional().describe("Filter neighbors by keyword (matches name, description, or edge description)"),
@@ -195,7 +195,7 @@ export function createMcpServer(schema: GraphQLSchema, options?: McpServerOption
 
   server.tool(
     "get_graph",
-    "Returns all nodes and edges in a subtree. Can be large — prefer context() or navigate() for focused exploration.",
+    "Dumps all nodes and edges in a subtree. Can be large — use context() or navigate() to explore incrementally instead.",
     {
       path: z.string().optional().describe("Root path (defaults to '/')"),
       depth: z.number().optional().describe("How many levels deep"),
@@ -261,7 +261,7 @@ export function createMcpServer(schema: GraphQLSchema, options?: McpServerOption
 
   server.tool(
     "create_thing",
-    "Creates a new node at the given path. Parent path must already exist.",
+    "Creates a new node with frontmatter and optional links. Parent path must already exist.",
     {
       path: z.string().describe("Path for the new Thing (e.g. '/clients/acme')"),
       name: z.string().describe("Name of the Thing"),
