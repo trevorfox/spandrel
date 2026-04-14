@@ -43,7 +43,11 @@ Or add to your MCP config (Claude Desktop, Claude Code, etc.):
 }
 ```
 
-Start with `get_node` at `/` and navigate from there.
+Then tell your agent:
+
+```
+Use the spandrel-docs MCP to explore the Spandrel framework. Start at the root and navigate from there.
+```
 
 ## What It Does
 
