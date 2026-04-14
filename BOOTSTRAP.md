@@ -113,6 +113,7 @@ Create a `README.md` in the knowledge repo root. Include:
 - Quick-start commands: `spandrel compile .`, `spandrel dev .`, `spandrel mcp .`
 - Key conventions: directory = node, `index.md` = frontmatter + content, `design.md` = build guidance for collections
 - The directory-per-node explanation (brief version of the above)
+- Skills: explain that reusable workflows live in `/skills` as graph nodes — queryable via MCP, portable to any tool. To use in Claude Code, copy skill content to `.claude/skills/`
 - Initial build snapshot: list of collections created and approximate node count
 
 **Concepts introduced:** Things, `index.md` as the nucleus, directory-per-node pattern.
@@ -181,32 +182,36 @@ Then show search as a secondary tool:
 
 > "You can also search: `search 'acme'`. But traversal is the primary navigation pattern — start at a known point and follow edges. Search is a fallback for when you don't know where to start."
 
-### Generate starter skills
+### Generate starter skills as graph nodes
 
-Create `.claude/skills/` in the knowledge repo with three starter skills:
+Skills are Things in the graph — they have names, descriptions, content, and links to the nodes they operate on. Create a `/skills` collection with three starter skills:
 
-**`.claude/skills/navigate/SKILL.md`** — Graph navigator. How to traverse the graph using progressive disclosure: start at `/` with `context()`, read names and descriptions to decide where to go deeper, follow links laterally, use `get_references` for connections. Only fall back to search when you have no starting point. Include an example workflow using this graph's actual collections.
+**`/skills/navigate/index.md`** — Graph navigator. How to traverse the graph using progressive disclosure: start at `/` with `context()`, read names and descriptions to decide where to go deeper, follow links laterally, use `get_references` for connections. Only fall back to search when you have no starting point. Include an example workflow using this graph's actual collections. Link to the collections it references.
 
-**`.claude/skills/review/SKILL.md`** — Content reviewer. How to check graph health: run `validate` for warnings, walk the graph checking for missing descriptions, orphaned nodes (no incoming links), broken links, stale content. Present findings prioritized — missing descriptions first (they break progressive disclosure), then broken links, then orphans.
+**`/skills/review/index.md`** — Content reviewer. How to check graph health: run `validate` for warnings, walk the graph checking for missing descriptions, orphaned nodes (no incoming links), broken links, stale content. Present findings prioritized — missing descriptions first (they break progressive disclosure), then broken links, then orphans.
 
-**`.claude/skills/create-node/SKILL.md`** — Node creator. How to add a new Thing correctly: determine which collection it belongs in, choose a slug (lowercase, hyphenated), use `create_thing` with name, description, and links, add links from related existing nodes back to the new one, compile to verify.
+**`/skills/create-node/index.md`** — Node creator. How to add a new Thing correctly: determine which collection it belongs in, choose a slug (lowercase, hyphenated), use `create_thing` with name, description, and links, add links from related existing nodes back to the new one, compile to verify. Link to the collections where new nodes would typically be created.
+
+Create `/skills/index.md` with name "Skills" and a description explaining that these are reusable workflows for working with this knowledge graph. They live in the graph so they're queryable ("what skills can I use?") and travel with the knowledge.
 
 Customize each skill with this graph's actual collection names and domain vocabulary.
 
-**Concepts introduced:** Compilation, progressive disclosure as navigation, traversal over search, skills as reusable workflows.
+**Why skills are nodes, not files:** Skills are knowledge about how to work with the graph. They belong in the graph — queryable via MCP, linked to the nodes they operate on, governed by the same access control. When the user serves this graph to agents via MCP, the skills are immediately available as content the agent can read. If the user wants to use a skill in a specific tool (e.g., copy it to `.claude/skills/` for Claude Code), they can — but the graph is the source of truth.
 
-**Agent instruction:** Demo traversal FIRST. Show the user navigating from root to a specific node by following edges. Only then mention search. This sets the right expectation from the start.
+**Concepts introduced:** Compilation, progressive disclosure as navigation, traversal over search, skills as graph nodes.
+
+**Agent instruction:** Demo traversal FIRST. Show the user navigating from root to a specific node by following edges. Only then mention search. This sets the right expectation from the start. Explain that skills are nodes — they'll show up when you traverse to `/skills`.
 
 ## Level 6: What's Next
 
 The graph is live. Brief pointers — no pressure to do everything at once:
 
 - **Add content:** Create a directory with an `index.md`. That's it — it's a new node.
-- **Use skills:** The starter skills in `.claude/skills/` are ready — navigate, review, create-node.
+- **Use skills:** The starter skills are in `/skills` — traverse there with `context("/skills")` to see what's available. To use a skill in a specific tool (e.g., Claude Code), copy its content to `.claude/skills/`.
 - **Bring in more data:** Add sources over time. The graph grows incrementally.
 - **Graph health:** Run `spandrel compile .` to check. Use the `validate` MCP tool for details.
 - **Access control:** When ready, create `_access/config.yaml` with roles and policies.
-- **MCP for agents:** Run `spandrel mcp /path/to/knowledge-repo` to serve the graph to any MCP-compatible agent.
-- **Role-based skills:** As the graph matures, consider loading specialized roles — Information Architect for structural work, Context Engineer for maintenance, Analyst for exploration.
+- **MCP for agents:** Run `spandrel mcp /path/to/knowledge-repo` to serve the graph to any MCP-compatible agent. Skills are already in the graph — agents can read them via MCP.
+- **Role-based skills:** As the graph matures, add specialized skills — Information Architect for structural work, Context Engineer for maintenance, Analyst for exploration.
 
 **Agent instruction:** Keep this brief. The user just built something. Let them explore it.
