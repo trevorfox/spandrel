@@ -46,6 +46,12 @@ Mutations:
 
 Mutations check write access, execute the file operation, recompile the affected node, and return success/failure with any new validation warnings.
 
+## Agent-friendly responses
+
+**Deterministic ordering.** Query results should be sorted by path. Deterministic ordering keeps prompt cache keys stable when agents re-query the same subgraph — reordered results invalidate downstream caches even when the content is identical.
+
+**Token awareness.** Content responses should include a `tokenEstimate` field (rough character count / 4). Agents operating under context budgets need to know how much content costs before fetching it. This enables agents to make informed progressive disclosure decisions rather than fetching content and hoping it fits.
+
 ## Storage independence
 
 The schema resolves against a `SpandrelGraph` object (nodes as a Map, edges as an array). It does not know or care how that object was populated — in-memory compilation, SQLite, Postgres, or anything else. The storage backend is invisible to the schema layer.

@@ -8,6 +8,7 @@ A root directory containing:
 - `index.md` files inside directories (composite nodes)
 - Standalone `.md` files (leaf nodes)
 - YAML frontmatter with at minimum `name` and `description`
+- Optional `hint` field in frontmatter: 3-10 words optimized for agent discovery (distinct from `description`, which can be longer and more detailed)
 - Optional `links` array in frontmatter declaring relationships to other nodes
 
 ## Output

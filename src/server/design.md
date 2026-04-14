@@ -35,6 +35,18 @@ Validation:
 
 Each tool's output is formatted for progressive disclosure: names and descriptions first, full content on request.
 
+### Tool description principles
+
+Tool descriptions are the primary mechanism for guiding agent behavior. An effective description:
+
+1. **Prevents misuse** — explicitly states what NOT to do ("Do not dump all content at once — use get_node with depth=1 first, then drill into specific paths")
+2. **Redirects to related tools** — tells the agent when a different tool is more appropriate ("If you need relationships, use context instead of get_node + get_references separately")
+3. **Documents navigation strategy** — establishes the traversal-first pattern ("Start at root, read children, then traverse. Search is a fallback, not the primary navigation method")
+4. **Includes per-parameter examples** — every parameter should describe its type, default, and at least one example value
+5. **States defaults and limits** — "depth defaults to 1", "search returns at most 20 results"
+
+Descriptions should be under 2048 characters. Longer descriptions waste tokens in the system prompt without improving agent behavior.
+
 ## Writer
 
 The writer handles file operations for mutations: creating markdown files with frontmatter, updating existing files, and deleting files. It operates on the file system, not on the storage layer — mutations write to markdown files, then the compiler recompiles the affected node.
