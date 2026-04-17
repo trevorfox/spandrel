@@ -4,10 +4,11 @@ import matter from "gray-matter";
 import type {
   SpandrelNode,
   SpandrelEdge,
-  SpandrelGraph,
   ValidationWarning,
   HistoryEntry,
 } from "./types.js";
+import type { GraphStore } from "../storage/graph-store.js";
+import { InMemoryGraphStore } from "../storage/in-memory-graph-store.js";
 
 const INLINE_LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/g;
 
@@ -19,7 +20,7 @@ export const EXCLUDED_LEAF_MD_FILES = new Set([
   "README.md",
 ]);
 
-export function compile(rootDir: string): SpandrelGraph {
+export function compile(rootDir: string): GraphStore {
   const nodes = new Map<string, SpandrelNode>();
   const edges: SpandrelEdge[] = [];
   const warnings: ValidationWarning[] = [];
@@ -27,19 +28,23 @@ export function compile(rootDir: string): SpandrelGraph {
   walkTree(rootDir, rootDir, nodes, edges, warnings);
   validate(nodes, edges, warnings);
 
-  return { nodes, edges, warnings };
+  const store = new InMemoryGraphStore();
+  for (const node of nodes.values()) store.setNode(node);
+  store.replaceEdges(edges);
+  store.replaceWarnings(warnings);
+  return store;
 }
 
 export function recompileNode(
-  graph: SpandrelGraph,
+  store: GraphStore,
   rootDir: string,
   filePath: string
 ): void {
   const nodePath = filePathToNodePath(rootDir, filePath);
 
   // Remove old node and its edges
-  graph.nodes.delete(nodePath);
-  graph.edges = graph.edges.filter(
+  store.deleteNode(nodePath);
+  const edges = store.getEdges().filter(
     (e) => e.from !== nodePath && e.to !== nodePath
   );
 
@@ -56,11 +61,11 @@ export function recompileNode(
     }
 
     if (node) {
-      graph.nodes.set(node.path, node);
-      extractEdges(node, graph.edges);
+      store.setNode(node);
+      extractEdges(node, edges);
 
       if (node.parent) {
-        graph.edges.push({
+        edges.push({
           from: node.parent,
           to: node.path,
           type: "hierarchy",
@@ -69,12 +74,17 @@ export function recompileNode(
     }
   }
 
+  store.replaceEdges(edges);
+
   // Rebuild children lists
-  rebuildChildren(graph);
+  rebuildChildren(store);
 
   // Re-validate
-  graph.warnings = [];
-  validate(graph.nodes, graph.edges, graph.warnings);
+  const warnings: ValidationWarning[] = [];
+  const allNodes = new Map<string, SpandrelNode>();
+  for (const node of store.getAllNodes()) allNodes.set(node.path, node);
+  validate(allNodes, store.getEdges(), warnings);
+  store.replaceWarnings(warnings);
 }
 
 function filePathToNodePath(rootDir: string, filePath: string): string {
@@ -329,24 +339,19 @@ function extractEdges(node: SpandrelNode, edges: SpandrelEdge[]): void {
   }
 }
 
-function rebuildChildren(graph: SpandrelGraph): void {
-  // Clear all children
-  for (const node of graph.nodes.values()) {
+function rebuildChildren(store: GraphStore): void {
+  for (const node of store.getAllNodes()) {
     node.children = [];
   }
 
-  // Rebuild from hierarchy edges
-  for (const edge of graph.edges) {
-    if (edge.type === "hierarchy") {
-      const parent = graph.nodes.get(edge.from);
-      if (parent && !parent.children.includes(edge.to)) {
-        parent.children.push(edge.to);
-      }
+  for (const edge of store.getEdges({ type: "hierarchy" })) {
+    const parent = store.getNode(edge.from);
+    if (parent && !parent.children.includes(edge.to)) {
+      parent.children.push(edge.to);
     }
   }
 
-  // Update nodeType based on children
-  for (const node of graph.nodes.values()) {
+  for (const node of store.getAllNodes()) {
     node.nodeType = node.children.length > 0 ? "composite" : "leaf";
   }
 }
@@ -423,17 +428,16 @@ export function resolveNodeSourceFile(rootDir: string, nodePath: string): string
 }
 
 export async function addGitMetadata(
-  graph: SpandrelGraph,
+  store: GraphStore,
   rootDir: string
 ): Promise<void> {
   const { simpleGit } = await import("simple-git");
   const git = simpleGit(rootDir);
 
-  // Check if this is a git repo
   const isRepo = await git.checkIsRepo().catch(() => false);
   if (!isRepo) return;
 
-  for (const node of graph.nodes.values()) {
+  for (const node of store.getAllNodes()) {
     const filePath = resolveNodeSourceFile(rootDir, node.path);
 
     try {

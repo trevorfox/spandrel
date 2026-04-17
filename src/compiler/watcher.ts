@@ -1,11 +1,11 @@
 import chokidar from "chokidar";
 import path from "node:path";
 import { recompileNode, EXCLUDED_LEAF_MD_FILES } from "./compiler.js";
-import type { SpandrelGraph } from "./types.js";
+import type { GraphStore } from "../storage/graph-store.js";
 
 export function watchTree(
   rootDir: string,
-  graph: SpandrelGraph,
+  store: GraphStore,
   onChange?: (filePath: string) => void
 ): ReturnType<typeof chokidar.watch> {
   const watcher = chokidar.watch(rootDir, {
@@ -27,7 +27,7 @@ export function watchTree(
     if (basename.startsWith(".") || basename.startsWith("_")) return;
 
     console.log(`[spandrel] Change detected: ${path.relative(rootDir, filePath)}`);
-    recompileNode(graph, rootDir, filePath);
+    recompileNode(store, rootDir, filePath);
     onChange?.(filePath);
   };
 

@@ -138,11 +138,11 @@ function runE2E(def: KnowledgeDefinition) {
 
     describe("compilation", () => {
       it("zero warnings", () => {
-        expect(compiledGraph.warnings).toHaveLength(0);
+        expect(compiledGraph.getWarnings()).toHaveLength(0);
       });
 
       it("node count matches definition", () => {
-        expect(compiledGraph.nodes.size).toBe(1 + items.length);
+        expect(compiledGraph.nodeCount).toBe(1 + items.length);
       });
     });
 

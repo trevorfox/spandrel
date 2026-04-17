@@ -47,6 +47,20 @@ Tool descriptions are the primary mechanism for guiding agent behavior. An effec
 
 Descriptions should be under 2048 characters. Longer descriptions waste tokens in the system prompt without improving agent behavior.
 
+### Agent ergonomics
+
+How response formatting affects agent performance, informed by retrieval and context research:
+
+**Root context includes a full tree.** When `context("/")` is called, the response includes a compact tree listing of every node in the graph — path + name + one-line description. For graphs under ~200 nodes, this costs fewer tokens than the incremental navigation it replaces (each tool call has overhead). The agent sees the entire graph in one call and can jump directly to any node. Above ~200 nodes, the tree should be depth-limited with deeper nodes discoverable via traversal.
+
+**Orientation first, reference second.** Structure the root context response in two parts: (1) the node's own content, children, and links — the structured orientation that helps the agent understand the domain's shape, and (2) the flat tree listing as a scannable reference for direct path lookup. This mirrors the CLAUDE.md pattern: conceptual map at the top, pointers to details below.
+
+**Keep decision sets small, reference sets unlimited.** When the agent must *choose* between items (which child to explore, which link to follow), keep the set under 20 items. When items are reference material the agent scans for a known target (the tree listing, search results), larger sets are fine — the agent is pattern-matching, not deliberating.
+
+**Position matters.** Items in the middle of a long list receive less attention than items at the beginning or end (the "lost in the middle" effect). When ordering matters — search results, ranked recommendations — put the most relevant items first. For unordered listings like the tree, alphabetical or structural ordering is fine since the agent scans by path, not position.
+
+**One call per orientation.** An agent's first interaction with the graph should fully orient it. Multi-hop discovery (call root → pick a child → call that → pick again) wastes tool calls on navigation boilerplate and pollutes the agent's context with intermediate results it won't need again. The root context response should make a second orientation call unnecessary.
+
 ## Writer
 
 The writer handles file operations for mutations: creating markdown files with frontmatter, updating existing files, and deleting files. It operates on the file system, not on the storage layer — mutations write to markdown files, then the compiler recompiles the affected node.

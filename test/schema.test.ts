@@ -64,8 +64,8 @@ describe("GraphQL Schema", () => {
   });
 
   function query(source: string, variables?: Record<string, unknown>) {
-    const graph = compile(root);
-    const schema = createSchema(graph);
+    const store = compile(root);
+    const schema = createSchema(store);
     return graphql({ schema, source, variableValues: variables });
   }
 

@@ -12,7 +12,8 @@ import {
   GraphQLInputObjectType,
 } from "graphql";
 import nodePath from "node:path";
-import type { SpandrelGraph, SpandrelNode, HistoryEntry } from "../compiler/types.js";
+import type { SpandrelNode, HistoryEntry } from "../compiler/types.js";
+import type { GraphStore } from "../storage/graph-store.js";
 import type { AccessConfig, Actor, AccessLevel } from "./types.js";
 import { canAccess, canWrite, accessLevelAtLeast } from "./access.js";
 import { createThing, updateThing, deleteThing, resolveSourcePath } from "../server/writer.js";
@@ -217,7 +218,7 @@ const ContextResultType = new GraphQLObjectType({
   },
 });
 
-export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQLSchema {
+export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSchema {
   function checkAccess(nodePath: string, metadata: Record<string, unknown> = {}): AccessLevel {
     if (!ctx?.accessConfig || !ctx?.actor) return "traverse";
     return canAccess(ctx.accessConfig, ctx.actor, nodePath, metadata);
@@ -228,7 +229,7 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
     minLevel: AccessLevel = "exists"
   ): T[] {
     return (items.filter(Boolean) as T[]).filter((item) => {
-      const node = graph.nodes.get(item.path);
+      const node = store.getNode(item.path);
       const level = checkAccess(item.path, node?.frontmatter ?? {});
       return accessLevelAtLeast(level, minLevel);
     });
@@ -246,12 +247,12 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             includeContent: { type: GraphQLBoolean },
           },
           resolve: (_root, args: { path: string; depth?: number; includeContent?: boolean }) => {
-            const node = graph.nodes.get(args.path);
+            const node = store.getNode(args.path);
             if (!node) return null;
             const level = checkAccess(args.path, node.frontmatter);
             if (level === "none") return null;
             const includeContent = args.includeContent && accessLevelAtLeast(level, "content");
-            const result = resolveNode(graph, args.path, args.depth, includeContent);
+            const result = resolveNode(store, args.path, args.depth, includeContent);
             if (!result) return null;
             // Filter children and links by access
             if (result.children) {
@@ -286,7 +287,7 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             path: { type: new GraphQLNonNull(GraphQLString) },
           },
           resolve: (_root, args: { path: string }) => {
-            const node = graph.nodes.get(args.path);
+            const node = store.getNode(args.path);
             if (!node) return null;
             const level = checkAccess(args.path, node.frontmatter);
             if (!accessLevelAtLeast(level, "content")) return null;
@@ -300,11 +301,11 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             path: { type: new GraphQLNonNull(GraphQLString) },
           },
           resolve: (_root, args: { path: string }) => {
-            const node = graph.nodes.get(args.path);
+            const node = store.getNode(args.path);
             if (!node) return null;
             const level = checkAccess(args.path, node.frontmatter);
             if (level === "none") return null;
-            const result = resolveContext(graph, args.path);
+            const result = resolveContext(store, args.path);
             if (!result) return null;
             // Filter by access
             if (result.children) {
@@ -338,7 +339,7 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
           resolve: (_root, args: { path: string; depth?: number }) => {
             const level = checkAccess(args.path);
             if (!accessLevelAtLeast(level, "description")) return [];
-            const children = resolveChildren(graph, args.path, args.depth ?? 1);
+            const children = resolveChildren(store, args.path, args.depth ?? 1);
             return filterAccessible(children);
           },
         },
@@ -352,7 +353,7 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
           resolve: (_root, args: { path: string; direction?: string }) => {
             const level = checkAccess(args.path);
             if (!accessLevelAtLeast(level, "description")) return [];
-            const refs = resolveReferences(graph, args.path, args.direction ?? "outgoing");
+            const refs = resolveReferences(store, args.path, args.direction ?? "outgoing");
             return filterAccessible(refs);
           },
         },
@@ -364,7 +365,7 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             path: { type: GraphQLString },
           },
           resolve: (_root, args: { query: string; path?: string }) => {
-            const results = resolveSearch(graph, args.query, args.path);
+            const results = resolveSearch(store, args.query, args.path);
             return filterAccessible(results, "description");
           },
         },
@@ -379,7 +380,7 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
           resolve: (_root, args: { path: string; keyword?: string; edgeType?: string }) => {
             const level = checkAccess(args.path);
             if (!accessLevelAtLeast(level, "description")) return null;
-            const result = resolveNavigate(graph, args.path, args.keyword, args.edgeType);
+            const result = resolveNavigate(store, args.path, args.keyword, args.edgeType);
             if (!result) return null;
             result.neighbors = filterAccessible(result.neighbors);
             return result;
@@ -397,7 +398,7 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             args: { path?: string; depth?: number }
           ) => {
             const result = resolveGraph(
-              graph,
+              store,
               args.path ?? "/",
               args.depth ?? 999
             );
@@ -420,13 +421,13 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
             if (args.path) {
               const level = checkAccess(args.path);
               if (!accessLevelAtLeast(level, "content")) return [];
-              return graph.warnings.filter(
+              return store.getWarnings().filter(
                 (w) =>
                   w.path === args.path || w.path.startsWith(args.path + "/")
               );
             }
             // Full validate — filter to accessible warnings only
-            return graph.warnings.filter((w) =>
+            return store.getWarnings().filter((w) =>
               accessLevelAtLeast(checkAccess(w.path), "content")
             );
           },
@@ -461,8 +462,8 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
           action();
           // Synchronous recompile so the node is immediately queryable
           const { sourcePath } = resolveSourcePath(rootDir, thingPath);
-          recompileNode(graph, rootDir, sourcePath);
-          const warnings = graph.warnings.filter(
+          recompileNode(store, rootDir, sourcePath);
+          const warnings = store.getWarnings().filter(
             (w) => w.path === thingPath || w.path.startsWith(thingPath + "/")
           );
           return { success: true, path: thingPath, message: null, warnings };
@@ -530,9 +531,8 @@ export function createSchema(graph: SpandrelGraph, ctx?: SchemaContext): GraphQL
   });
 }
 
-function getOutgoingLinks(graph: SpandrelGraph, nodePath: string) {
-  return graph.edges
-    .filter((e) => e.from === nodePath && e.type === "link")
+function getOutgoingLinks(store: GraphStore, nodePath: string) {
+  return store.getEdges({ from: nodePath, type: "link" })
     .map((e) => ({
       to: e.to,
       type: e.linkType ?? null,
@@ -540,9 +540,8 @@ function getOutgoingLinks(graph: SpandrelGraph, nodePath: string) {
     }));
 }
 
-function getIncomingLinks(graph: SpandrelGraph, nodePath: string) {
-  return graph.edges
-    .filter((e) => e.to === nodePath && e.type === "link")
+function getIncomingLinks(store: GraphStore, nodePath: string) {
+  return store.getEdges({ to: nodePath, type: "link" })
     .map((e) => ({
       to: e.from,
       type: e.linkType ?? null,
@@ -551,7 +550,7 @@ function getIncomingLinks(graph: SpandrelGraph, nodePath: string) {
 }
 
 function resolveReferences(
-  graph: SpandrelGraph,
+  store: GraphStore,
   nodePath: string,
   direction: string
 ): Array<{
@@ -572,34 +571,30 @@ function resolveReferences(
   }> = [];
 
   if (direction === "outgoing" || direction === "both") {
-    for (const edge of graph.edges) {
-      if (edge.from === nodePath && edge.type === "link") {
-        const target = graph.nodes.get(edge.to);
-        results.push({
-          path: edge.to,
-          name: target?.name ?? edge.to,
-          description: target?.description ?? "",
-          linkType: edge.linkType ?? null,
-          linkDescription: edge.description ?? null,
-          direction: "outgoing",
-        });
-      }
+    for (const edge of store.getEdges({ from: nodePath, type: "link" })) {
+      const target = store.getNode(edge.to);
+      results.push({
+        path: edge.to,
+        name: target?.name ?? edge.to,
+        description: target?.description ?? "",
+        linkType: edge.linkType ?? null,
+        linkDescription: edge.description ?? null,
+        direction: "outgoing",
+      });
     }
   }
 
   if (direction === "incoming" || direction === "both") {
-    for (const edge of graph.edges) {
-      if (edge.to === nodePath && edge.type === "link") {
-        const source = graph.nodes.get(edge.from);
-        results.push({
-          path: edge.from,
-          name: source?.name ?? edge.from,
-          description: source?.description ?? "",
-          linkType: edge.linkType ?? null,
-          linkDescription: edge.description ?? null,
-          direction: "incoming",
-        });
-      }
+    for (const edge of store.getEdges({ to: nodePath, type: "link" })) {
+      const source = store.getNode(edge.from);
+      results.push({
+        path: edge.from,
+        name: source?.name ?? edge.from,
+        description: source?.description ?? "",
+        linkType: edge.linkType ?? null,
+        linkDescription: edge.description ?? null,
+        direction: "incoming",
+      });
     }
   }
 
@@ -607,22 +602,22 @@ function resolveReferences(
 }
 
 function resolveNode(
-  graph: SpandrelGraph,
+  store: GraphStore,
   nodePath: string,
   depth?: number,
   includeContent?: boolean
 ) {
-  const node = graph.nodes.get(nodePath);
+  const node = store.getNode(nodePath);
   if (!node) return null;
 
-  const links = getOutgoingLinks(graph, nodePath);
-  const referencedBy = getIncomingLinks(graph, nodePath);
+  const links = getOutgoingLinks(store, nodePath);
+  const referencedBy = getIncomingLinks(store, nodePath);
 
   const children =
     depth !== undefined && depth > 0
-      ? resolveChildren(graph, nodePath, depth)
+      ? resolveChildren(store, nodePath, depth)
       : node.children.map((cp) => {
-          const child = graph.nodes.get(cp);
+          const child = store.getNode(cp);
           return child
             ? {
                 path: child.path,
@@ -652,16 +647,16 @@ function resolveNode(
   };
 }
 
-function resolveContext(graph: SpandrelGraph, nodePath: string) {
-  const node = graph.nodes.get(nodePath);
+function resolveContext(store: GraphStore, nodePath: string) {
+  const node = store.getNode(nodePath);
   if (!node) return null;
 
-  const outgoing = resolveReferences(graph, nodePath, "outgoing");
-  const incoming = resolveReferences(graph, nodePath, "incoming");
+  const outgoing = resolveReferences(store, nodePath, "outgoing");
+  const incoming = resolveReferences(store, nodePath, "incoming");
 
   const children = node.children
     .map((cp) => {
-      const child = graph.nodes.get(cp);
+      const child = store.getNode(cp);
       return child
         ? {
             path: child.path,
@@ -693,7 +688,7 @@ function resolveContext(graph: SpandrelGraph, nodePath: string) {
 }
 
 function resolveChildren(
-  graph: SpandrelGraph,
+  store: GraphStore,
   nodePath: string,
   depth: number
 ): Array<{
@@ -704,16 +699,16 @@ function resolveChildren(
   depth: number;
   children: string[];
 }> {
-  const node = graph.nodes.get(nodePath);
+  const node = store.getNode(nodePath);
   if (!node || depth <= 0) return [];
 
   return node.children
     .map((cp) => {
-      const child = graph.nodes.get(cp);
+      const child = store.getNode(cp);
       if (!child) return null;
 
       const grandchildren =
-        depth > 1 ? resolveChildren(graph, cp, depth - 1) : [];
+        depth > 1 ? resolveChildren(store, cp, depth - 1) : [];
 
       return {
         path: child.path,
@@ -736,7 +731,7 @@ function resolveChildren(
   }>;
 }
 
-function resolveSearch(graph: SpandrelGraph, query: string, scopePath?: string) {
+function resolveSearch(store: GraphStore, query: string, scopePath?: string) {
   const q = query.toLowerCase();
   const results: Array<{
     path: string;
@@ -759,7 +754,7 @@ function resolveSearch(graph: SpandrelGraph, query: string, scopePath?: string) 
       }
       return;
     }
-    const node = graph.nodes.get(path);
+    const node = store.getNode(path);
     if (!node) return;
     seen.add(path);
     results.push({
@@ -776,7 +771,7 @@ function resolveSearch(graph: SpandrelGraph, query: string, scopePath?: string) 
   }
 
   // 1. Match against node text (existing behavior)
-  for (const node of graph.nodes.values()) {
+  for (const node of store.getAllNodes()) {
     if (!inScope(node.path)) continue;
 
     const nameExact = node.name.toLowerCase() === q;
@@ -805,19 +800,13 @@ function resolveSearch(graph: SpandrelGraph, query: string, scopePath?: string) 
   }
 
   // 2. Match against edge linkType and description
-  for (const edge of graph.edges) {
-    if (edge.type !== "link") continue;
-
+  for (const edge of store.getEdges({ type: "link" })) {
     const linkTypeMatch = edge.linkType?.toLowerCase().includes(q);
     const linkDescMatch = edge.description?.toLowerCase().includes(q);
 
     if (linkTypeMatch || linkDescMatch) {
-      const matchedText = linkTypeMatch
-        ? `Edge type: ${edge.linkType}`
-        : `Edge: ${edge.description}`;
       const snippet = `${edge.from} —${edge.linkType ?? "link"}→ ${edge.to}: ${edge.description ?? ""}`;
 
-      // Surface both sides of the edge if they're in scope
       if (inScope(edge.from)) {
         addResult(edge.from, linkTypeMatch ? 60 : 40, snippet);
       }
@@ -834,7 +823,7 @@ function resolveSearch(graph: SpandrelGraph, query: string, scopePath?: string) 
 }
 
 function resolveNavigate(
-  graph: SpandrelGraph,
+  store: GraphStore,
   nodePath: string,
   keyword?: string,
   edgeType?: string
@@ -852,7 +841,7 @@ function resolveNavigate(
     linkDescription: string | null;
   }>;
 } | null {
-  const node = graph.nodes.get(nodePath);
+  const node = store.getNode(nodePath);
   if (!node) return null;
 
   const kw = keyword?.toLowerCase();
@@ -885,7 +874,7 @@ function resolveNavigate(
   // Children (only filtered by keyword, not edgeType — children aren't edges)
   if (!edgeType) {
     for (const childPath of node.children) {
-      const child = graph.nodes.get(childPath);
+      const child = store.getNode(childPath);
       if (child && !seen.has(childPath) && matchesKeyword(child)) {
         seen.add(childPath);
         neighbors.push({
@@ -902,40 +891,36 @@ function resolveNavigate(
   }
 
   // Outgoing links
-  for (const edge of graph.edges) {
-    if (edge.from === nodePath && edge.type === "link") {
-      const target = graph.nodes.get(edge.to);
-      if (target && !seen.has(edge.to) && matchesEdgeType(edge.linkType) && matchesKeyword(target, edge.description)) {
-        seen.add(edge.to);
-        neighbors.push({
-          path: target.path,
-          name: target.name,
-          description: target.description,
-          nodeType: target.nodeType,
-          relation: "outgoing",
-          linkType: edge.linkType ?? null,
-          linkDescription: edge.description ?? null,
-        });
-      }
+  for (const edge of store.getEdges({ from: nodePath, type: "link" })) {
+    const target = store.getNode(edge.to);
+    if (target && !seen.has(edge.to) && matchesEdgeType(edge.linkType) && matchesKeyword(target, edge.description)) {
+      seen.add(edge.to);
+      neighbors.push({
+        path: target.path,
+        name: target.name,
+        description: target.description,
+        nodeType: target.nodeType,
+        relation: "outgoing",
+        linkType: edge.linkType ?? null,
+        linkDescription: edge.description ?? null,
+      });
     }
   }
 
   // Incoming links
-  for (const edge of graph.edges) {
-    if (edge.to === nodePath && edge.type === "link") {
-      const source = graph.nodes.get(edge.from);
-      if (source && !seen.has(edge.from) && matchesEdgeType(edge.linkType) && matchesKeyword(source, edge.description)) {
-        seen.add(edge.from);
-        neighbors.push({
-          path: source.path,
-          name: source.name,
-          description: source.description,
-          nodeType: source.nodeType,
-          relation: "incoming",
-          linkType: edge.linkType ?? null,
-          linkDescription: edge.description ?? null,
-        });
-      }
+  for (const edge of store.getEdges({ to: nodePath, type: "link" })) {
+    const source = store.getNode(edge.from);
+    if (source && !seen.has(edge.from) && matchesEdgeType(edge.linkType) && matchesKeyword(source, edge.description)) {
+      seen.add(edge.from);
+      neighbors.push({
+        path: source.path,
+        name: source.name,
+        description: source.description,
+        nodeType: source.nodeType,
+        relation: "incoming",
+        linkType: edge.linkType ?? null,
+        linkDescription: edge.description ?? null,
+      });
     }
   }
 
@@ -948,7 +933,7 @@ function resolveNavigate(
 }
 
 function resolveGraph(
-  graph: SpandrelGraph,
+  store: GraphStore,
   rootPath: string,
   depth: number
 ) {
@@ -956,7 +941,7 @@ function resolveGraph(
   const collectFromPath = (p: string, d: number) => {
     collectedNodes.add(p);
     if (d <= 0) return;
-    const node = graph.nodes.get(p);
+    const node = store.getNode(p);
     if (!node) return;
     for (const child of node.children) {
       collectFromPath(child, d - 1);
@@ -966,7 +951,7 @@ function resolveGraph(
   collectFromPath(rootPath, depth);
 
   const nodes = Array.from(collectedNodes)
-    .map((p) => graph.nodes.get(p))
+    .map((p) => store.getNode(p))
     .filter(Boolean)
     .map((n) => ({
       path: n!.path,
@@ -977,7 +962,7 @@ function resolveGraph(
       children: n!.children,
     }));
 
-  const edges = graph.edges.filter(
+  const edges = store.getEdges().filter(
     (e) => collectedNodes.has(e.from) || collectedNodes.has(e.to)
   );
 

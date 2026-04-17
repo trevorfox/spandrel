@@ -206,12 +206,12 @@ describe("E2E: Self-contained knowledge graph", () => {
 
   beforeAll(() => {
     root = createFixture();
-    const graph = compile(root);
-    schema = createSchema(graph, { rootDir: root });
+    const store = compile(root);
+    schema = createSchema(store, { rootDir: root });
 
     // Verify the fixture compiled as expected
-    expect(graph.nodes.size).toBeGreaterThan(20);
-    expect(graph.warnings).toHaveLength(0);
+    expect(store.nodeCount).toBeGreaterThan(20);
+    expect(store.getWarnings()).toHaveLength(0);
   });
 
   afterAll(() => {

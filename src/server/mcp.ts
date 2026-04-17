@@ -3,25 +3,24 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { graphql } from "graphql";
 import { z } from "zod";
 import type { GraphQLSchema } from "graphql";
-import type { SpandrelGraph } from "../compiler/types.js";
+import type { GraphStore } from "../storage/graph-store.js";
 
 export type McpServerOptions = {
-  /** The compiled graph — used to generate server instructions */
-  graph?: SpandrelGraph;
+  /** The compiled graph store — used to generate server instructions */
+  graph?: GraphStore;
 };
 
-function buildInstructions(graph?: SpandrelGraph): string {
-  const root = graph?.nodes.get("/");
+function buildInstructions(graph?: GraphStore): string {
+  const root = graph?.getNode("/");
   const name = root?.name ?? "Knowledge Graph";
   const description = root?.description ?? "";
-  const nodeCount = graph?.nodes.size ?? 0;
-  const edgeCount = graph?.edges.filter(e => e.type === "link").length ?? 0;
+  const nodeCount = graph?.nodeCount ?? 0;
+  const edgeCount = graph?.getEdges({ type: "link" }).length ?? 0;
 
-  // Build a collections summary from root's children
   const collections: string[] = [];
   if (root && graph) {
     for (const childPath of root.children) {
-      const child = graph.nodes.get(childPath);
+      const child = graph.getNode(childPath);
       if (child) {
         collections.push(`${child.name} (${childPath})`);
       }

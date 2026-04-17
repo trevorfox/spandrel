@@ -39,15 +39,15 @@ Commands:
 
 async function dev(rootDir: string) {
   console.log(`[spandrel] Compiling ${rootDir}...`);
-  const graph = compile(rootDir);
-  await addGitMetadata(graph, rootDir);
+  const store = compile(rootDir);
+  await addGitMetadata(store, rootDir);
   console.log(
-    `[spandrel] Compiled: ${graph.nodes.size} nodes, ${graph.edges.length} edges, ${graph.warnings.length} warnings`
+    `[spandrel] Compiled: ${store.nodeCount} nodes, ${store.edgeCount} edges, ${store.getWarnings().length} warnings`
   );
 
-  if (graph.warnings.length > 0) {
+  if (store.getWarnings().length > 0) {
     console.log("[spandrel] Warnings:");
-    for (const w of graph.warnings) {
+    for (const w of store.getWarnings()) {
       console.log(`  ${w.type}: ${w.message}`);
     }
   }
@@ -58,7 +58,7 @@ async function dev(rootDir: string) {
   }
 
   const schemaCtx: SchemaContext = { rootDir, getHistory, accessConfig };
-  const schema = createSchema(graph, schemaCtx);
+  const schema = createSchema(store, schemaCtx);
 
   const yoga = createYoga({
     schema,
@@ -74,10 +74,9 @@ async function dev(rootDir: string) {
     console.log(`[spandrel] GraphQL server at http://localhost:${port}/graphql`);
   });
 
-  // File watcher
-  const watcher = watchTree(rootDir, graph, () => {
+  const watcher = watchTree(rootDir, store, () => {
     console.log(
-      `[spandrel] Recompiled: ${graph.nodes.size} nodes, ${graph.edges.length} edges`
+      `[spandrel] Recompiled: ${store.nodeCount} nodes, ${store.edgeCount} edges`
     );
   });
 
@@ -91,31 +90,29 @@ async function dev(rootDir: string) {
 
 async function mcp(rootDir: string) {
   console.error(`[spandrel] Compiling ${rootDir}...`);
-  const graph = compile(rootDir);
+  const store = compile(rootDir);
   console.error(
-    `[spandrel] Compiled: ${graph.nodes.size} nodes, ${graph.edges.length} edges`
+    `[spandrel] Compiled: ${store.nodeCount} nodes, ${store.edgeCount} edges`
   );
 
-  await addGitMetadata(graph, rootDir);
+  await addGitMetadata(store, rootDir);
   const accessConfig = loadAccessConfig(rootDir);
   if (accessConfig) {
     console.error(`[spandrel] Access config loaded (${Object.keys(accessConfig.roles).length} roles)`);
   }
 
-  // MCP actor from env var
   const identity = process.env.SPANDREL_IDENTITY;
   const actor = identity ? { identity } : undefined;
 
-  const schema = createSchema(graph, { rootDir, getHistory, accessConfig, actor });
-  const mcpServer = createMcpServer(schema, { graph });
+  const schema = createSchema(store, { rootDir, getHistory, accessConfig, actor });
+  const mcpServer = createMcpServer(schema, { graph: store });
   const transport = new StdioServerTransport();
   await mcpServer.connect(transport);
   console.error("[spandrel] MCP server running on stdio");
 
-  // Watch for changes
-  watchTree(rootDir, graph, () => {
+  watchTree(rootDir, store, () => {
     console.error(
-      `[spandrel] Recompiled: ${graph.nodes.size} nodes, ${graph.edges.length} edges`
+      `[spandrel] Recompiled: ${store.nodeCount} nodes, ${store.edgeCount} edges`
     );
   });
 }
@@ -232,20 +229,20 @@ function initMcp(rootDir: string) {
 
 function compileOnly(rootDir: string) {
   console.log(`Compiling ${rootDir}...`);
-  const graph = compile(rootDir);
+  const store = compile(rootDir);
   console.log(
-    `Compiled: ${graph.nodes.size} nodes, ${graph.edges.length} edges, ${graph.warnings.length} warnings`
+    `Compiled: ${store.nodeCount} nodes, ${store.edgeCount} edges, ${store.getWarnings().length} warnings`
   );
 
-  if (graph.warnings.length > 0) {
+  if (store.getWarnings().length > 0) {
     console.log("\nWarnings:");
-    for (const w of graph.warnings) {
+    for (const w of store.getWarnings()) {
       console.log(`  [${w.type}] ${w.path}: ${w.message}`);
     }
   }
 
   console.log("\nNodes:");
-  for (const node of graph.nodes.values()) {
+  for (const node of store.getAllNodes()) {
     const indent = "  ".repeat(node.depth);
     console.log(`${indent}${node.path} (${node.nodeType}) — ${node.name}`);
   }

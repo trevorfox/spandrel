@@ -28,9 +28,9 @@ describe("MCP Server", () => {
       links: [{ to: "/clients/acme", type: "client" }],
     }, "Alpha is ongoing.");
 
-    const graph = compile(root);
-    const schema = createSchema(graph, { rootDir: root });
-    const mcpServer = createMcpServer(schema, { graph });
+    const store = compile(root);
+    const schema = createSchema(store, { rootDir: root });
+    const mcpServer = createMcpServer(schema, { graph: store });
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -70,9 +70,9 @@ describe("MCP Server", () => {
     const info = client.getServerCapabilities();
     // We can't directly access instructions from client API, but we can verify
     // the server was created with instructions by creating a fresh connection
-    const graph2 = compile(root);
-    const schema2 = createSchema(graph2, { rootDir: root });
-    const mcpServer2 = createMcpServer(schema2, { graph: graph2 });
+    const store2 = compile(root);
+    const schema2 = createSchema(store2, { rootDir: root });
+    const mcpServer2 = createMcpServer(schema2, { graph: store2 });
 
     const [ct, st] = InMemoryTransport.createLinkedPair();
     const client2 = new Client({ name: "test-client-2", version: "1.0.0" });

@@ -95,13 +95,13 @@ describe("createThing", () => {
       links: [{ to: "/", type: "parent" }],
     });
 
-    const graph = compile(root);
-    const node = graph.nodes.get("/projects");
+    const store = compile(root);
+    const node = store.getNode("/projects");
     expect(node).toBeDefined();
     expect(node!.name).toBe("Projects");
     expect(node!.description).toBe("All projects");
 
-    const linkEdges = graph.edges.filter(
+    const linkEdges = store.getEdges().filter(
       (e) => e.from === "/projects" && e.type === "link"
     );
     expect(linkEdges).toHaveLength(1);
@@ -285,13 +285,13 @@ describe("Leaf file operations", () => {
       links: [{ to: "/", type: "parent" }],
     });
 
-    const graph = compile(root);
-    const node = graph.nodes.get("/acme");
+    const store = compile(root);
+    const node = store.getNode("/acme");
     expect(node).toBeDefined();
     expect(node!.name).toBe("Acme");
     expect(node!.nodeType).toBe("leaf");
 
-    const linkEdges = graph.edges.filter(
+    const linkEdges = store.getEdges().filter(
       (e) => e.from === "/acme" && e.type === "link"
     );
     expect(linkEdges).toHaveLength(1);
