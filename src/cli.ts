@@ -39,15 +39,16 @@ Commands:
 
 async function dev(rootDir: string) {
   console.log(`[spandrel] Compiling ${rootDir}...`);
-  const store = compile(rootDir);
+  const store = await compile(rootDir);
   await addGitMetadata(store, rootDir);
+  const warnings = await store.getWarnings();
   console.log(
-    `[spandrel] Compiled: ${store.nodeCount} nodes, ${store.edgeCount} edges, ${store.getWarnings().length} warnings`
+    `[spandrel] Compiled: ${store.nodeCount} nodes, ${store.edgeCount} edges, ${warnings.length} warnings`
   );
 
-  if (store.getWarnings().length > 0) {
+  if (warnings.length > 0) {
     console.log("[spandrel] Warnings:");
-    for (const w of store.getWarnings()) {
+    for (const w of warnings) {
       console.log(`  ${w.type}: ${w.message}`);
     }
   }
@@ -90,7 +91,7 @@ async function dev(rootDir: string) {
 
 async function mcp(rootDir: string) {
   console.error(`[spandrel] Compiling ${rootDir}...`);
-  const store = compile(rootDir);
+  const store = await compile(rootDir);
   console.error(
     `[spandrel] Compiled: ${store.nodeCount} nodes, ${store.edgeCount} edges`
   );
@@ -105,7 +106,7 @@ async function mcp(rootDir: string) {
   const actor = identity ? { identity } : undefined;
 
   const schema = createSchema(store, { rootDir, getHistory, accessConfig, actor });
-  const mcpServer = createMcpServer(schema, { graph: store });
+  const mcpServer = await createMcpServer(schema, { graph: store });
   const transport = new StdioServerTransport();
   await mcpServer.connect(transport);
   console.error("[spandrel] MCP server running on stdio");
@@ -227,22 +228,23 @@ function initMcp(rootDir: string) {
   console.log(`  claude mcp add spandrel -- ${command} ${args.join(" ")}`);
 }
 
-function compileOnly(rootDir: string) {
+async function compileOnly(rootDir: string) {
   console.log(`Compiling ${rootDir}...`);
-  const store = compile(rootDir);
+  const store = await compile(rootDir);
+  const warnings = await store.getWarnings();
   console.log(
-    `Compiled: ${store.nodeCount} nodes, ${store.edgeCount} edges, ${store.getWarnings().length} warnings`
+    `Compiled: ${store.nodeCount} nodes, ${store.edgeCount} edges, ${warnings.length} warnings`
   );
 
-  if (store.getWarnings().length > 0) {
+  if (warnings.length > 0) {
     console.log("\nWarnings:");
-    for (const w of store.getWarnings()) {
+    for (const w of warnings) {
       console.log(`  [${w.type}] ${w.path}: ${w.message}`);
     }
   }
 
   console.log("\nNodes:");
-  for (const node of store.getAllNodes()) {
+  for (const node of await store.getAllNodes()) {
     const indent = "  ".repeat(node.depth);
     console.log(`${indent}${node.path} (${node.nodeType}) — ${node.name}`);
   }

@@ -7,17 +7,19 @@ export interface EdgeFilter {
 }
 
 export interface GraphStore {
-  getNode(path: string): SpandrelNode | undefined;
-  hasNode(path: string): boolean;
-  getAllNodes(): IterableIterator<SpandrelNode>;
-  getEdges(filter?: EdgeFilter): SpandrelEdge[];
-  getWarnings(): ValidationWarning[];
+  getNode(path: string): Promise<SpandrelNode | undefined>;
+  hasNode(path: string): Promise<boolean>;
+  getAllNodes(): Promise<SpandrelNode[]>;
+  getNodes(paths: string[]): Promise<Map<string, SpandrelNode>>;
+  getEdges(filter?: EdgeFilter): Promise<SpandrelEdge[]>;
+  getEdgesBatch(paths: string[]): Promise<Map<string, SpandrelEdge[]>>;
+  getWarnings(): Promise<ValidationWarning[]>;
 
-  setNode(node: SpandrelNode): void;
-  deleteNode(path: string): void;
-  replaceEdges(edges: SpandrelEdge[]): void;
-  replaceWarnings(warnings: ValidationWarning[]): void;
-  clear(): void;
+  setNode(node: SpandrelNode): Promise<void>;
+  deleteNode(path: string): Promise<void>;
+  replaceEdges(edges: SpandrelEdge[]): Promise<void>;
+  replaceWarnings(warnings: ValidationWarning[]): Promise<void>;
+  clear(): Promise<void>;
 
   readonly nodeCount: number;
   readonly edgeCount: number;

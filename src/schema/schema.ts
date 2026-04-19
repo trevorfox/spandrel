@@ -224,12 +224,14 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
     return canAccess(ctx.accessConfig, ctx.actor, nodePath, metadata);
   }
 
-  function filterAccessible<T extends { path: string }>(
+  async function filterAccessible<T extends { path: string }>(
     items: (T | null | undefined)[],
     minLevel: AccessLevel = "exists"
-  ): T[] {
-    return (items.filter(Boolean) as T[]).filter((item) => {
-      const node = store.getNode(item.path);
+  ): Promise<T[]> {
+    const validItems = items.filter(Boolean) as T[];
+    const nodeMap = await store.getNodes(validItems.map((i) => i.path));
+    return validItems.filter((item) => {
+      const node = nodeMap.get(item.path);
       const level = checkAccess(item.path, node?.frontmatter ?? {});
       return accessLevelAtLeast(level, minLevel);
     });
@@ -246,17 +248,17 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
             depth: { type: GraphQLInt },
             includeContent: { type: GraphQLBoolean },
           },
-          resolve: (_root, args: { path: string; depth?: number; includeContent?: boolean }) => {
-            const node = store.getNode(args.path);
+          resolve: async (_root, args: { path: string; depth?: number; includeContent?: boolean }) => {
+            const node = await store.getNode(args.path);
             if (!node) return null;
             const level = checkAccess(args.path, node.frontmatter);
             if (level === "none") return null;
             const includeContent = args.includeContent && accessLevelAtLeast(level, "content");
-            const result = resolveNode(store, args.path, args.depth, includeContent);
+            const result = await resolveNode(store, args.path, args.depth, includeContent);
             if (!result) return null;
             // Filter children and links by access
             if (result.children) {
-              result.children = filterAccessible(result.children);
+              result.children = await filterAccessible(result.children);
             }
             if (result.links) {
               result.links = result.links.filter((l: { to: string }) =>
@@ -286,8 +288,8 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
           args: {
             path: { type: new GraphQLNonNull(GraphQLString) },
           },
-          resolve: (_root, args: { path: string }) => {
-            const node = store.getNode(args.path);
+          resolve: async (_root, args: { path: string }) => {
+            const node = await store.getNode(args.path);
             if (!node) return null;
             const level = checkAccess(args.path, node.frontmatter);
             if (!accessLevelAtLeast(level, "content")) return null;
@@ -300,22 +302,22 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
           args: {
             path: { type: new GraphQLNonNull(GraphQLString) },
           },
-          resolve: (_root, args: { path: string }) => {
-            const node = store.getNode(args.path);
+          resolve: async (_root, args: { path: string }) => {
+            const node = await store.getNode(args.path);
             if (!node) return null;
             const level = checkAccess(args.path, node.frontmatter);
             if (level === "none") return null;
-            const result = resolveContext(store, args.path);
+            const result = await resolveContext(store, args.path);
             if (!result) return null;
             // Filter by access
             if (result.children) {
-              result.children = filterAccessible(result.children);
+              result.children = await filterAccessible(result.children);
             }
             if (result.outgoing) {
-              result.outgoing = filterAccessible(result.outgoing);
+              result.outgoing = await filterAccessible(result.outgoing);
             }
             if (result.incoming) {
-              result.incoming = filterAccessible(result.incoming);
+              result.incoming = await filterAccessible(result.incoming);
             }
             if (!accessLevelAtLeast(level, "content")) {
               (result as Record<string, unknown>).content = null;
@@ -336,10 +338,10 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
             path: { type: new GraphQLNonNull(GraphQLString) },
             depth: { type: GraphQLInt },
           },
-          resolve: (_root, args: { path: string; depth?: number }) => {
+          resolve: async (_root, args: { path: string; depth?: number }) => {
             const level = checkAccess(args.path);
             if (!accessLevelAtLeast(level, "description")) return [];
-            const children = resolveChildren(store, args.path, args.depth ?? 1);
+            const children = await resolveChildren(store, args.path, args.depth ?? 1);
             return filterAccessible(children);
           },
         },
@@ -350,10 +352,10 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
             path: { type: new GraphQLNonNull(GraphQLString) },
             direction: { type: DirectionEnum },
           },
-          resolve: (_root, args: { path: string; direction?: string }) => {
+          resolve: async (_root, args: { path: string; direction?: string }) => {
             const level = checkAccess(args.path);
             if (!accessLevelAtLeast(level, "description")) return [];
-            const refs = resolveReferences(store, args.path, args.direction ?? "outgoing");
+            const refs = await resolveReferences(store, args.path, args.direction ?? "outgoing");
             return filterAccessible(refs);
           },
         },
@@ -364,8 +366,8 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
             query: { type: new GraphQLNonNull(GraphQLString) },
             path: { type: GraphQLString },
           },
-          resolve: (_root, args: { query: string; path?: string }) => {
-            const results = resolveSearch(store, args.query, args.path);
+          resolve: async (_root, args: { query: string; path?: string }) => {
+            const results = await resolveSearch(store, args.query, args.path);
             return filterAccessible(results, "description");
           },
         },
@@ -377,12 +379,12 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
             keyword: { type: GraphQLString },
             edgeType: { type: GraphQLString },
           },
-          resolve: (_root, args: { path: string; keyword?: string; edgeType?: string }) => {
+          resolve: async (_root, args: { path: string; keyword?: string; edgeType?: string }) => {
             const level = checkAccess(args.path);
             if (!accessLevelAtLeast(level, "description")) return null;
-            const result = resolveNavigate(store, args.path, args.keyword, args.edgeType);
+            const result = await resolveNavigate(store, args.path, args.keyword, args.edgeType);
             if (!result) return null;
-            result.neighbors = filterAccessible(result.neighbors);
+            result.neighbors = await filterAccessible(result.neighbors);
             return result;
           },
         },
@@ -393,16 +395,16 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
             path: { type: GraphQLString },
             depth: { type: GraphQLInt },
           },
-          resolve: (
+          resolve: async (
             _root,
             args: { path?: string; depth?: number }
           ) => {
-            const result = resolveGraph(
+            const result = await resolveGraph(
               store,
               args.path ?? "/",
               args.depth ?? 999
             );
-            result.nodes = filterAccessible(result.nodes);
+            result.nodes = await filterAccessible(result.nodes);
             const visiblePaths = new Set(result.nodes.map((n) => n.path));
             result.edges = result.edges.filter(
               (e) => visiblePaths.has(e.from) && visiblePaths.has(e.to)
@@ -416,18 +418,19 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
           args: {
             path: { type: GraphQLString },
           },
-          resolve: (_root, args: { path?: string }) => {
+          resolve: async (_root, args: { path?: string }) => {
             // Validate requires at least content-level access
+            const warnings = await store.getWarnings();
             if (args.path) {
               const level = checkAccess(args.path);
               if (!accessLevelAtLeast(level, "content")) return [];
-              return store.getWarnings().filter(
+              return warnings.filter(
                 (w) =>
                   w.path === args.path || w.path.startsWith(args.path + "/")
               );
             }
             // Full validate — filter to accessible warnings only
-            return store.getWarnings().filter((w) =>
+            return warnings.filter((w) =>
               accessLevelAtLeast(checkAccess(w.path), "content")
             );
           },
@@ -452,7 +455,7 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
     mutation: ctx?.rootDir ? (() => {
       const rootDir = ctx!.rootDir!;
 
-      function executeMutation(thingPath: string, action: () => void) {
+      async function executeMutation(thingPath: string, action: () => void) {
         if (ctx?.accessConfig && ctx?.actor) {
           if (!canWrite(ctx.accessConfig, ctx.actor, thingPath)) {
             return { success: false, path: thingPath, message: "Write access denied", warnings: [] };
@@ -460,10 +463,9 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
         }
         try {
           action();
-          // Synchronous recompile so the node is immediately queryable
           const { sourcePath } = resolveSourcePath(rootDir, thingPath);
-          recompileNode(store, rootDir, sourcePath);
-          const warnings = store.getWarnings().filter(
+          await recompileNode(store, rootDir, sourcePath);
+          const warnings = (await store.getWarnings()).filter(
             (w) => w.path === thingPath || w.path.startsWith(thingPath + "/")
           );
           return { success: true, path: thingPath, message: null, warnings };
@@ -531,8 +533,8 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
   });
 }
 
-function getOutgoingLinks(store: GraphStore, nodePath: string) {
-  return store.getEdges({ from: nodePath, type: "link" })
+async function getOutgoingLinks(store: GraphStore, nodePath: string) {
+  return (await store.getEdges({ from: nodePath, type: "link" }))
     .map((e) => ({
       to: e.to,
       type: e.linkType ?? null,
@@ -540,8 +542,8 @@ function getOutgoingLinks(store: GraphStore, nodePath: string) {
     }));
 }
 
-function getIncomingLinks(store: GraphStore, nodePath: string) {
-  return store.getEdges({ to: nodePath, type: "link" })
+async function getIncomingLinks(store: GraphStore, nodePath: string) {
+  return (await store.getEdges({ to: nodePath, type: "link" }))
     .map((e) => ({
       to: e.from,
       type: e.linkType ?? null,
@@ -549,18 +551,18 @@ function getIncomingLinks(store: GraphStore, nodePath: string) {
     }));
 }
 
-function resolveReferences(
+async function resolveReferences(
   store: GraphStore,
   nodePath: string,
   direction: string
-): Array<{
+): Promise<Array<{
   path: string;
   name: string;
   description: string;
   linkType: string | null;
   linkDescription: string | null;
   direction: string;
-}> {
+}>> {
   const results: Array<{
     path: string;
     name: string;
@@ -571,8 +573,10 @@ function resolveReferences(
   }> = [];
 
   if (direction === "outgoing" || direction === "both") {
-    for (const edge of store.getEdges({ from: nodePath, type: "link" })) {
-      const target = store.getNode(edge.to);
+    const outEdges = await store.getEdges({ from: nodePath, type: "link" });
+    const targetMap = await store.getNodes(outEdges.map((e) => e.to));
+    for (const edge of outEdges) {
+      const target = targetMap.get(edge.to);
       results.push({
         path: edge.to,
         name: target?.name ?? edge.to,
@@ -585,8 +589,10 @@ function resolveReferences(
   }
 
   if (direction === "incoming" || direction === "both") {
-    for (const edge of store.getEdges({ to: nodePath, type: "link" })) {
-      const source = store.getNode(edge.from);
+    const inEdges = await store.getEdges({ to: nodePath, type: "link" });
+    const sourceMap = await store.getNodes(inEdges.map((e) => e.from));
+    for (const edge of inEdges) {
+      const source = sourceMap.get(edge.from);
       results.push({
         path: edge.from,
         name: source?.name ?? edge.from,
@@ -601,34 +607,39 @@ function resolveReferences(
   return results;
 }
 
-function resolveNode(
+async function resolveNode(
   store: GraphStore,
   nodePath: string,
   depth?: number,
   includeContent?: boolean
 ) {
-  const node = store.getNode(nodePath);
+  const node = await store.getNode(nodePath);
   if (!node) return null;
 
-  const links = getOutgoingLinks(store, nodePath);
-  const referencedBy = getIncomingLinks(store, nodePath);
+  const links = await getOutgoingLinks(store, nodePath);
+  const referencedBy = await getIncomingLinks(store, nodePath);
 
-  const children =
-    depth !== undefined && depth > 0
-      ? resolveChildren(store, nodePath, depth)
-      : node.children.map((cp) => {
-          const child = store.getNode(cp);
-          return child
-            ? {
-                path: child.path,
-                name: child.name,
-                description: child.description,
-                nodeType: child.nodeType,
-                depth: child.depth,
-                children: child.children,
-              }
-            : null;
-        }).filter(Boolean);
+  let children;
+  if (depth !== undefined && depth > 0) {
+    children = await resolveChildren(store, nodePath, depth);
+  } else {
+    const childMap = await store.getNodes(node.children);
+    children = node.children
+      .map((cp) => {
+        const child = childMap.get(cp);
+        return child
+          ? {
+              path: child.path,
+              name: child.name,
+              description: child.description,
+              nodeType: child.nodeType,
+              depth: child.depth,
+              children: child.children,
+            }
+          : null;
+      })
+      .filter(Boolean);
+  }
 
   return {
     path: node.path,
@@ -647,16 +658,17 @@ function resolveNode(
   };
 }
 
-function resolveContext(store: GraphStore, nodePath: string) {
-  const node = store.getNode(nodePath);
+async function resolveContext(store: GraphStore, nodePath: string) {
+  const node = await store.getNode(nodePath);
   if (!node) return null;
 
-  const outgoing = resolveReferences(store, nodePath, "outgoing");
-  const incoming = resolveReferences(store, nodePath, "incoming");
+  const outgoing = await resolveReferences(store, nodePath, "outgoing");
+  const incoming = await resolveReferences(store, nodePath, "incoming");
 
+  const childMap = await store.getNodes(node.children);
   const children = node.children
     .map((cp) => {
-      const child = store.getNode(cp);
+      const child = childMap.get(cp);
       return child
         ? {
             path: child.path,
@@ -687,28 +699,29 @@ function resolveContext(store: GraphStore, nodePath: string) {
   };
 }
 
-function resolveChildren(
+async function resolveChildren(
   store: GraphStore,
   nodePath: string,
   depth: number
-): Array<{
+): Promise<Array<{
   path: string;
   name: string;
   description: string;
   nodeType: string;
   depth: number;
   children: string[];
-}> {
-  const node = store.getNode(nodePath);
+}>> {
+  const node = await store.getNode(nodePath);
   if (!node || depth <= 0) return [];
 
-  return node.children
-    .map((cp) => {
-      const child = store.getNode(cp);
+  const childMap = await store.getNodes(node.children);
+
+  const results = await Promise.all(
+    node.children.map(async (cp) => {
+      const child = childMap.get(cp);
       if (!child) return null;
 
-      const grandchildren =
-        depth > 1 ? resolveChildren(store, cp, depth - 1) : [];
+      const grandchildren = depth > 1 ? await resolveChildren(store, cp, depth - 1) : [];
 
       return {
         path: child.path,
@@ -721,7 +734,9 @@ function resolveChildren(
           : child.children,
       };
     })
-    .filter(Boolean) as Array<{
+  );
+
+  return results.filter(Boolean) as Array<{
     path: string;
     name: string;
     description: string;
@@ -731,7 +746,7 @@ function resolveChildren(
   }>;
 }
 
-function resolveSearch(store: GraphStore, query: string, scopePath?: string) {
+async function resolveSearch(store: GraphStore, query: string, scopePath?: string) {
   const q = query.toLowerCase();
   const results: Array<{
     path: string;
@@ -744,19 +759,17 @@ function resolveSearch(store: GraphStore, query: string, scopePath?: string) {
   // Track which paths we've already added so edge matches don't duplicate
   const seen = new Set<string>();
 
-  function addResult(path: string, score: number, snippet: string | null) {
-    if (seen.has(path)) {
+  function addResult(node: SpandrelNode, score: number, snippet: string | null) {
+    if (seen.has(node.path)) {
       // Keep the higher score
-      const existing = results.find(r => r.path === path);
+      const existing = results.find(r => r.path === node.path);
       if (existing && score > existing.score) {
         existing.score = score;
         if (snippet) existing.snippet = snippet;
       }
       return;
     }
-    const node = store.getNode(path);
-    if (!node) return;
-    seen.add(path);
+    seen.add(node.path);
     results.push({
       path: node.path,
       name: node.name,
@@ -770,8 +783,8 @@ function resolveSearch(store: GraphStore, query: string, scopePath?: string) {
     return !scopePath || path === scopePath || path.startsWith(scopePath + "/");
   }
 
-  // 1. Match against node text (existing behavior)
-  for (const node of store.getAllNodes()) {
+  // 1. Match against node text
+  for (const node of await store.getAllNodes()) {
     if (!inScope(node.path)) continue;
 
     const nameExact = node.name.toLowerCase() === q;
@@ -795,23 +808,28 @@ function resolveSearch(store: GraphStore, query: string, scopePath?: string) {
           node.content.slice(start, end) +
           (end < node.content.length ? "..." : "");
       }
-      addResult(node.path, score, snippet);
+      addResult(node, score, snippet);
     }
   }
 
   // 2. Match against edge linkType and description
-  for (const edge of store.getEdges({ type: "link" })) {
+  for (const edge of await store.getEdges({ type: "link" })) {
     const linkTypeMatch = edge.linkType?.toLowerCase().includes(q);
     const linkDescMatch = edge.description?.toLowerCase().includes(q);
 
     if (linkTypeMatch || linkDescMatch) {
       const snippet = `${edge.from} —${edge.linkType ?? "link"}→ ${edge.to}: ${edge.description ?? ""}`;
+      const edgePaths = [
+        inScope(edge.from) ? edge.from : null,
+        inScope(edge.to) ? edge.to : null,
+      ].filter(Boolean) as string[];
 
-      if (inScope(edge.from)) {
-        addResult(edge.from, linkTypeMatch ? 60 : 40, snippet);
-      }
-      if (inScope(edge.to)) {
-        addResult(edge.to, linkTypeMatch ? 60 : 40, snippet);
+      if (edgePaths.length > 0) {
+        const nodeMap = await store.getNodes(edgePaths);
+        for (const path of edgePaths) {
+          const node = nodeMap.get(path);
+          if (node) addResult(node, linkTypeMatch ? 60 : 40, snippet);
+        }
       }
     }
   }
@@ -822,12 +840,12 @@ function resolveSearch(store: GraphStore, query: string, scopePath?: string) {
   return results;
 }
 
-function resolveNavigate(
+async function resolveNavigate(
   store: GraphStore,
   nodePath: string,
   keyword?: string,
   edgeType?: string
-): {
+): Promise<{
   path: string;
   name: string;
   description: string;
@@ -840,8 +858,8 @@ function resolveNavigate(
     linkType: string | null;
     linkDescription: string | null;
   }>;
-} | null {
-  const node = store.getNode(nodePath);
+} | null> {
+  const node = await store.getNode(nodePath);
   if (!node) return null;
 
   const kw = keyword?.toLowerCase();
@@ -873,8 +891,9 @@ function resolveNavigate(
 
   // Children (only filtered by keyword, not edgeType — children aren't edges)
   if (!edgeType) {
+    const childMap = await store.getNodes(node.children);
     for (const childPath of node.children) {
-      const child = store.getNode(childPath);
+      const child = childMap.get(childPath);
       if (child && !seen.has(childPath) && matchesKeyword(child)) {
         seen.add(childPath);
         neighbors.push({
@@ -891,8 +910,10 @@ function resolveNavigate(
   }
 
   // Outgoing links
-  for (const edge of store.getEdges({ from: nodePath, type: "link" })) {
-    const target = store.getNode(edge.to);
+  const outEdges = await store.getEdges({ from: nodePath, type: "link" });
+  const outTargetMap = await store.getNodes(outEdges.map((e) => e.to));
+  for (const edge of outEdges) {
+    const target = outTargetMap.get(edge.to);
     if (target && !seen.has(edge.to) && matchesEdgeType(edge.linkType) && matchesKeyword(target, edge.description)) {
       seen.add(edge.to);
       neighbors.push({
@@ -908,8 +929,10 @@ function resolveNavigate(
   }
 
   // Incoming links
-  for (const edge of store.getEdges({ to: nodePath, type: "link" })) {
-    const source = store.getNode(edge.from);
+  const inEdges = await store.getEdges({ to: nodePath, type: "link" });
+  const inSourceMap = await store.getNodes(inEdges.map((e) => e.from));
+  for (const edge of inEdges) {
+    const source = inSourceMap.get(edge.from);
     if (source && !seen.has(edge.from) && matchesEdgeType(edge.linkType) && matchesKeyword(source, edge.description)) {
       seen.add(edge.from);
       neighbors.push({
@@ -932,26 +955,29 @@ function resolveNavigate(
   };
 }
 
-function resolveGraph(
+async function resolveGraph(
   store: GraphStore,
   rootPath: string,
   depth: number
 ) {
   const collectedNodes = new Set<string>();
-  const collectFromPath = (p: string, d: number) => {
+  const toVisit: Array<{ path: string; d: number }> = [{ path: rootPath, d: depth }];
+
+  while (toVisit.length > 0) {
+    const { path: p, d } = toVisit.pop()!;
+    if (collectedNodes.has(p)) continue;
     collectedNodes.add(p);
-    if (d <= 0) return;
-    const node = store.getNode(p);
-    if (!node) return;
+    if (d <= 0) continue;
+    const node = await store.getNode(p);
+    if (!node) continue;
     for (const child of node.children) {
-      collectFromPath(child, d - 1);
+      toVisit.push({ path: child, d: d - 1 });
     }
-  };
+  }
 
-  collectFromPath(rootPath, depth);
-
+  const nodeMap = await store.getNodes(Array.from(collectedNodes));
   const nodes = Array.from(collectedNodes)
-    .map((p) => store.getNode(p))
+    .map((p) => nodeMap.get(p))
     .filter(Boolean)
     .map((n) => ({
       path: n!.path,
@@ -962,9 +988,11 @@ function resolveGraph(
       children: n!.children,
     }));
 
-  const edges = store.getEdges().filter(
-    (e) => collectedNodes.has(e.from) || collectedNodes.has(e.to)
-  );
+  // Use getEdgesBatch to fetch outgoing edges for all collected nodes at once
+  const edgeBatch = await store.getEdgesBatch(Array.from(collectedNodes));
+  const edges = Array.from(edgeBatch.values())
+    .flat()
+    .filter((e) => collectedNodes.has(e.to));
 
   return { nodes, edges };
 }

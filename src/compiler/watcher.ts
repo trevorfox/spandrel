@@ -20,14 +20,14 @@ export function watchTree(
     persistent: true,
   });
 
-  const handleChange = (filePath: string) => {
+  const handleChange = async (filePath: string) => {
     const basename = path.basename(filePath);
     if (!basename.endsWith(".md")) return;
     if (EXCLUDED_LEAF_MD_FILES.has(basename)) return;
     if (basename.startsWith(".") || basename.startsWith("_")) return;
 
     console.log(`[spandrel] Change detected: ${path.relative(rootDir, filePath)}`);
-    recompileNode(store, rootDir, filePath);
+    await recompileNode(store, rootDir, filePath);
     onChange?.(filePath);
   };
 

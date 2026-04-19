@@ -10,17 +10,18 @@ export type McpServerOptions = {
   graph?: GraphStore;
 };
 
-function buildInstructions(graph?: GraphStore): string {
-  const root = graph?.getNode("/");
+async function buildInstructions(graph?: GraphStore): Promise<string> {
+  const root = graph ? await graph.getNode("/") : undefined;
   const name = root?.name ?? "Knowledge Graph";
   const description = root?.description ?? "";
   const nodeCount = graph?.nodeCount ?? 0;
-  const edgeCount = graph?.getEdges({ type: "link" }).length ?? 0;
+  const edgeCount = graph ? (await graph.getEdges({ type: "link" })).length : 0;
 
   const collections: string[] = [];
   if (root && graph) {
+    const childMap = await graph.getNodes(root.children);
     for (const childPath of root.children) {
-      const child = graph.getNode(childPath);
+      const child = childMap.get(childPath);
       if (child) {
         collections.push(`${child.name} (${childPath})`);
       }
@@ -43,10 +44,10 @@ How to use:
 When to use: Consult this graph proactively for questions about ${collections.length > 0 ? collections.map(c => c.replace(/ \(.*/, "").toLowerCase()).join(", ") : "the domain it covers"}.`;
 }
 
-export function createMcpServer(schema: GraphQLSchema, options?: McpServerOptions): McpServer {
+export async function createMcpServer(schema: GraphQLSchema, options?: McpServerOptions): Promise<McpServer> {
   const server = new McpServer(
     { name: "spandrel", version: "0.1.0" },
-    { instructions: buildInstructions(options?.graph) },
+    { instructions: await buildInstructions(options?.graph) },
   );
 
   // Helper: run a parameterized GraphQL query safely
@@ -342,7 +343,7 @@ export function createMcpServer(schema: GraphQLSchema, options?: McpServerOption
 }
 
 export async function startMcpServer(schema: GraphQLSchema, options?: McpServerOptions): Promise<void> {
-  const server = createMcpServer(schema, options);
+  const server = await createMcpServer(schema, options);
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

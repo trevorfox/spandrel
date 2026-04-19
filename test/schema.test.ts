@@ -63,8 +63,8 @@ describe("GraphQL Schema", () => {
     rmrf(root);
   });
 
-  function query(source: string, variables?: Record<string, unknown>) {
-    const store = compile(root);
+  async function query(source: string, variables?: Record<string, unknown>) {
+    const store = await compile(root);
     const schema = createSchema(store);
     return graphql({ schema, source, variableValues: variables });
   }

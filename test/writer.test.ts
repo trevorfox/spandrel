@@ -88,20 +88,20 @@ describe("createThing", () => {
     ).toThrow("name and description are required");
   });
 
-  it("created Thing compiles correctly", () => {
+  it("created Thing compiles correctly", async () => {
     createThing(root, "/projects", {
       name: "Projects",
       description: "All projects",
       links: [{ to: "/", type: "parent" }],
     });
 
-    const store = compile(root);
-    const node = store.getNode("/projects");
+    const store = await compile(root);
+    const node = await store.getNode("/projects");
     expect(node).toBeDefined();
     expect(node!.name).toBe("Projects");
     expect(node!.description).toBe("All projects");
 
-    const linkEdges = store.getEdges().filter(
+    const linkEdges = (await store.getEdges()).filter(
       (e) => e.from === "/projects" && e.type === "link"
     );
     expect(linkEdges).toHaveLength(1);
@@ -204,14 +204,14 @@ describe("deleteThing", () => {
     expect(() => deleteThing(root, "/nonexistent")).toThrow("does not exist");
   });
 
-  it("deleted Thing is gone from compiled graph", () => {
-    const graphBefore = compile(root);
-    expect(graphBefore.nodes.has("/projects")).toBe(true);
+  it("deleted Thing is gone from compiled graph", async () => {
+    const graphBefore = await compile(root);
+    expect(await graphBefore.hasNode("/projects")).toBe(true);
 
     deleteThing(root, "/projects");
 
-    const graphAfter = compile(root);
-    expect(graphAfter.nodes.has("/projects")).toBe(false);
+    const graphAfter = await compile(root);
+    expect(await graphAfter.hasNode("/projects")).toBe(false);
   });
 });
 
@@ -278,20 +278,20 @@ describe("Leaf file operations", () => {
     expect(data.name).toBe("Clients");
   });
 
-  it("created leaf Thing compiles correctly", () => {
+  it("created leaf Thing compiles correctly", async () => {
     createThing(root, "/acme", {
       name: "Acme",
       description: "A client",
       links: [{ to: "/", type: "parent" }],
     });
 
-    const store = compile(root);
-    const node = store.getNode("/acme");
+    const store = await compile(root);
+    const node = await store.getNode("/acme");
     expect(node).toBeDefined();
     expect(node!.name).toBe("Acme");
     expect(node!.nodeType).toBe("leaf");
 
-    const linkEdges = store.getEdges().filter(
+    const linkEdges = (await store.getEdges()).filter(
       (e) => e.from === "/acme" && e.type === "link"
     );
     expect(linkEdges).toHaveLength(1);

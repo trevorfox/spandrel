@@ -111,17 +111,17 @@ function allDeclaredLinks(def: KnowledgeDefinition): Array<{ from: string; to: s
 function runE2E(def: KnowledgeDefinition) {
   let root: string;
   let client: Client;
-  let compiledGraph: ReturnType<typeof compile>;
+  let compiledGraph: Awaited<ReturnType<typeof compile>>;
   const items = allItems(def);
   const declaredLinks = allDeclaredLinks(def);
 
   describe(`E2E: ${def.name}`, () => {
     beforeAll(async () => {
       root = buildSystem(def);
-      compiledGraph = compile(root);
+      compiledGraph = await compile(root);
       const schema = createSchema(compiledGraph, { rootDir: root });
 
-      const mcpServer = createMcpServer(schema);
+      const mcpServer = await createMcpServer(schema);
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
       client = new Client({ name: "e2e-test", version: "1.0.0" });
       await Promise.all([
@@ -137,8 +137,8 @@ function runE2E(def: KnowledgeDefinition) {
     // ---- STRUCTURAL ----
 
     describe("compilation", () => {
-      it("zero warnings", () => {
-        expect(compiledGraph.getWarnings()).toHaveLength(0);
+      it("zero warnings", async () => {
+        expect(await compiledGraph.getWarnings()).toHaveLength(0);
       });
 
       it("node count matches definition", () => {

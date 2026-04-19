@@ -204,14 +204,14 @@ describe("E2E: Self-contained knowledge graph", () => {
   let root: string;
   let schema: GraphQLSchema;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     root = createFixture();
-    const store = compile(root);
+    const store = await compile(root);
     schema = createSchema(store, { rootDir: root });
 
     // Verify the fixture compiled as expected
     expect(store.nodeCount).toBeGreaterThan(20);
-    expect(store.getWarnings()).toHaveLength(0);
+    expect(await store.getWarnings()).toHaveLength(0);
   });
 
   afterAll(() => {
@@ -419,9 +419,9 @@ describe("E2E: Self-contained knowledge graph", () => {
     let client: Client;
 
     beforeAll(async () => {
-      const graph = compile(root);
+      const graph = await compile(root);
       const mcpSchema = createSchema(graph, { rootDir: root });
-      const mcpServer = createMcpServer(mcpSchema);
+      const mcpServer = await createMcpServer(mcpSchema);
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
       client = new Client({ name: "e2e-test", version: "1.0.0" });
       await Promise.all([

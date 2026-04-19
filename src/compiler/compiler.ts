@@ -20,7 +20,7 @@ export const EXCLUDED_LEAF_MD_FILES = new Set([
   "README.md",
 ]);
 
-export function compile(rootDir: string): GraphStore {
+export async function compile(rootDir: string): Promise<GraphStore> {
   const nodes = new Map<string, SpandrelNode>();
   const edges: SpandrelEdge[] = [];
   const warnings: ValidationWarning[] = [];
@@ -29,22 +29,22 @@ export function compile(rootDir: string): GraphStore {
   validate(nodes, edges, warnings);
 
   const store = new InMemoryGraphStore();
-  for (const node of nodes.values()) store.setNode(node);
-  store.replaceEdges(edges);
-  store.replaceWarnings(warnings);
+  for (const node of nodes.values()) await store.setNode(node);
+  await store.replaceEdges(edges);
+  await store.replaceWarnings(warnings);
   return store;
 }
 
-export function recompileNode(
+export async function recompileNode(
   store: GraphStore,
   rootDir: string,
   filePath: string
-): void {
+): Promise<void> {
   const nodePath = filePathToNodePath(rootDir, filePath);
 
   // Remove old node and its edges
-  store.deleteNode(nodePath);
-  const edges = store.getEdges().filter(
+  await store.deleteNode(nodePath);
+  const edges = (await store.getEdges()).filter(
     (e) => e.from !== nodePath && e.to !== nodePath
   );
 
@@ -61,7 +61,7 @@ export function recompileNode(
     }
 
     if (node) {
-      store.setNode(node);
+      await store.setNode(node);
       extractEdges(node, edges);
 
       if (node.parent) {
@@ -74,17 +74,17 @@ export function recompileNode(
     }
   }
 
-  store.replaceEdges(edges);
+  await store.replaceEdges(edges);
 
   // Rebuild children lists
-  rebuildChildren(store);
+  await rebuildChildren(store);
 
   // Re-validate
   const warnings: ValidationWarning[] = [];
   const allNodes = new Map<string, SpandrelNode>();
-  for (const node of store.getAllNodes()) allNodes.set(node.path, node);
-  validate(allNodes, store.getEdges(), warnings);
-  store.replaceWarnings(warnings);
+  for (const node of await store.getAllNodes()) allNodes.set(node.path, node);
+  validate(allNodes, await store.getEdges(), warnings);
+  await store.replaceWarnings(warnings);
 }
 
 function filePathToNodePath(rootDir: string, filePath: string): string {
@@ -339,19 +339,19 @@ function extractEdges(node: SpandrelNode, edges: SpandrelEdge[]): void {
   }
 }
 
-function rebuildChildren(store: GraphStore): void {
-  for (const node of store.getAllNodes()) {
+async function rebuildChildren(store: GraphStore): Promise<void> {
+  for (const node of await store.getAllNodes()) {
     node.children = [];
   }
 
-  for (const edge of store.getEdges({ type: "hierarchy" })) {
-    const parent = store.getNode(edge.from);
+  for (const edge of await store.getEdges({ type: "hierarchy" })) {
+    const parent = await store.getNode(edge.from);
     if (parent && !parent.children.includes(edge.to)) {
       parent.children.push(edge.to);
     }
   }
 
-  for (const node of store.getAllNodes()) {
+  for (const node of await store.getAllNodes()) {
     node.nodeType = node.children.length > 0 ? "composite" : "leaf";
   }
 }
@@ -437,7 +437,7 @@ export async function addGitMetadata(
   const isRepo = await git.checkIsRepo().catch(() => false);
   if (!isRepo) return;
 
-  for (const node of store.getAllNodes()) {
+  for (const node of await store.getAllNodes()) {
     const filePath = resolveNodeSourceFile(rootDir, node.path);
 
     try {

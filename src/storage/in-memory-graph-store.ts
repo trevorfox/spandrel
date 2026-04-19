@@ -6,19 +6,28 @@ export class InMemoryGraphStore implements GraphStore {
   private edges: SpandrelEdge[] = [];
   private warnings: ValidationWarning[] = [];
 
-  getNode(path: string): SpandrelNode | undefined {
+  async getNode(path: string): Promise<SpandrelNode | undefined> {
     return this.nodes.get(path);
   }
 
-  hasNode(path: string): boolean {
+  async hasNode(path: string): Promise<boolean> {
     return this.nodes.has(path);
   }
 
-  getAllNodes(): IterableIterator<SpandrelNode> {
-    return this.nodes.values();
+  async getAllNodes(): Promise<SpandrelNode[]> {
+    return [...this.nodes.values()];
   }
 
-  getEdges(filter?: EdgeFilter): SpandrelEdge[] {
+  async getNodes(paths: string[]): Promise<Map<string, SpandrelNode>> {
+    const result = new Map<string, SpandrelNode>();
+    for (const path of paths) {
+      const node = this.nodes.get(path);
+      if (node) result.set(path, node);
+    }
+    return result;
+  }
+
+  async getEdges(filter?: EdgeFilter): Promise<SpandrelEdge[]> {
     if (!filter) return this.edges;
     return this.edges.filter(
       (e) =>
@@ -28,27 +37,39 @@ export class InMemoryGraphStore implements GraphStore {
     );
   }
 
-  getWarnings(): ValidationWarning[] {
+  async getEdgesBatch(paths: string[]): Promise<Map<string, SpandrelEdge[]>> {
+    const pathSet = new Set(paths);
+    const result = new Map<string, SpandrelEdge[]>();
+    for (const path of paths) result.set(path, []);
+    for (const edge of this.edges) {
+      if (pathSet.has(edge.from)) {
+        result.get(edge.from)!.push(edge);
+      }
+    }
+    return result;
+  }
+
+  async getWarnings(): Promise<ValidationWarning[]> {
     return this.warnings;
   }
 
-  setNode(node: SpandrelNode): void {
+  async setNode(node: SpandrelNode): Promise<void> {
     this.nodes.set(node.path, node);
   }
 
-  deleteNode(path: string): void {
+  async deleteNode(path: string): Promise<void> {
     this.nodes.delete(path);
   }
 
-  replaceEdges(edges: SpandrelEdge[]): void {
+  async replaceEdges(edges: SpandrelEdge[]): Promise<void> {
     this.edges = edges;
   }
 
-  replaceWarnings(warnings: ValidationWarning[]): void {
+  async replaceWarnings(warnings: ValidationWarning[]): Promise<void> {
     this.warnings = warnings;
   }
 
-  clear(): void {
+  async clear(): Promise<void> {
     this.nodes.clear();
     this.edges = [];
     this.warnings = [];

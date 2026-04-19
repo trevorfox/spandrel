@@ -47,10 +47,10 @@ describe("Compiler — File Parsing", () => {
     rmrf(root);
   });
 
-  it("parses a standalone index.md as a leaf node", () => {
+  it("parses a standalone index.md as a leaf node", async () => {
     writeIndex(root, { name: "Root", description: "The root" });
-    const store = compile(root);
-    const node = store.getNode("/");
+    const store = await compile(root);
+    const node = await store.getNode("/");
     expect(node).toBeDefined();
     expect(node!.name).toBe("Root");
     expect(node!.description).toBe("The root");
@@ -59,16 +59,16 @@ describe("Compiler — File Parsing", () => {
     expect(node!.depth).toBe(0);
   });
 
-  it("parses a directory with subdirs as a composite node", () => {
+  it("parses a directory with subdirs as a composite node", async () => {
     writeIndex(root, { name: "Root", description: "Root node" });
     writeIndex(path.join(root, "child"), { name: "Child", description: "A child" });
-    const store = compile(root);
-    const rootNode = store.getNode("/");
+    const store = await compile(root);
+    const rootNode = await store.getNode("/");
     expect(rootNode!.nodeType).toBe("composite");
     expect(rootNode!.children).toContain("/child");
   });
 
-  it("extracts link edges from frontmatter links", () => {
+  it("extracts link edges from frontmatter links", async () => {
     writeIndex(root, {
       name: "Root",
       description: "Root",
@@ -76,8 +76,8 @@ describe("Compiler — File Parsing", () => {
         { to: "/other", type: "related", description: "A related thing" },
       ],
     });
-    const store = compile(root);
-    const linkEdges = store.getEdges().filter((e) => e.type === "link");
+    const store = await compile(root);
+    const linkEdges = (await store.getEdges()).filter((e) => e.type === "link");
     expect(linkEdges).toHaveLength(1);
     expect(linkEdges[0].from).toBe("/");
     expect(linkEdges[0].to).toBe("/other");
@@ -85,44 +85,44 @@ describe("Compiler — File Parsing", () => {
     expect(linkEdges[0].description).toBe("A related thing");
   });
 
-  it("extracts authored_by edge from author field", () => {
+  it("extracts authored_by edge from author field", async () => {
     writeIndex(root, {
       name: "Root",
       description: "Root",
       author: "/people/jane",
     });
-    const store = compile(root);
-    const authorEdges = store.getEdges().filter((e) => e.type === "authored_by");
+    const store = await compile(root);
+    const authorEdges = (await store.getEdges()).filter((e) => e.type === "authored_by");
     expect(authorEdges).toHaveLength(1);
     expect(authorEdges[0].from).toBe("/");
     expect(authorEdges[0].to).toBe("/people/jane");
   });
 
-  it("flags missing name in frontmatter as a warning", () => {
+  it("flags missing name in frontmatter as a warning", async () => {
     writeIndex(root, { description: "No name here" });
-    const store = compile(root);
-    const nameWarnings = store.getWarnings().filter((w) => w.type === "missing_name");
+    const store = await compile(root);
+    const nameWarnings = (await store.getWarnings()).filter((w) => w.type === "missing_name");
     expect(nameWarnings.length).toBeGreaterThan(0);
   });
 
-  it("flags missing description as a warning", () => {
+  it("flags missing description as a warning", async () => {
     writeIndex(root, { name: "Root" });
-    const store = compile(root);
-    const descWarnings = store.getWarnings().filter(
+    const store = await compile(root);
+    const descWarnings = (await store.getWarnings()).filter(
       (w) => w.type === "missing_description"
     );
     expect(descWarnings.length).toBeGreaterThan(0);
   });
 
-  it("creates a minimal node for directories without index.md", () => {
+  it("creates a minimal node for directories without index.md", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     const childDir = path.join(root, "orphan");
     fs.mkdirSync(childDir);
-    const store = compile(root);
-    const orphan = store.getNode("/orphan");
+    const store = await compile(root);
+    const orphan = await store.getNode("/orphan");
     expect(orphan).toBeDefined();
     expect(orphan!.name).toBe("orphan");
-    const missingWarnings = store.getWarnings().filter(
+    const missingWarnings = (await store.getWarnings()).filter(
       (w) => w.type === "missing_index" && w.path === "/orphan"
     );
     expect(missingWarnings).toHaveLength(1);
@@ -140,13 +140,13 @@ describe("Compiler — Tree Walking", () => {
     rmrf(root);
   });
 
-  it("builds correct parent/child hierarchy edges", () => {
+  it("builds correct parent/child hierarchy edges", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     writeIndex(path.join(root, "a"), { name: "A", description: "A" });
     writeIndex(path.join(root, "a", "b"), { name: "B", description: "B" });
 
-    const store = compile(root);
-    const hierarchyEdges = store.getEdges().filter((e) => e.type === "hierarchy");
+    const store = await compile(root);
+    const hierarchyEdges = (await store.getEdges()).filter((e) => e.type === "hierarchy");
 
     expect(hierarchyEdges).toContainEqual({
       from: "/",
@@ -160,7 +160,7 @@ describe("Compiler — Tree Walking", () => {
     });
   });
 
-  it("skips directories prefixed with _", () => {
+  it("skips directories prefixed with _", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     writeIndex(path.join(root, "_system"), {
       name: "System",
@@ -171,30 +171,30 @@ describe("Compiler — Tree Walking", () => {
       description: "Content",
     });
 
-    const store = compile(root);
-    expect(store.hasNode("/_system")).toBe(false);
-    expect(store.hasNode("/content")).toBe(true);
+    const store = await compile(root);
+    expect(await store.hasNode("/_system")).toBe(false);
+    expect(await store.hasNode("/content")).toBe(true);
   });
 
-  it("does not compile design.md files as nodes", () => {
+  it("does not compile design.md files as nodes", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     fs.writeFileSync(
       path.join(root, "design.md"),
       "---\nname: Design\ndescription: Design file\n---\n\nDesign content\n"
     );
 
-    const store = compile(root);
+    const store = await compile(root);
     // design.md should not create a separate node
     expect(store.nodeCount).toBe(1); // only root
   });
 
-  it("excluded .md files are not compiled as nodes", () => {
+  it("excluded .md files are not compiled as nodes", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     fs.writeFileSync(path.join(root, "SKILL.md"), "---\nname: test\n---\n");
     fs.writeFileSync(path.join(root, "AGENT.md"), "---\nname: test\n---\n");
     fs.writeFileSync(path.join(root, "README.md"), "# Readme\n");
 
-    const store = compile(root);
+    const store = await compile(root);
     expect(store.nodeCount).toBe(1); // only root
   });
 });
@@ -210,23 +210,23 @@ describe("Compiler — Edge Extraction", () => {
     rmrf(root);
   });
 
-  it("extracts inline markdown links to internal paths", () => {
+  it("extracts inline markdown links to internal paths", async () => {
     writeIndex(root, { name: "Root", description: "Root" }, "See [Alpha](/projects/alpha) for details.");
-    const store = compile(root);
-    const inlineLinks = store.getEdges().filter(
+    const store = await compile(root);
+    const inlineLinks = (await store.getEdges()).filter(
       (e) => e.type === "link" && e.to === "/projects/alpha"
     );
     expect(inlineLinks).toHaveLength(1);
   });
 
-  it("does not extract external URLs as validated links", () => {
+  it("does not extract external URLs as validated links", async () => {
     writeIndex(
       root,
       { name: "Root", description: "Root" },
       "See [Google](https://google.com) for info."
     );
-    const store = compile(root);
-    const externalLinks = store.getEdges().filter(
+    const store = await compile(root);
+    const externalLinks = (await store.getEdges()).filter(
       (e) => e.type === "link" && e.to.startsWith("http")
     );
     // External URLs should not be extracted as link edges
@@ -245,25 +245,25 @@ describe("Compiler — Validation", () => {
     rmrf(root);
   });
 
-  it("flags broken links", () => {
+  it("flags broken links", async () => {
     writeIndex(root, {
       name: "Root",
       description: "Root",
       links: [{ to: "/nonexistent" }],
     });
-    const store = compile(root);
-    const broken = store.getWarnings().filter((w) => w.type === "broken_link");
+    const store = await compile(root);
+    const broken = (await store.getWarnings()).filter((w) => w.type === "broken_link");
     expect(broken).toHaveLength(1);
     expect(broken[0].message).toContain("/nonexistent");
   });
 
-  it("flags unlisted children", () => {
+  it("flags unlisted children", async () => {
     writeIndex(root, { name: "Root", description: "Root" }, "Only mentions Alpha.");
     writeIndex(path.join(root, "alpha"), { name: "Alpha", description: "Alpha" });
     writeIndex(path.join(root, "beta"), { name: "Beta", description: "Beta" });
 
-    const store = compile(root);
-    const unlisted = store.getWarnings().filter((w) => w.type === "unlisted_child");
+    const store = await compile(root);
+    const unlisted = (await store.getWarnings()).filter((w) => w.type === "unlisted_child");
     // Beta is not mentioned in root's content
     expect(unlisted.some((w) => w.message.includes("/beta"))).toBe(true);
   });
@@ -280,22 +280,22 @@ describe("Compiler — Graph Structure", () => {
     rmrf(root);
   });
 
-  it("root node has path / and depth 0", () => {
+  it("root node has path / and depth 0", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
-    const store = compile(root);
-    const rootNode = store.getNode("/");
+    const store = await compile(root);
+    const rootNode = await store.getNode("/");
     expect(rootNode!.path).toBe("/");
     expect(rootNode!.depth).toBe(0);
   });
 
-  it("every non-root node has exactly one parent", () => {
+  it("every non-root node has exactly one parent", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     writeIndex(path.join(root, "a"), { name: "A", description: "A" });
     writeIndex(path.join(root, "a", "b"), { name: "B", description: "B" });
     writeIndex(path.join(root, "c"), { name: "C", description: "C" });
 
-    const store = compile(root);
-    for (const node of store.getAllNodes()) {
+    const store = await compile(root);
+    for (const node of await store.getAllNodes()) {
       if (node.path === "/") {
         expect(node.parent).toBeNull();
       } else {
@@ -305,13 +305,13 @@ describe("Compiler — Graph Structure", () => {
     }
   });
 
-  it("composite nodes have children, leaf nodes do not", () => {
+  it("composite nodes have children, leaf nodes do not", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     writeIndex(path.join(root, "a"), { name: "A", description: "A" });
 
-    const store = compile(root);
-    const rootNode = store.getNode("/");
-    const aNode = store.getNode("/a");
+    const store = await compile(root);
+    const rootNode = await store.getNode("/");
+    const aNode = await store.getNode("/a");
     expect(rootNode!.nodeType).toBe("composite");
     expect(rootNode!.children.length).toBeGreaterThan(0);
     expect(aNode!.nodeType).toBe("leaf");
@@ -330,47 +330,47 @@ describe("Compiler — Change Detection (recompileNode)", () => {
     rmrf(root);
   });
 
-  it("updates a node when its file changes", () => {
+  it("updates a node when its file changes", async () => {
     writeIndex(root, { name: "Root", description: "Root" }, "Content");
     writeIndex(path.join(root, "a"), { name: "A", description: "Original" });
 
-    const store = compile(root);
-    expect(store.getNode("/a")!.description).toBe("Original");
+    const store = await compile(root);
+    expect((await store.getNode("/a"))!.description).toBe("Original");
 
     // Change the file
     writeIndex(path.join(root, "a"), { name: "A", description: "Updated" });
-    recompileNode(store, root, path.join(root, "a", "index.md"));
+    await recompileNode(store, root, path.join(root, "a", "index.md"));
 
-    expect(store.getNode("/a")!.description).toBe("Updated");
+    expect((await store.getNode("/a"))!.description).toBe("Updated");
   });
 
-  it("removes a node when its file is deleted", () => {
+  it("removes a node when its file is deleted", async () => {
     writeIndex(root, { name: "Root", description: "Root" }, "Content");
     writeIndex(path.join(root, "a"), { name: "A", description: "A" });
 
-    const store = compile(root);
-    expect(store.hasNode("/a")).toBe(true);
+    const store = await compile(root);
+    expect(await store.hasNode("/a")).toBe(true);
 
     // Delete the file
     fs.rmSync(path.join(root, "a", "index.md"));
-    recompileNode(store, root, path.join(root, "a", "index.md"));
+    await recompileNode(store, root, path.join(root, "a", "index.md"));
 
-    expect(store.hasNode("/a")).toBe(false);
+    expect(await store.hasNode("/a")).toBe(false);
   });
 
-  it("adds a new node when a file is created", () => {
+  it("adds a new node when a file is created", async () => {
     writeIndex(root, { name: "Root", description: "Root" }, "Content");
-    const store = compile(root);
-    expect(store.hasNode("/newchild")).toBe(false);
+    const store = await compile(root);
+    expect(await store.hasNode("/newchild")).toBe(false);
 
     // Create a new file
     writeIndex(path.join(root, "newchild"), { name: "New", description: "New child" });
 
     // Need to add hierarchy edge manually since recompileNode works on the specific node
-    recompileNode(store, root, path.join(root, "newchild", "index.md"));
+    await recompileNode(store, root, path.join(root, "newchild", "index.md"));
 
-    expect(store.hasNode("/newchild")).toBe(true);
-    expect(store.getNode("/newchild")!.name).toBe("New");
+    expect(await store.hasNode("/newchild")).toBe(true);
+    expect((await store.getNode("/newchild"))!.name).toBe("New");
   });
 });
 
@@ -385,15 +385,15 @@ describe("Compiler — Leaf .md Files", () => {
     rmrf(root);
   });
 
-  it("leaf .md files become nodes", () => {
+  it("leaf .md files become nodes", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     fs.writeFileSync(
       path.join(root, "acme.md"),
       "---\nname: Acme Corp\ndescription: A client\n---\n\nAcme details.\n"
     );
 
-    const store = compile(root);
-    const node = store.getNode("/acme");
+    const store = await compile(root);
+    const node = await store.getNode("/acme");
     expect(node).toBeDefined();
     expect(node!.name).toBe("Acme Corp");
     expect(node!.description).toBe("A client");
@@ -403,35 +403,35 @@ describe("Compiler — Leaf .md Files", () => {
     expect(node!.content).toBe("Acme details.");
   });
 
-  it("leaf nodes get hierarchy edges", () => {
+  it("leaf nodes get hierarchy edges", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     fs.writeFileSync(
       path.join(root, "acme.md"),
       "---\nname: Acme\ndescription: A client\n---\n"
     );
 
-    const store = compile(root);
-    const hierarchyEdges = store.getEdges().filter(
+    const store = await compile(root);
+    const hierarchyEdges = (await store.getEdges()).filter(
       (e) => e.type === "hierarchy" && e.to === "/acme"
     );
     expect(hierarchyEdges).toHaveLength(1);
     expect(hierarchyEdges[0].from).toBe("/");
   });
 
-  it("parent becomes composite when it has leaf children", () => {
+  it("parent becomes composite when it has leaf children", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     fs.writeFileSync(
       path.join(root, "note.md"),
       "---\nname: Note\ndescription: A note\n---\n"
     );
 
-    const store = compile(root);
-    const rootNode = store.getNode("/");
+    const store = await compile(root);
+    const rootNode = await store.getNode("/");
     expect(rootNode!.nodeType).toBe("composite");
     expect(rootNode!.children).toContain("/note");
   });
 
-  it("conflict: directory wins over leaf file", () => {
+  it("conflict: directory wins over leaf file", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     writeIndex(path.join(root, "foo"), { name: "Foo Dir", description: "From directory" });
     fs.writeFileSync(
@@ -439,15 +439,15 @@ describe("Compiler — Leaf .md Files", () => {
       "---\nname: Foo File\ndescription: From leaf file\n---\n"
     );
 
-    const store = compile(root);
-    const fooNode = store.getNode("/foo");
+    const store = await compile(root);
+    const fooNode = await store.getNode("/foo");
     expect(fooNode).toBeDefined();
     expect(fooNode!.name).toBe("Foo Dir");
     // Only one /foo node, not two
-    expect(store.hasNode("/foo")).toBe(true);
+    expect(await store.hasNode("/foo")).toBe(true);
   });
 
-  it("leaf nodes in nested directories", () => {
+  it("leaf nodes in nested directories", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     writeIndex(path.join(root, "dept"), { name: "Dept", description: "Department" });
     fs.writeFileSync(
@@ -455,25 +455,25 @@ describe("Compiler — Leaf .md Files", () => {
       "---\nname: Alice\ndescription: A person\n---\n"
     );
 
-    const store = compile(root);
-    const alice = store.getNode("/dept/alice");
+    const store = await compile(root);
+    const alice = await store.getNode("/dept/alice");
     expect(alice).toBeDefined();
     expect(alice!.parent).toBe("/dept");
 
-    const dept = store.getNode("/dept");
+    const dept = await store.getNode("/dept");
     expect(dept!.children).toContain("/dept/alice");
     expect(dept!.nodeType).toBe("composite");
   });
 
-  it("links in leaf .md files are extracted", () => {
+  it("links in leaf .md files are extracted", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     fs.writeFileSync(
       path.join(root, "acme.md"),
       "---\nname: Acme\ndescription: Client\nlinks:\n  -\n    to: \"/people/jane\"\n    type: \"account_lead\"\n---\n"
     );
 
-    const store = compile(root);
-    const linkEdges = store.getEdges().filter(
+    const store = await compile(root);
+    const linkEdges = (await store.getEdges()).filter(
       (e) => e.type === "link" && e.from === "/acme"
     );
     expect(linkEdges).toHaveLength(1);
@@ -481,51 +481,51 @@ describe("Compiler — Leaf .md Files", () => {
     expect(linkEdges[0].linkType).toBe("account_lead");
   });
 
-  it("leaf name defaults to file stem when frontmatter name is missing", () => {
+  it("leaf name defaults to file stem when frontmatter name is missing", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     fs.writeFileSync(
       path.join(root, "my-project.md"),
       "---\ndescription: A project\n---\n"
     );
 
-    const store = compile(root);
-    const node = store.getNode("/my-project");
+    const store = await compile(root);
+    const node = await store.getNode("/my-project");
     expect(node).toBeDefined();
     expect(node!.name).toBe("my-project");
   });
 
-  it("recompileNode handles leaf file changes", () => {
+  it("recompileNode handles leaf file changes", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     fs.writeFileSync(
       path.join(root, "acme.md"),
       "---\nname: Acme\ndescription: Original\n---\n"
     );
 
-    const store = compile(root);
-    expect(store.getNode("/acme")!.description).toBe("Original");
+    const store = await compile(root);
+    expect((await store.getNode("/acme"))!.description).toBe("Original");
 
     fs.writeFileSync(
       path.join(root, "acme.md"),
       "---\nname: Acme\ndescription: Updated\n---\n"
     );
-    recompileNode(store, root, path.join(root, "acme.md"));
+    await recompileNode(store, root, path.join(root, "acme.md"));
 
-    expect(store.getNode("/acme")!.description).toBe("Updated");
+    expect((await store.getNode("/acme"))!.description).toBe("Updated");
   });
 
-  it("recompileNode handles leaf file deletion", () => {
+  it("recompileNode handles leaf file deletion", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     fs.writeFileSync(
       path.join(root, "acme.md"),
       "---\nname: Acme\ndescription: Client\n---\n"
     );
 
-    const store = compile(root);
-    expect(store.hasNode("/acme")).toBe(true);
+    const store = await compile(root);
+    expect(await store.hasNode("/acme")).toBe(true);
 
     fs.unlinkSync(path.join(root, "acme.md"));
-    recompileNode(store, root, path.join(root, "acme.md"));
+    await recompileNode(store, root, path.join(root, "acme.md"));
 
-    expect(store.hasNode("/acme")).toBe(false);
+    expect(await store.hasNode("/acme")).toBe(false);
   });
 });
