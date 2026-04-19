@@ -386,16 +386,17 @@ function extractEdges(node: SpandrelNode, edges: SpandrelEdge[]): void {
     });
   }
 
-  // Inline markdown links to internal paths
+  // Inline markdown links to internal paths — typed as "mentions" to distinguish
+  // from declared frontmatter links. Mentions are implicit prose references.
   const matches = node.content.matchAll(INLINE_LINK_RE);
   for (const match of matches) {
     const href = match[2];
-    // Only extract links that look like internal paths (start with / or are relative .md refs)
     if (href.startsWith("/")) {
       edges.push({
         from: node.path,
         to: href,
         type: "link",
+        linkType: "mentions",
         description: match[1] || undefined,
       });
     }

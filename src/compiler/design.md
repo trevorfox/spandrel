@@ -17,7 +17,9 @@ A graph consisting of:
 - **Nodes** — one per compilable markdown file. Each has: path, name, description, nodeType (leaf/composite), depth, parent, children, content, frontmatter, git metadata (created, updated, author).
 - **Edges** — three types:
   - `hierarchy` — parent/child relationships from the directory tree
-  - `link` — declared in frontmatter, with optional `type` and `description`
+  - `link` — references between nodes, with optional `linkType` and `description`. Two sources:
+    - Declared in frontmatter `links` array — explicit relationships, `linkType` set by the author (e.g. `depends-on`, `relates-to`)
+    - Extracted from inline markdown links in content (`[text](/path)`) whose target resolves to an internal path — implicit prose references, emitted with `linkType: "mentions"`
   - `authored_by` — from git metadata
 - **Warnings** — validation issues: missing index files, missing name/description, broken links, unlisted children.
 
