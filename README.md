@@ -4,50 +4,52 @@ Old technologies, new structure. Markdown files, git repos, YAML frontmatter, Gr
 
 Named after the [architectural byproduct](https://en.wikipedia.org/wiki/Spandrel_(biology)) that Gould & Lewontin argued becomes more interesting than the structure it emerged from. File systems weren't designed for knowledge graphs. Git wasn't designed for editorial workflow. Markdown wasn't designed for progressive disclosure. But put them together and the structure you build to hold knowledge becomes its own thing worth having.
 
-## Quick Start
+## Quickstart
 
-- [Build your own knowledge graph](#build-your-own-knowledge-graph)
-- [Explore the framework via MCP](#explore-the-framework-via-mcp)
+Zero to a local MCP endpoint in five steps. For a guided walkthrough of designing a real graph, see [BOOTSTRAP.md](BOOTSTRAP.md).
 
-### Build your own knowledge graph
-
-Tell your coding agent:
-
-```
-Clone https://github.com/trevorfox/spandrel.git then read BOOTSTRAP.md and follow its instructions to set up my knowledge graph.
-```
-
-The agent clones the repo, reads `BOOTSTRAP.md`, and guides you through designing your graph: what it's for, what collections you need, how to structure your content. It creates the knowledge repo, compiles it, and validates the result.
-
-### Explore the framework via MCP
-
-This repo describes itself as a Spandrel knowledge graph. Explore the philosophy, content model, architecture, and patterns through MCP:
+**1. Install.** Not yet on npm — clone and link:
 
 ```bash
 git clone https://github.com/trevorfox/spandrel.git
-cd spandrel && npm install
-npx spandrel mcp docs/
+cd spandrel && npm install && npm link
 ```
 
-Or add to your MCP config (Claude Desktop, Claude Code, etc.):
+**2. Create a graph.** Scaffolds the root node plus a `/linkTypes` collection seeded with the baseline vocabulary (`owns`, `depends-on`, `relates-to`, …).
 
-```json
-{
-  "mcpServers": {
-    "spandrel-docs": {
-      "command": "npx",
-      "args": ["spandrel", "mcp", "docs/"],
-      "cwd": "/path/to/spandrel"
-    }
-  }
-}
+```bash
+spandrel init my-graph --name "My Graph" --description "Trying Spandrel out."
+cd my-graph
 ```
 
-Then tell your agent:
+**3. Add content.** Create `clients/acme.md`:
 
+```markdown
+---
+name: Acme Corp
+description: Enterprise SaaS client, onboarded Q2 2025.
+links:
+  - to: /
+    type: relates-to
+---
+Main engagement this quarter. See also [the linking pattern](/linkTypes/owns).
 ```
-Use the spandrel-docs MCP to explore the Spandrel framework. Start at the root and navigate from there.
+
+See [docs/patterns/linking.md](docs/patterns/linking.md) for frontmatter vs. inline links.
+
+**4. Compile and serve.** Starts GraphQL at `localhost:4000/graphql` with a file watcher.
+
+```bash
+spandrel dev .
 ```
+
+**5. Connect Claude Desktop.** Get the MCP snippet and paste it into `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```bash
+spandrel init-mcp .
+```
+
+Restart Claude Desktop. The graph is live — ask it to start at `/` and navigate.
 
 ## What It Does
 
@@ -56,20 +58,6 @@ Spandrel is a spec with a reference implementation. You write markdown files wit
 An agent doesn't get everything dumped into its context window. It reads the root description, picks a direction, reads that level, picks again, and arrives at exactly what it needs. Hundreds of tokens on navigation instead of tens of thousands on loading everything. That's progressive disclosure, and it's what makes this different from search-based retrieval.
 
 The [philosophy](docs/philosophy.md) and [content model](docs/content-model/index.md) are documented as a Spandrel knowledge graph in `docs/` — explorable via `spandrel mcp docs/`.
-
-## Setup
-
-```bash
-npm install -g spandrel
-```
-
-## Usage
-
-```bash
-spandrel compile /path/to/my-knowledge
-spandrel dev /path/to/my-knowledge       # GraphQL at localhost:4000 + file watcher
-spandrel mcp /path/to/my-knowledge       # MCP server on stdio
-```
 
 ## Knowledge Repo Structure
 
