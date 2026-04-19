@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import readline from "node:readline/promises";
 import { createServer } from "node:http";
 import { compile, addGitMetadata, getHistory } from "./compiler/compiler.js";
 import { createSchema } from "./schema/schema.js";
@@ -8,22 +9,23 @@ import type { SchemaContext } from "./schema/schema.js";
 import { createMcpServer } from "./server/mcp.js";
 import { watchTree } from "./compiler/watcher.js";
 import { loadAccessConfig } from "./schema/access.js";
+import { scaffoldInit, type InitOptions } from "./cli-init.js";
 import { createYoga } from "graphql-yoga";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-const command = process.argv[2];
-const rootDir = process.argv[3] || process.cwd();
+const args = process.argv.slice(2);
+const command = args[0];
 
 if (command === "dev") {
-  dev(rootDir);
+  dev(parsePositional(args));
 } else if (command === "mcp") {
-  mcp(rootDir);
+  mcp(parsePositional(args));
 } else if (command === "compile") {
-  compileOnly(rootDir);
+  compileOnly(parsePositional(args));
 } else if (command === "init") {
-  init(rootDir);
+  init(args.slice(1));
 } else if (command === "init-mcp") {
-  initMcp(rootDir);
+  initMcp(parsePositional(args));
 } else {
   console.log(`Usage: spandrel <command> [root-dir]
 
@@ -118,76 +120,71 @@ async function mcp(rootDir: string) {
   });
 }
 
-function init(targetDir: string) {
+function parsePositional(argv: string[]): string {
+  // First positional after the command, skipping --flag value pairs.
+  for (let i = 1; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith("--")) {
+      if (!a.includes("=")) i++; // skip value
+      continue;
+    }
+    return a;
+  }
+  return process.cwd();
+}
+
+function parseInitArgs(argv: string[]): { targetDir: string; opts: Partial<InitOptions> } {
+  let targetDir: string | undefined;
+  const opts: Partial<InitOptions> = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--name" || a === "--description") {
+      const key = a === "--name" ? "name" : "description";
+      opts[key] = argv[++i] ?? "";
+    } else if (a.startsWith("--name=")) {
+      opts.name = a.slice("--name=".length);
+    } else if (a.startsWith("--description=")) {
+      opts.description = a.slice("--description=".length);
+    } else if (!targetDir && !a.startsWith("--")) {
+      targetDir = a;
+    }
+  }
+  return { targetDir: targetDir ?? process.cwd(), opts };
+}
+
+async function init(argv: string[]) {
+  const { targetDir, opts } = parseInitArgs(argv);
   const absDir = path.resolve(targetDir);
 
   if (fs.existsSync(path.join(absDir, "index.md"))) {
-    console.error(`[spandrel] ${absDir} already contains an index.md — aborting.`);
-    process.exit(1);
+    console.log(`Already a Spandrel graph at ${absDir}. Nothing to do.`);
+    process.exit(0);
   }
 
-  // Create the directory if it doesn't exist
-  fs.mkdirSync(absDir, { recursive: true });
+  let name = opts.name;
+  let description = opts.description;
 
-  // Root index.md
-  fs.writeFileSync(
-    path.join(absDir, "index.md"),
-    `---
-name: My Knowledge Graph
-description: A Spandrel knowledge graph — edit this description to explain what this graph is for.
----
+  if (!name || !description) {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      if (!name) name = (await rl.question("Graph name: ")).trim();
+      if (!description) description = (await rl.question("Description: ")).trim();
+    } finally {
+      rl.close();
+    }
+  }
 
-Welcome to your knowledge graph. Start by creating collections (directories with \`index.md\` files) for the major entity types in your domain.
+  if (!name) name = path.basename(absDir) || "My Knowledge Graph";
+  if (!description) description = "A Spandrel knowledge graph.";
 
-See the [Spandrel patterns](https://github.com/spandrel/spandrel/tree/main/patterns) for guidance on structuring your graph.
-`
-  );
-
-  // Example collection
-  const exampleDir = path.join(absDir, "topics");
-  fs.mkdirSync(exampleDir, { recursive: true });
-
-  fs.writeFileSync(
-    path.join(exampleDir, "index.md"),
-    `---
-name: Topics
-description: An example collection — rename or replace this with your own top-level categories.
----
-
-This is an example collection. Each subdirectory with an \`index.md\` becomes a Thing in the graph.
-`
-  );
-
-  fs.writeFileSync(
-    path.join(exampleDir, "design.md"),
-    `# Topics — Design
-
-## What a well-formed member looks like
-
-- Has a clear, specific \`name\`
-- Has a \`description\` that tells the reader whether to go deeper
-- Links to related Things in other collections via frontmatter \`links\`
-
-## Expected frontmatter
-
-\`\`\`yaml
-name: Topic Name
-description: One-line summary
-links:
-  - to: /path/to/related-thing
-    type: relationship_type
-\`\`\`
-`
-  );
-
-  // .gitignore
-  fs.writeFileSync(path.join(absDir, ".gitignore"), `_access/\n`);
+  const result = scaffoldInit(absDir, { name, description });
 
   console.log(`[spandrel] Created knowledge repo at ${absDir}`);
+  console.log(`  ${result.filesWritten.length} files written`);
   console.log(`
 Next steps:
   1. Edit index.md to describe your graph
-  2. Create collections: mkdir -p people && echo '---\\nname: People\\ndescription: ...\\n---' > people/index.md
+  2. Add collections (directories with index.md) for your domain's entity types
   3. Compile:  spandrel compile ${absDir}
   4. Serve:    spandrel dev ${absDir}
   5. MCP:      spandrel init-mcp ${absDir}
