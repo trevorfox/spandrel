@@ -10,6 +10,7 @@ export type {
   SpandrelGraph,
   ValidationWarning,
   HistoryEntry,
+  LinkTypeInfo,
 } from "./compiler/types.js";
 
 // Storage
