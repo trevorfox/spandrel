@@ -26,3 +26,17 @@ export {
   filterNodeFields,
 } from "./schema/access.js";
 export type { AccessLevel, Actor, Policy, AccessConfig } from "./schema/types.js";
+
+// GraphQL schema
+export { createSchema } from "./schema/schema.js";
+export type { SchemaContext } from "./schema/schema.js";
+
+// MCP server
+export {
+  createMcpServer,
+  startMcpServer,
+  registerReadOnlyTools,
+  registerWriteTools,
+  buildInstructions,
+} from "./server/mcp.js";
+export type { McpServerOptions } from "./server/mcp.js";

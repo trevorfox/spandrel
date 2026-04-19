@@ -10,7 +10,7 @@ export type McpServerOptions = {
   graph?: GraphStore;
 };
 
-async function buildInstructions(graph?: GraphStore): Promise<string> {
+export async function buildInstructions(graph?: GraphStore): Promise<string> {
   const root = graph ? await graph.getNode("/") : undefined;
   const name = root?.name ?? "Knowledge Graph";
   const description = root?.description ?? "";
@@ -44,6 +44,31 @@ How to use:
 When to use: Consult this graph proactively for questions about ${collections.length > 0 ? collections.map(c => c.replace(/ \(.*/, "").toLowerCase()).join(", ") : "the domain it covers"}.`;
 }
 
+/**
+ * Registers the read-only MCP tool set (navigation, content, references, search,
+ * navigate, get_graph) on an existing server. Safe to use on hosted, multi-tenant
+ * deployments where write operations are handled out-of-band (e.g. via a compile
+ * pipeline).
+ */
+export function registerReadOnlyTools(server: McpServer, schema: GraphQLSchema): void {
+  async function gql(source: string, variables: Record<string, unknown> = {}) {
+    return graphql({ schema, source, variableValues: variables });
+  }
+  registerReadOnlyToolsImpl(server, gql);
+}
+
+/**
+ * Registers the read-only + builder-facing write tools (create_thing, update_thing,
+ * delete_thing) on an existing server. Only appropriate for local / single-tenant
+ * deployments where the caller has filesystem write access.
+ */
+export function registerWriteTools(server: McpServer, schema: GraphQLSchema): void {
+  async function gql(source: string, variables: Record<string, unknown> = {}) {
+    return graphql({ schema, source, variableValues: variables });
+  }
+  registerWriteToolsImpl(server, gql);
+}
+
 export async function createMcpServer(schema: GraphQLSchema, options?: McpServerOptions): Promise<McpServer> {
   const server = new McpServer(
     { name: "spandrel", version: "0.1.0" },
@@ -55,6 +80,14 @@ export async function createMcpServer(schema: GraphQLSchema, options?: McpServer
     return graphql({ schema, source, variableValues: variables });
   }
 
+  registerReadOnlyToolsImpl(server, gql);
+  registerWriteToolsImpl(server, gql);
+  return server;
+}
+
+type GqlFn = (source: string, variables?: Record<string, unknown>) => Promise<{ data?: Record<string, unknown> | null; errors?: unknown }>;
+
+function registerReadOnlyToolsImpl(server: McpServer, gql: GqlFn): void {
   // --- Core navigation tools (agent-facing) ---
 
   server.tool(
@@ -258,6 +291,9 @@ export async function createMcpServer(schema: GraphQLSchema, options?: McpServer
     }
   );
 
+}
+
+function registerWriteToolsImpl(server: McpServer, gql: GqlFn): void {
   // --- Write tools (context engineer / builder-facing) ---
 
   server.tool(
@@ -339,8 +375,6 @@ export async function createMcpServer(schema: GraphQLSchema, options?: McpServer
       };
     }
   );
-
-  return server;
 }
 
 export async function startMcpServer(schema: GraphQLSchema, options?: McpServerOptions): Promise<void> {
