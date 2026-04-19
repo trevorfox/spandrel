@@ -1,4 +1,4 @@
-import type { SpandrelNode, SpandrelEdge, ValidationWarning } from "../compiler/types.js";
+import type { SpandrelNode, SpandrelEdge, ValidationWarning, LinkTypeInfo } from "../compiler/types.js";
 
 export interface EdgeFilter {
   from?: string;
@@ -14,6 +14,12 @@ export interface GraphStore {
   getEdges(filter?: EdgeFilter): Promise<SpandrelEdge[]>;
   getEdgesBatch(paths: string[]): Promise<Map<string, SpandrelEdge[]>>;
   getWarnings(): Promise<ValidationWarning[]>;
+  /**
+   * Returns the link-type vocabulary declared under `/linkTypes/`, keyed by
+   * filename stem (e.g. `"owns"` for `/linkTypes/owns.md`). Returns an empty
+   * Map when the graph has no `/linkTypes/` collection.
+   */
+  getLinkTypes(): Promise<Map<string, LinkTypeInfo>>;
 
   setNode(node: SpandrelNode): Promise<void>;
   deleteNode(path: string): Promise<void>;

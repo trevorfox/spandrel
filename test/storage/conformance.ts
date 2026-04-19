@@ -261,6 +261,59 @@ export function runConformanceTests(createStore: () => GraphStore): void {
       });
     });
 
+    describe("getLinkTypes", () => {
+      it("returns an empty map when no /linkTypes/* nodes exist", async () => {
+        expect(await store.getLinkTypes()).toEqual(new Map());
+      });
+
+      it("returns an empty map when unrelated nodes exist", async () => {
+        await store.setNode(makeNode("/"));
+        await store.setNode(makeNode("/clients"));
+        expect(await store.getLinkTypes()).toEqual(new Map());
+      });
+
+      it("indexes direct children of /linkTypes/ by filename stem", async () => {
+        await store.setNode(makeNode("/linkTypes", { name: "Link Types", description: "Vocab" }));
+        await store.setNode(makeNode("/linkTypes/owns", {
+          name: "owns",
+          description: "The source controls the target.",
+        }));
+        await store.setNode(makeNode("/linkTypes/depends-on", {
+          name: "depends-on",
+          description: "Source cannot function without target.",
+        }));
+
+        const linkTypes = await store.getLinkTypes();
+        expect(linkTypes.size).toBe(2);
+        expect(linkTypes.get("owns")).toEqual({
+          name: "owns",
+          description: "The source controls the target.",
+          path: "/linkTypes/owns",
+        });
+        expect(linkTypes.get("depends-on")).toEqual({
+          name: "depends-on",
+          description: "Source cannot function without target.",
+          path: "/linkTypes/depends-on",
+        });
+      });
+
+      it("excludes the /linkTypes landing page itself", async () => {
+        await store.setNode(makeNode("/linkTypes", { name: "Link Types", description: "Vocab" }));
+        await store.setNode(makeNode("/linkTypes/owns", {
+          name: "owns",
+          description: "Controls target.",
+        }));
+        const linkTypes = await store.getLinkTypes();
+        expect(Array.from(linkTypes.keys())).toEqual(["owns"]);
+      });
+
+      it("does not include nodes outside /linkTypes/", async () => {
+        await store.setNode(makeNode("/linkTypesReservation", { name: "Unrelated", description: "" }));
+        await store.setNode(makeNode("/other/linkTypes", { name: "Unrelated", description: "" }));
+        expect(await store.getLinkTypes()).toEqual(new Map());
+      });
+    });
+
     describe("nodeCount / edgeCount", () => {
       it("starts at zero", () => {
         expect(store.nodeCount).toBe(0);

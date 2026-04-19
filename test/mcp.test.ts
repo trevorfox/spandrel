@@ -5,7 +5,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { compile } from "../src/compiler/compiler.js";
 import { createSchema } from "../src/schema/schema.js";
-import { createMcpServer } from "../src/server/mcp.js";
+import { buildInstructions, createMcpServer } from "../src/server/mcp.js";
 import { createTempDir, writeIndex } from "./test-helpers.js";
 
 describe("MCP Server", () => {
@@ -302,5 +302,129 @@ describe("MCP Server", () => {
     const data = JSON.parse(text);
     expect(data.success).toBe(false);
     expect(data.message).toContain("already exists");
+  });
+});
+
+describe("MCP — buildInstructions and /linkTypes/", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = createTempDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("includes a 'Link types declared in this graph' block when /linkTypes/ exists", async () => {
+    writeIndex(root, { name: "Test Graph", description: "A graph with link types" });
+    writeIndex(path.join(root, "linkTypes"), {
+      name: "Link Types",
+      description: "Declared vocabulary",
+    });
+    fs.writeFileSync(
+      path.join(root, "linkTypes", "owns.md"),
+      "---\nname: owns\ndescription: The source entity has operational control of the target.\n---\n"
+    );
+    fs.writeFileSync(
+      path.join(root, "linkTypes", "depends-on.md"),
+      "---\nname: depends-on\ndescription: The source cannot function without the target.\n---\n"
+    );
+
+    const store = await compile(root);
+    const instructions = await buildInstructions(store);
+
+    expect(instructions).toContain("Link types declared in this graph:");
+    expect(instructions).toContain("- owns — The source entity has operational control of the target.");
+    expect(instructions).toContain("- depends-on — The source cannot function without the target.");
+  });
+
+  it("omits the link-types block entirely when graph has no /linkTypes/ collection", async () => {
+    writeIndex(root, { name: "Bare Graph", description: "No linkTypes" });
+    writeIndex(path.join(root, "clients"), { name: "Clients", description: "Clients" });
+
+    const store = await compile(root);
+    const instructions = await buildInstructions(store);
+
+    expect(instructions).not.toContain("Link types declared in this graph:");
+    // Sanity: the rest of the instructions block still renders
+    expect(instructions).toContain("Bare Graph");
+  });
+
+  it("truncates the link-types list at 20 entries with an overflow marker", async () => {
+    writeIndex(root, { name: "Big Vocab", description: "Many link types" });
+    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
+    // Declare 25 link types — more than the 20-entry cap.
+    for (let i = 0; i < 25; i++) {
+      const stem = `rel-${i.toString().padStart(2, "0")}`;
+      fs.writeFileSync(
+        path.join(root, "linkTypes", `${stem}.md`),
+        `---\nname: ${stem}\ndescription: Relationship ${i} description.\n---\n`
+      );
+    }
+
+    const store = await compile(root);
+    const instructions = await buildInstructions(store);
+
+    // Only first 20 are rendered by name; the rest are folded into the overflow line.
+    expect(instructions).toContain("- rel-00");
+    expect(instructions).toContain("- rel-19");
+    expect(instructions).not.toContain("- rel-20 — Relationship 20");
+    expect(instructions).toContain("…and 5 more");
+  });
+
+  it("context tool surfaces linkTypeDescription for declared linkTypes", async () => {
+    // Full end-to-end: compile → schema → MCP client → context tool call.
+    writeIndex(root, { name: "Root", description: "Root" }, "Welcome.");
+    writeIndex(path.join(root, "clients"), { name: "Clients", description: "Clients" });
+    writeIndex(path.join(root, "clients", "acme"), {
+      name: "Acme",
+      description: "Key client",
+      links: [{ to: "/clients/globex", type: "owns", description: "Acquired 2024" }],
+    });
+    writeIndex(path.join(root, "clients", "globex"), { name: "Globex", description: "Sub" });
+    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
+    fs.writeFileSync(
+      path.join(root, "linkTypes", "owns.md"),
+      "---\nname: owns\ndescription: The source entity has operational or legal control of the target.\n---\n"
+    );
+
+    const store = await compile(root);
+    const schema = createSchema(store, { rootDir: root });
+    const mcpServer = await createMcpServer(schema, { graph: store });
+
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    const c = new Client({ name: "test-linktype-client", version: "1.0.0" });
+    await Promise.all([c.connect(ct), mcpServer.connect(st)]);
+
+    const result = await c.callTool({
+      name: "context",
+      arguments: { path: "/clients/acme" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const ctx = JSON.parse(text);
+    const owns = ctx.outgoing.find((o: { linkType: string }) => o.linkType === "owns");
+    expect(owns.linkTypeDescription).toBe(
+      "The source entity has operational or legal control of the target."
+    );
+  });
+
+  it("truncates long link-type descriptions to keep the block within budget", async () => {
+    writeIndex(root, { name: "Verbose Graph", description: "Verbose linkType desc" });
+    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
+    const longDesc = "x".repeat(800);
+    fs.writeFileSync(
+      path.join(root, "linkTypes", "bloated.md"),
+      `---\nname: bloated\ndescription: "${longDesc}"\n---\n`
+    );
+
+    const store = await compile(root);
+    const instructions = await buildInstructions(store);
+
+    expect(instructions).toContain("- bloated — ");
+    // The summary should be truncated with an ellipsis, not the full 800 chars.
+    const bloatedLine = instructions.split("\n").find((l) => l.startsWith("- bloated"))!;
+    expect(bloatedLine.length).toBeLessThan(800);
+    expect(bloatedLine.endsWith("…")).toBe(true);
   });
 });

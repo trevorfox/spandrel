@@ -27,10 +27,23 @@ export interface ValidationWarning {
   message: string;
 }
 
+/**
+ * Metadata about a link type declared as a Thing under `/linkTypes/`.
+ * The canonical key for a link type is its filename stem (e.g. `owns.md`
+ * → `"owns"`), not the `name` frontmatter field — the stem stays stable
+ * across display-name renames.
+ */
+export interface LinkTypeInfo {
+  name: string;
+  description: string;
+  path: string;
+}
+
 export interface SpandrelGraph {
   nodes: Map<string, SpandrelNode>;
   edges: SpandrelEdge[];
   warnings: ValidationWarning[];
+  linkTypes: Map<string, LinkTypeInfo>;
 }
 
 export interface HistoryEntry {

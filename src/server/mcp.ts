@@ -10,6 +10,30 @@ export type McpServerOptions = {
   graph?: GraphStore;
 };
 
+/**
+ * How many link types to enumerate in the instructions block before
+ * truncating with a "…and N more" marker. Keeps the instructions within
+ * the agent's context budget regardless of how large the declared
+ * vocabulary grows.
+ */
+const MAX_LINK_TYPES_IN_INSTRUCTIONS = 20;
+
+/**
+ * Cap on the summarised length of a single linkType description line.
+ * Longer descriptions are truncated with an ellipsis so one verbose
+ * entry can't blow out the whole block.
+ */
+const MAX_LINK_TYPE_DESCRIPTION_CHARS = 400;
+
+function formatLinkTypeLine(stem: string, description: string): string {
+  const trimmed = description.trim();
+  if (!trimmed) return `- ${stem}`;
+  const summary = trimmed.length > MAX_LINK_TYPE_DESCRIPTION_CHARS
+    ? trimmed.slice(0, MAX_LINK_TYPE_DESCRIPTION_CHARS - 1).trimEnd() + "…"
+    : trimmed;
+  return `- ${stem} — ${summary}`;
+}
+
 export async function buildInstructions(graph?: GraphStore): Promise<string> {
   const root = graph ? await graph.getNode("/") : undefined;
   const name = root?.name ?? "Knowledge Graph";
@@ -32,6 +56,21 @@ export async function buildInstructions(graph?: GraphStore): Promise<string> {
     ? `\nCollections: ${collections.join(", ")}.`
     : "";
 
+  let linkTypesBlock = "";
+  if (graph) {
+    const linkTypes = await graph.getLinkTypes();
+    if (linkTypes.size > 0) {
+      const entries = Array.from(linkTypes.entries()).sort(([a], [b]) => a.localeCompare(b));
+      const shown = entries.slice(0, MAX_LINK_TYPES_IN_INSTRUCTIONS);
+      const remaining = entries.length - shown.length;
+      const lines = shown.map(([stem, info]) => formatLinkTypeLine(stem, info.description));
+      if (remaining > 0) {
+        lines.push(`- …and ${remaining} more (query linkTypes for the full list)`);
+      }
+      linkTypesBlock = `\n\nLink types declared in this graph:\n${lines.join("\n")}`;
+    }
+  }
+
   return `Spandrel is a structured knowledge graph: "${name}" — ${description}
 ${nodeCount} nodes, ${edgeCount} typed edges.${collectionsLine}
 
@@ -41,7 +80,7 @@ How to use:
 - Use search() as a fallback when you don't know where to start. Search matches node text only, not edges.
 - For "who owns X" or "what connects to Y", use get_references() or context() — not search.
 
-When to use: Consult this graph proactively for questions about ${collections.length > 0 ? collections.map(c => c.replace(/ \(.*/, "").toLowerCase()).join(", ") : "the domain it covers"}.`;
+When to use: Consult this graph proactively for questions about ${collections.length > 0 ? collections.map(c => c.replace(/ \(.*/, "").toLowerCase()).join(", ") : "the domain it covers"}.${linkTypesBlock}`;
 }
 
 /**
@@ -154,8 +193,8 @@ function registerReadOnlyToolsImpl(
           node(path: $path, depth: $depth, includeContent: $includeContent) {
             path name description nodeType depth parent
             children { path name description nodeType depth children }
-            links { to type description }
-            referencedBy { to type description }
+            links { to type description linkTypeDescription }
+            referencedBy { to type description linkTypeDescription }
             content
             created updated author
           }
@@ -199,8 +238,8 @@ function registerReadOnlyToolsImpl(
             path name description nodeType depth parent
             content
             children { path name description nodeType depth }
-            outgoing { path name description linkType linkDescription direction }
-            incoming { path name description linkType linkDescription direction }
+            outgoing { path name description linkType linkDescription linkTypeDescription direction }
+            incoming { path name description linkType linkDescription linkTypeDescription direction }
             created updated author
           }
         }
@@ -222,7 +261,7 @@ function registerReadOnlyToolsImpl(
       const result = await gql(`
         query GetReferences($path: String!, $direction: Direction) {
           references(path: $path, direction: $direction) {
-            nodes { path name description linkType linkDescription direction }
+            nodes { path name description linkType linkDescription linkTypeDescription direction }
             pageInfo { hasNextPage endCursor }
           }
         }

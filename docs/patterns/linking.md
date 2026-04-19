@@ -43,6 +43,35 @@ Link types are arbitrary strings. Use whatever describes the relationship. Commo
 
 The compiler doesn't enforce or validate link types. They're metadata for consumers.
 
+### Declaring a typed vocabulary with `/linkTypes/`
+
+When a graph relies on a handful of recurring relationship classes, declare them as Things under a top-level `/linkTypes/` collection. Each file names and describes one relationship class:
+
+```
+docs/linkTypes/
+├── index.md          # collection front page
+├── owns.md           # one file per linkType
+├── depends-on.md
+└── mentions.md
+```
+
+Each linkType file carries a short frontmatter entry:
+
+```yaml
+---
+name: owns
+description: The source entity has operational or legal control of the target.
+---
+```
+
+The compiler indexes `/linkTypes/*` by filename stem (`owns.md` → `owns`). The stem is the canonical key — it's what frontmatter `links[].type` values reference, and it stays stable across display-name renames. Hierarchical subfolders under `/linkTypes/` are out of scope for now; keep the namespace flat.
+
+When a linkType is declared, every edge using that type picks up a `linkTypeDescription` on the GraphQL side (`context`, `references`, `get_node`) — agents see the relationship's meaning without following another hop. Querying `{ linkTypes { name description path } }` returns the full declared vocabulary.
+
+Undeclared linkTypes keep working; `linkTypeDescription` is simply `null` on those edges. Declare the ones that carry load-bearing semantics in your graph.
+
+The compiler already emits `linkType: "mentions"` for inline-markdown links (see below). Adding `/linkTypes/mentions.md` automatically gives those edges a description — no other changes required.
+
 ## Backlinks
 
 The compiler generates backlinks automatically. If `/clients/acme` links to `/people/jane`, then querying Jane's node shows Acme as a backlink. You don't need to declare both directions.

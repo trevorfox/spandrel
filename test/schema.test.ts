@@ -528,3 +528,195 @@ describe("GraphQL Schema", () => {
     expect(result.data!.graph.nodes.length).toBeGreaterThan(0);
   });
 });
+
+describe("GraphQL Schema — /linkTypes/ vocabulary", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = createTempDir();
+    writeIndex(root, { name: "Root", description: "Root" }, "See [Clients](/clients).");
+    writeIndex(path.join(root, "clients"), { name: "Clients", description: "Clients" }, "Clients list.");
+    writeIndex(path.join(root, "clients", "acme"), {
+      name: "Acme Corp",
+      description: "Key client",
+      links: [
+        { to: "/projects/alpha", type: "active_project", description: "Main project" },
+        { to: "/clients/globex", type: "owns", description: "Acquired 2024" },
+      ],
+    }, "Acme details.");
+    writeIndex(path.join(root, "clients", "globex"), { name: "Globex", description: "Subsidiary" });
+    writeIndex(path.join(root, "projects"), { name: "Projects", description: "Projects" });
+    writeIndex(path.join(root, "projects", "alpha"), {
+      name: "Alpha",
+      description: "Alpha project",
+    });
+    writeIndex(path.join(root, "linkTypes"), {
+      name: "Link Types",
+      description: "Declared relationship vocabulary",
+    });
+    fs.writeFileSync(
+      path.join(root, "linkTypes", "owns.md"),
+      "---\nname: owns\ndescription: The source entity has operational or legal control of the target.\n---\n\n# owns\n\nDetails.\n"
+    );
+    fs.writeFileSync(
+      path.join(root, "linkTypes", "active_project.md"),
+      "---\nname: active_project\ndescription: The target is a project the source is currently engaged on.\n---\n"
+    );
+  });
+
+  afterEach(() => {
+    rmrf(root);
+  });
+
+  async function query(source: string, variables?: Record<string, unknown>) {
+    const { compile } = await import("../src/compiler/compiler.js");
+    const store = await compile(root);
+    const schema = createSchema(store);
+    return graphql({ schema, source, variableValues: variables });
+  }
+
+  it("exposes linkTypes query returning declared vocabulary", async () => {
+    const result = await query(`{
+      linkTypes { name description path }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const types = result.data!.linkTypes as Array<{ name: string; description: string; path: string }>;
+    const byName = new Map(types.map((t) => [t.name, t]));
+    expect(types.length).toBe(2);
+    expect(byName.get("owns")).toEqual({
+      name: "owns",
+      description: "The source entity has operational or legal control of the target.",
+      path: "/linkTypes/owns",
+    });
+    expect(byName.get("active_project")).toEqual({
+      name: "active_project",
+      description: "The target is a project the source is currently engaged on.",
+      path: "/linkTypes/active_project",
+    });
+  });
+
+  it("linkTypes returns empty array when graph has no /linkTypes/ collection", async () => {
+    // Build a fresh graph without a /linkTypes/ collection
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), "spandrel-no-linktypes-"));
+    try {
+      writeIndex(bare, { name: "Bare", description: "No linkTypes here" });
+      const { compile } = await import("../src/compiler/compiler.js");
+      const store = await compile(bare);
+      const schema = createSchema(store);
+      const result = await graphql({ schema, source: `{ linkTypes { name } }` });
+      expect(result.errors).toBeUndefined();
+      expect(result.data!.linkTypes).toEqual([]);
+    } finally {
+      rmrf(bare);
+    }
+  });
+
+  it("context query populates linkTypeDescription on outgoing edges when declared", async () => {
+    const result = await query(`{
+      context(path: "/clients/acme") {
+        outgoing { path linkType linkTypeDescription }
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const outgoing = result.data!.context.outgoing as Array<{
+      path: string;
+      linkType: string | null;
+      linkTypeDescription: string | null;
+    }>;
+    const owns = outgoing.find((r) => r.linkType === "owns");
+    const active = outgoing.find((r) => r.linkType === "active_project");
+    expect(owns?.linkTypeDescription).toBe(
+      "The source entity has operational or legal control of the target."
+    );
+    expect(active?.linkTypeDescription).toBe(
+      "The target is a project the source is currently engaged on."
+    );
+  });
+
+  it("context query returns null linkTypeDescription for undeclared linkType", async () => {
+    // /clients links to /clients/acme via hierarchy; add a frontmatter
+    // link with an undeclared linkType to /clients/acme and re-compile.
+    const acmePath = path.join(root, "clients", "acme");
+    fs.writeFileSync(
+      path.join(acmePath, "index.md"),
+      "---\n" +
+      "name: Acme Corp\n" +
+      "description: Key client\n" +
+      "links:\n" +
+      "  -\n" +
+      "    to: \"/projects/alpha\"\n" +
+      "    type: \"undeclared_linktype\"\n" +
+      "    description: \"no matching /linkTypes/ entry\"\n" +
+      "---\n\nAcme details.\n"
+    );
+
+    const result = await query(`{
+      context(path: "/clients/acme") {
+        outgoing { linkType linkTypeDescription }
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const outgoing = result.data!.context.outgoing as Array<{
+      linkType: string | null;
+      linkTypeDescription: string | null;
+    }>;
+    const undeclared = outgoing.find((r) => r.linkType === "undeclared_linktype");
+    expect(undeclared).toBeDefined();
+    expect(undeclared!.linkTypeDescription).toBeNull();
+  });
+
+  it("node.links carries linkTypeDescription when declared", async () => {
+    const result = await query(`{
+      node(path: "/clients/acme") {
+        links { to type description linkTypeDescription }
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const links = result.data!.node.links as Array<{
+      to: string;
+      type: string | null;
+      description: string | null;
+      linkTypeDescription: string | null;
+    }>;
+    const owns = links.find((l) => l.type === "owns");
+    expect(owns?.linkTypeDescription).toBe(
+      "The source entity has operational or legal control of the target."
+    );
+  });
+
+  it("references query populates linkTypeDescription", async () => {
+    const result = await query(`{
+      references(path: "/clients/acme") {
+        nodes { linkType linkTypeDescription }
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const nodes = result.data!.references.nodes as Array<{
+      linkType: string | null;
+      linkTypeDescription: string | null;
+    }>;
+    const owns = nodes.find((n) => n.linkType === "owns");
+    expect(owns?.linkTypeDescription).toBe(
+      "The source entity has operational or legal control of the target."
+    );
+  });
+
+  it("edges with linkType null return linkTypeDescription null", async () => {
+    // The graph query surfaces hierarchy edges with no linkType
+    const result = await query(`{
+      graph { edges { type linkType linkTypeDescription } }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const edges = result.data!.graph.edges as Array<{
+      type: string;
+      linkType: string | null;
+      linkTypeDescription: string | null;
+    }>;
+    const hierarchyEdges = edges.filter((e) => e.type === "hierarchy");
+    expect(hierarchyEdges.length).toBeGreaterThan(0);
+    for (const edge of hierarchyEdges) {
+      expect(edge.linkType).toBeNull();
+      expect(edge.linkTypeDescription).toBeNull();
+    }
+  });
+});

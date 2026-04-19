@@ -163,7 +163,21 @@ Any `[label](/internal/path)` the user writes in a node's prose gets extracted a
 
 That sentence creates two edges without touching frontmatter. Frontmatter links are for *curated, named* relationships (`active_project`, `account_lead`); inline links are for *incidental prose references*. Both show up in navigation tools; the `linkType` distinguishes intent.
 
-**Concepts introduced:** Links as graph edges, backlinks (automatic), typed relationships, lateral traversal across the tree, inline prose links as implicit edges.
+### Declaring the link vocabulary (optional but encouraged)
+
+If the graph is going to lean on a few named relationships — `owns`, `depends-on`, `account_lead`, whatever — nudge the user to declare them as Things in a `/linkTypes/` collection. Each file names and describes one relationship class; filename stem is the canonical key. See `patterns/linking.md` for the format.
+
+```
+linkTypes/
+├── index.md
+├── owns.md           # name: owns, description: The source entity has operational or legal control of the target.
+├── depends-on.md
+└── account-lead.md
+```
+
+Declared link types surface in two ways: every edge using that type gets a `linkTypeDescription` in `context()` and `get_references()` answers, and the MCP server advertises the vocabulary in its instructions. Undeclared link types still work — they just lack the description. Declare the ones whose meaning isn't self-evident.
+
+**Concepts introduced:** Links as graph edges, backlinks (automatic), typed relationships, lateral traversal across the tree, inline prose links as implicit edges, the `/linkTypes/` vocabulary for relationship classes.
 
 **Agent instruction:** Show a concrete YAML example AND a prose example with inline links. Links are what make this more than a file tree — make sure the user sees both mechanisms.
 

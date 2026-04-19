@@ -45,7 +45,7 @@ function paginateList<T>(
   return { items: sliced, hasNextPage, endCursor };
 }
 import nodePath from "node:path";
-import type { SpandrelNode, HistoryEntry } from "../compiler/types.js";
+import type { SpandrelNode, HistoryEntry, LinkTypeInfo } from "../compiler/types.js";
 import type { GraphStore } from "../storage/graph-store.js";
 import type { AccessConfig, Actor, AccessLevel } from "./types.js";
 import { canAccess, canWrite, accessLevelAtLeast } from "./access.js";
@@ -112,6 +112,9 @@ const EdgeObjectType = new GraphQLObjectType({
     type: { type: new GraphQLNonNull(EdgeTypeEnum) },
     linkType: { type: GraphQLString },
     description: { type: GraphQLString },
+    // Description of the linkType relationship class, looked up from
+    // /linkTypes/{stem}.md. Null when the stem has no declaration.
+    linkTypeDescription: { type: GraphQLString },
   },
 });
 
@@ -124,6 +127,7 @@ const RichReferenceType = new GraphQLObjectType({
     description: { type: new GraphQLNonNull(GraphQLString) },
     linkType: { type: GraphQLString },
     linkDescription: { type: GraphQLString },
+    linkTypeDescription: { type: GraphQLString },
     direction: { type: new GraphQLNonNull(GraphQLString) },
   },
 });
@@ -134,6 +138,16 @@ const LinkType = new GraphQLObjectType({
     to: { type: new GraphQLNonNull(GraphQLString) },
     type: { type: GraphQLString },
     description: { type: GraphQLString },
+    linkTypeDescription: { type: GraphQLString },
+  },
+});
+
+const LinkTypeInfoType = new GraphQLObjectType({
+  name: "LinkTypeInfo",
+  fields: {
+    name: { type: new GraphQLNonNull(GraphQLString) },
+    description: { type: new GraphQLNonNull(GraphQLString) },
+    path: { type: new GraphQLNonNull(GraphQLString) },
   },
 });
 
@@ -531,6 +545,19 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
             return [];
           },
         },
+
+        linkTypes: {
+          type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(LinkTypeInfoType))),
+          resolve: async () => {
+            const linkTypes = await store.getLinkTypes();
+            // Only surface link types the caller can actually see at
+            // description-level access — consistent with other query filtering.
+            const all = Array.from(linkTypes.values());
+            return all.filter((lt) =>
+              accessLevelAtLeast(checkAccess(lt.path), "description")
+            );
+          },
+        },
       },
     }),
     mutation: ctx?.rootDir ? (() => {
@@ -614,21 +641,38 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
   });
 }
 
+/**
+ * Resolve a link-type stem to its description, or null if the stem is missing
+ * or has no /linkTypes/{stem}.md declaration. Used to decorate edge-like
+ * GraphQL objects with the governed meaning of their linkType.
+ */
+function lookupLinkTypeDescription(
+  linkTypes: Map<string, LinkTypeInfo>,
+  linkType: string | null | undefined
+): string | null {
+  if (!linkType) return null;
+  return linkTypes.get(linkType)?.description ?? null;
+}
+
 async function getOutgoingLinks(store: GraphStore, nodePath: string) {
+  const linkTypes = await store.getLinkTypes();
   return (await store.getEdges({ from: nodePath, type: "link" }))
     .map((e) => ({
       to: e.to,
       type: e.linkType ?? null,
       description: e.description ?? null,
+      linkTypeDescription: lookupLinkTypeDescription(linkTypes, e.linkType),
     }));
 }
 
 async function getIncomingLinks(store: GraphStore, nodePath: string) {
+  const linkTypes = await store.getLinkTypes();
   return (await store.getEdges({ to: nodePath, type: "link" }))
     .map((e) => ({
       to: e.from,
       type: e.linkType ?? null,
       description: e.description ?? null,
+      linkTypeDescription: lookupLinkTypeDescription(linkTypes, e.linkType),
     }));
 }
 
@@ -642,14 +686,20 @@ async function resolveReferences(
   description: string;
   linkType: string | null;
   linkDescription: string | null;
+  linkTypeDescription: string | null;
   direction: string;
 }>> {
+  // Single lookup per request — the caller (context, references) decorates
+  // every edge from the same Map without round-tripping the store.
+  const linkTypes = await store.getLinkTypes();
+
   const results: Array<{
     path: string;
     name: string;
     description: string;
     linkType: string | null;
     linkDescription: string | null;
+    linkTypeDescription: string | null;
     direction: string;
   }> = [];
 
@@ -664,6 +714,7 @@ async function resolveReferences(
         description: target?.description ?? "",
         linkType: edge.linkType ?? null,
         linkDescription: edge.description ?? null,
+        linkTypeDescription: lookupLinkTypeDescription(linkTypes, edge.linkType),
         direction: "outgoing",
       });
     }
@@ -680,6 +731,7 @@ async function resolveReferences(
         description: source?.description ?? "",
         linkType: edge.linkType ?? null,
         linkDescription: edge.description ?? null,
+        linkTypeDescription: lookupLinkTypeDescription(linkTypes, edge.linkType),
         direction: "incoming",
       });
     }
@@ -1073,9 +1125,14 @@ async function resolveGraph(
 
   // Use getEdgesBatch to fetch outgoing edges for all collected nodes at once
   const edgeBatch = await store.getEdgesBatch(Array.from(collectedNodes));
+  const linkTypes = await store.getLinkTypes();
   const edges = Array.from(edgeBatch.values())
     .flat()
-    .filter((e) => collectedNodes.has(e.to));
+    .filter((e) => collectedNodes.has(e.to))
+    .map((e) => ({
+      ...e,
+      linkTypeDescription: lookupLinkTypeDescription(linkTypes, e.linkType),
+    }));
 
   return { nodes, edges };
 }
