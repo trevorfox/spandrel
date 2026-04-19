@@ -541,7 +541,7 @@ describe("Compiler — Safety Limits", () => {
     rmrf(root);
   });
 
-  it("skips leaf files exceeding MAX_FILE_SIZE_BYTES with a warning", () => {
+  it("skips leaf files exceeding MAX_FILE_SIZE_BYTES with a warning", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
 
     const leafPath = path.join(root, "large.md");
@@ -561,9 +561,9 @@ describe("Compiler — Safety Limits", () => {
     };
 
     try {
-      const store = compile(root);
-      expect(store.hasNode("/large")).toBe(false);
-      const warnings = store.getWarnings().filter((w) => w.type === "file_too_large");
+      const store = await compile(root);
+      expect(await store.hasNode("/large")).toBe(false);
+      const warnings = (await store.getWarnings()).filter((w) => w.type === "file_too_large");
       expect(warnings.length).toBeGreaterThan(0);
       expect(warnings[0].path).toBe("/large");
     } finally {
@@ -571,7 +571,7 @@ describe("Compiler — Safety Limits", () => {
     }
   });
 
-  it("skips index.md files exceeding MAX_FILE_SIZE_BYTES with a warning", () => {
+  it("skips index.md files exceeding MAX_FILE_SIZE_BYTES with a warning", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     writeIndex(path.join(root, "child"), { name: "Child", description: "Child" });
 
@@ -590,9 +590,9 @@ describe("Compiler — Safety Limits", () => {
     };
 
     try {
-      const store = compile(root);
-      expect(store.hasNode("/child")).toBe(false);
-      const warnings = store.getWarnings().filter((w) => w.type === "file_too_large");
+      const store = await compile(root);
+      expect(await store.hasNode("/child")).toBe(false);
+      const warnings = (await store.getWarnings()).filter((w) => w.type === "file_too_large");
       expect(warnings.length).toBeGreaterThan(0);
     } finally {
       (fs as unknown as Record<string, unknown>).statSync = origStatSync;

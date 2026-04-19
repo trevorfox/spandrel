@@ -515,10 +515,10 @@ describe("GraphQL Schema", () => {
   });
 
   it("graph with injected cycle does not cause infinite recursion", async () => {
-    const store = compile(root);
+    const store = await compile(root);
 
     // Inject a back-edge cycle: /clients/acme -> /clients (parent)
-    const acmeNode = store.getNode("/clients/acme")!;
+    const acmeNode = (await store.getNode("/clients/acme"))!;
     acmeNode.children = ["/clients"];
 
     const schema = createSchema(store);

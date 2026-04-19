@@ -145,7 +145,7 @@ export async function createMcpServer(schema: GraphQLSchema, options?: McpServer
         }
       `, { path: nodePath, direction: direction ?? "outgoing" });
       return {
-        content: [{ type: "text" as const, text: JSON.stringify(result.data?.references?.nodes ?? [], null, 2) }],
+        content: [{ type: "text" as const, text: JSON.stringify((result.data?.references as { nodes?: unknown[] } | undefined)?.nodes ?? [], null, 2) }],
       };
     }
   );
