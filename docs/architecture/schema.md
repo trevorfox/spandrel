@@ -23,6 +23,9 @@ The schema exposes queries for:
 - **graph** — get a subgraph of nodes and edges
 - **validate** — get validation warnings
 - **history** — get git history for a node
+- **linkTypes** — get the graph's declared link-type vocabulary (see `patterns/linking`)
+
+Edge types (`Link`, `RichReference`, `Edge`) carry a `linkTypeDescription` field. It's populated from `/linkTypes/{stem}.md` when the stem is declared, `null` otherwise. Clients get type semantics inline without a second round trip.
 
 And mutations for creating, updating, and deleting Things.
 

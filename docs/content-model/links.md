@@ -24,8 +24,25 @@ links:
 ```
 
 - `to` — the path of the target node (required)
-- `type` — a label for the relationship (optional)
+- `type` — a label for the relationship (optional). Acts as the linkType on the resulting edge. When a matching `/linkTypes/{type}.md` exists, tools surface that type's description alongside the edge — see `patterns/linking`.
 - `description` — context for why the link exists (optional)
+
+## Inline markdown links
+
+`[label](/internal/path)` in node content also produces link edges, tagged `linkType: "mentions"`. The label becomes the edge's description. Use frontmatter when the relationship has a name that matters; use inline links for incidental prose references.
+
+## Link type descriptions
+
+Link types are free-form by default. To make the vocabulary navigable — so an agent reading an edge knows what `owns` or `depends-on` means in this graph — declare each type as a Thing under a top-level `/linkTypes/` collection:
+
+```
+docs/linkTypes/
+├── owns.md
+├── depends-on.md
+└── mentions.md
+```
+
+Each file is indexed by filename stem; its description appears on every edge using that linkType via GraphQL's `linkTypeDescription` field and in the MCP instructions block. Declaration is optional — undeclared linkTypes still work, they just don't carry a description.
 
 ## Backlinks
 

@@ -11,6 +11,7 @@ Any conforming storage backend must support:
 - **Read a node by path** — return the full node or null
 - **Read all nodes** — for search, validation, and graph traversal
 - **Read edges** — filtered by from, to, or type
+- **Read link types** — return the `/linkTypes/*` declared vocabulary as `Map<stem, LinkTypeInfo>` for edge decoration and MCP instructions
 - **Write warnings** — validation warnings produced during compilation
 - **Clear and rebuild** — for full recompilation
 
