@@ -38,5 +38,6 @@ export {
   registerReadOnlyTools,
   registerWriteTools,
   buildInstructions,
+  runKeywordSearch,
 } from "./server/mcp.js";
-export type { McpServerOptions } from "./server/mcp.js";
+export type { McpServerOptions, RegisterReadOnlyToolsOptions } from "./server/mcp.js";

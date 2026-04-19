@@ -50,11 +50,57 @@ When to use: Consult this graph proactively for questions about ${collections.le
  * deployments where write operations are handled out-of-band (e.g. via a compile
  * pipeline).
  */
-export function registerReadOnlyTools(server: McpServer, schema: GraphQLSchema): void {
+/**
+ * Run Spandrel's keyword search against a schema. Hosts that register their
+ * own `search` tool (e.g. to layer vector search on top for paid tiers) can
+ * call this to fall through to the default keyword behaviour when the caller
+ * is on a lower tier.
+ */
+export async function runKeywordSearch(
+  schema: GraphQLSchema,
+  args: { query: string; path?: string },
+): Promise<Array<{ path: string; name: string; description: string; snippet: string | null; score: number }>> {
+  const result = await graphql({
+    schema,
+    source: `
+      query Search($query: String!, $path: String) {
+        search(query: $query, path: $path) {
+          path name description snippet score
+        }
+      }
+    `,
+    variableValues: { query: args.query, path: args.path },
+  });
+  const data = result.data as { search?: unknown[] } | null | undefined;
+  return (data?.search ?? []) as Array<{
+    path: string;
+    name: string;
+    description: string;
+    snippet: string | null;
+    score: number;
+  }>;
+}
+
+export interface RegisterReadOnlyToolsOptions {
+  /**
+   * When true, skip registering the default keyword `search` tool. Hosts that
+   * want to provide their own search implementation (e.g. vector search on a
+   * paid tier) can pass `{ skipSearch: true }` and then register their own
+   * `search` tool directly on the server after this call. This is the
+   * supported extension point; do not reach into `server._registeredTools`.
+   */
+  skipSearch?: boolean;
+}
+
+export function registerReadOnlyTools(
+  server: McpServer,
+  schema: GraphQLSchema,
+  options: RegisterReadOnlyToolsOptions = {},
+): void {
   async function gql(source: string, variables: Record<string, unknown> = {}) {
     return graphql({ schema, source, variableValues: variables });
   }
-  registerReadOnlyToolsImpl(server, gql);
+  registerReadOnlyToolsImpl(server, gql, options);
 }
 
 /**
@@ -87,7 +133,11 @@ export async function createMcpServer(schema: GraphQLSchema, options?: McpServer
 
 type GqlFn = (source: string, variables?: Record<string, unknown>) => Promise<{ data?: Record<string, unknown> | null; errors?: unknown }>;
 
-function registerReadOnlyToolsImpl(server: McpServer, gql: GqlFn): void {
+function registerReadOnlyToolsImpl(
+  server: McpServer,
+  gql: GqlFn,
+  options: RegisterReadOnlyToolsOptions = {},
+): void {
   // --- Core navigation tools (agent-facing) ---
 
   server.tool(
@@ -183,26 +233,28 @@ function registerReadOnlyToolsImpl(server: McpServer, gql: GqlFn): void {
     }
   );
 
-  server.tool(
-    "search",
-    "Keyword search across node text and edge metadata. Use when you don't know where to look; follow up with context() on results to get the full picture.",
-    {
-      query: z.string().describe("Search query string"),
-      path: z.string().optional().describe("Scope search to this subtree path"),
-    },
-    async ({ query: q, path: scopePath }) => {
-      const result = await gql(`
-        query Search($query: String!, $path: String) {
-          search(query: $query, path: $path) {
-            path name description snippet score
+  if (!options.skipSearch) {
+    server.tool(
+      "search",
+      "Keyword search across node text and edge metadata. Use when you don't know where to look; follow up with context() on results to get the full picture.",
+      {
+        query: z.string().describe("Search query string"),
+        path: z.string().optional().describe("Scope search to this subtree path"),
+      },
+      async ({ query: q, path: scopePath }) => {
+        const result = await gql(`
+          query Search($query: String!, $path: String) {
+            search(query: $query, path: $path) {
+              path name description snippet score
+            }
           }
-        }
-      `, { query: q, path: scopePath });
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result.data?.search ?? [], null, 2) }],
-      };
-    }
-  );
+        `, { query: q, path: scopePath });
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result.data?.search ?? [], null, 2) }],
+        };
+      }
+    );
+  }
 
   server.tool(
     "navigate",
