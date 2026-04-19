@@ -155,9 +155,17 @@ links:
 
 Reference `patterns/linking.md` for conventions. Explain that backlinks are generated automatically — if Acme links to Jane, Jane's node will show the incoming link without you adding it manually.
 
-**Concepts introduced:** Links as graph edges, backlinks (automatic), typed relationships, lateral traversal across the tree.
+### Inline markdown links also become edges
 
-**Agent instruction:** Show a concrete YAML example. Links are what make this more than a file tree — make sure the user sees that.
+Any `[label](/internal/path)` the user writes in a node's prose gets extracted as a graph edge with `linkType: "mentions"`. They don't need to repeat these in frontmatter. Encourage natural writing:
+
+> "In Q2 we onboarded [Acme Corp](/clients/acme) and started [Project Alpha](/projects/alpha)."
+
+That sentence creates two edges without touching frontmatter. Frontmatter links are for *curated, named* relationships (`active_project`, `account_lead`); inline links are for *incidental prose references*. Both show up in navigation tools; the `linkType` distinguishes intent.
+
+**Concepts introduced:** Links as graph edges, backlinks (automatic), typed relationships, lateral traversal across the tree, inline prose links as implicit edges.
+
+**Agent instruction:** Show a concrete YAML example AND a prose example with inline links. Links are what make this more than a file tree — make sure the user sees both mechanisms.
 
 ## Level 5: The Graph Is Live
 

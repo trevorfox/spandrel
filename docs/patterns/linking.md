@@ -51,4 +51,14 @@ The compiler generates backlinks automatically. If `/clients/acme` links to `/pe
 
 - **Link, don't nest.** If a relationship is encoded as directory hierarchy, you probably want a link instead.
 - **Describe non-obvious links.** `type: account_lead` is self-evident. `type: context` could mean anything — add a description.
-- **Inline markdown links also create edges.** `[Jane](/people/jane)` in the content body creates a link edge, same as a frontmatter declaration.
+
+## Inline markdown links
+
+Any `[label](/internal/path)` in the content body is extracted as a link edge with `linkType: "mentions"`. The label becomes the edge description. This lets you write naturally without repeating relationships in frontmatter:
+
+```markdown
+In Q2 we onboarded [Acme Corp](/clients/acme) and started
+[Project Alpha](/projects/alpha), led by [Jane](/people/jane).
+```
+
+That paragraph produces three edges — all with `linkType: "mentions"`. Use frontmatter when the relationship has a *name* (`account_lead`, `depends_on`) that matters for navigation; use inline links for *incidental references* inside prose. Both forms show up in `get_references()` and `context()`; the `linkType` distinguishes intent.
