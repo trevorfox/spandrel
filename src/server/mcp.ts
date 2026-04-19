@@ -138,12 +138,13 @@ export function createMcpServer(schema: GraphQLSchema, options?: McpServerOption
       const result = await gql(`
         query GetReferences($path: String!, $direction: Direction) {
           references(path: $path, direction: $direction) {
-            path name description linkType linkDescription direction
+            nodes { path name description linkType linkDescription direction }
+            pageInfo { hasNextPage endCursor }
           }
         }
       `, { path: nodePath, direction: direction ?? "outgoing" });
       return {
-        content: [{ type: "text" as const, text: JSON.stringify(result.data?.references ?? [], null, 2) }],
+        content: [{ type: "text" as const, text: JSON.stringify(result.data?.references?.nodes ?? [], null, 2) }],
       };
     }
   );
