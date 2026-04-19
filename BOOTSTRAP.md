@@ -32,12 +32,19 @@ Summarize back what you heard. Confirm you understand the domain before continui
 
 Ask:
 
-> **"Show me what you're working with. Point me at a folder of existing files, or say 'nothing yet.'"**
+> **"Show me what you're working with. Is this (A) a content corpus, (B) a code repo I'm about to document, or (C) nothing yet?"**
+
+Cues for distinguishing, in case the user isn't sure:
+
+- **Content corpus** — mostly `.md`, `.txt`, `.org`, `.rst`; exported notes, docs, transcripts; an Obsidian vault or similar. Prose is the payload.
+- **Code repo** — a dominant source language (TypeScript, Python, Go, Rust, Java…), `package.json` / `pyproject.toml` / `Cargo.toml` / `go.mod` at the root or inside subdirectories, source files vastly outnumber prose files. The prose that exists (READMEs, ADRs, architecture docs) is *about* the code.
+- **Nothing yet** — an empty directory, or only a `README` the user just scaffolded. The purpose from Level 0 is all that's on the table.
 
 This determines the path:
 
 - **Path A** — Content exists. Files, docs, exports, transcripts, an Obsidian vault, whatever.
 - **Path B** — Starting from scratch. The user has a purpose but no existing content.
+- **Path C** — Pointing at a code repo. The repo itself becomes a *subject* of the knowledge graph — the graph describes it, it is not the graph.
 
 ### Path A: Inventory existing content
 
@@ -54,9 +61,27 @@ For large volumes (hundreds of files), summarize by directory or cluster rather 
 
 Note the purpose from Level 0 and move to Level 2.
 
-**Concept introduced:** The knowledge repo is a separate git repo from the Spandrel framework. You're about to create it.
+### Path C: Inventory a code repo
 
-**Agent instruction:** For Path A, actually read the files. Do not ask the user to describe content they already have. Do not propose collections until you've shown the user what you found.
+**Critical rule: Spandrel does not compile source files. Do not read `.ts`, `.py`, `.go`, `.rs`, `.java`, etc. as content. The code repo is what you're documenting, not what you're ingesting.**
+
+1. Scan the directory structure, but filter OUT source files. Only read:
+   - `README*` (root and in every subdirectory)
+   - `CHANGELOG*`, `HISTORY*`, `NOTES*`
+   - `LICENSE*`, `CONTRIBUTING*`, `CODE_OF_CONDUCT*`
+   - Anything under `docs/`, `adrs/`, `architecture/`, `proposals/`, `rfcs/`, `design/`, `RFC*/`
+   - Manifests: `package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`, `pom.xml`, `build.gradle`, `Gemfile`, `composer.json`, `mix.exs`, etc.
+   - Workspace config: `pnpm-workspace.yaml`, `lerna.json`, `turbo.json`, `nx.json`, `Cargo.toml` `[workspace]`, Go workspace `go.work`
+2. Detect the shape:
+   - **Single package** — one manifest at the root.
+   - **Monorepo** — manifests inside `packages/`, `apps/`, `services/`, `crates/`, `libs/`, or a workspaces declaration in the root manifest.
+3. Present findings in concrete terms:
+   > "I see a monorepo with 5 packages under `packages/` — `core`, `cli`, `server`, `ui`, `utils`. Each has a README. I found 3 ADRs under `docs/adrs/` (0001-storage-choice, 0002-auth-model, 0003-plugin-api) and an `architecture/overview.md`. Root README is ~120 lines."
+4. Let the user confirm, correct, or add context about the repo.
+
+**Concepts introduced:** The knowledge repo is a separate git repo from the Spandrel framework. For Path C, the knowledge graph is *about* the code repo — it can live in a separate repo or as a `docs/knowledge/` subtree inside the code repo, but source files never become graph nodes; only prose and structural metadata do.
+
+**Agent instruction:** For Path A, actually read the files. Do not ask the user to describe content they already have. Do not propose collections until you've shown the user what you found. For Path C, do not open source files — stick to the allowlist above.
 
 ## Level 2: Sense-Making
 
@@ -78,6 +103,19 @@ Draw on patterns for the stated purpose:
 
 Reference `patterns/collections.md` for domain-specific examples. Propose 3-5 collections with names and one-line descriptions.
 
+### Path C (code repo)
+
+Propose collections appropriate for documenting a codebase. Pick the name that fits the repo's own vocabulary — don't force all four:
+
+- **`/modules`** or **`/services`** or **`/packages`** — one node per package, service, or module. Seeded with the package's README and manifest metadata (name, version, description, dependencies). Use `/services` for a service-oriented repo, `/packages` for a JS/TS workspace, `/crates` for Rust, `/modules` as a neutral fallback.
+- **`/architecture`** — architecture overviews, system diagrams (as markdown), component boundaries, high-level design notes. Home for `architecture/overview.md` and friends.
+- **`/adrs`** or **`/decisions`** — architecture decision records, one node per ADR, preserving IDs like `ADR-0001`. The ID is the canonical identity; the title is the name.
+- **`/domains`** — business or problem-domain concepts that cut across modules (e.g., `billing`, `identity`, `inventory`). These are not code artifacts — they're the *subjects* the code is about. Add only if the user talks about the system in these terms.
+
+Optionally, later: `/runbooks`, `/integrations`, `/glossary`. Don't propose these yet unless the inventory surfaced them.
+
+Present the menu; let the user pick which are relevant.
+
 ### Both paths
 
 The user confirms, adjusts, adds, or removes. Iterate until they're satisfied with the top-level groupings.
@@ -95,6 +133,67 @@ Create the knowledge repo:
 3. Write the root `index.md` with `name` and `description` in frontmatter
 4. For each agreed collection: create the directory with `index.md` (name, description) and `design.md` (what a well-formed member looks like, expected link types, anti-patterns)
 5. For Path A: classify and place existing content into collections — create `index.md` files with frontmatter extracted from the source material
+6. For Path C: see the code-repo-specific seeding steps below
+
+### Path C: seed from code-repo artifacts
+
+First, ask where the knowledge repo lives:
+
+> "Should the knowledge graph be a separate repo, or live inside this code repo as `docs/knowledge/`? A separate repo keeps concerns clean; an in-repo `docs/knowledge/` keeps the graph next to the code it describes."
+
+Either is fine. Adjust the paths below accordingly.
+
+For each module/package/service:
+
+- Create `/<modules>/{slug}/index.md` (use the collection name the user picked)
+- `name` — from the manifest (`package.json` `name`, `Cargo.toml` `[package].name`, etc.); strip scope prefixes like `@org/` if the user prefers unscoped names
+- `description` — from the manifest `description` field if present; otherwise the first non-heading paragraph of the package's README
+- Copy or reference the README body as the node's content
+
+For each ADR found:
+
+- Create `/adrs/{id}-{slug}.md` (leaf node) — preserve the original ID like `0001`, `ADR-0001`, or whatever scheme the repo uses
+- `name` — the ADR's title (first `# ...` heading, minus any "ADR-NNNN:" prefix)
+- `description` — the one-line summary or the first paragraph under the heading
+- Content — the body of the ADR, preserved
+
+For architecture docs:
+
+- One node per top-level document under `architecture/` or `docs/architecture/`
+- Use directory form (`/architecture/overview/index.md`) if the doc has sub-sections worth promoting to their own nodes; leaf form otherwise
+
+**Seed `depends-on` links automatically.** For each module, read its manifest's dependency list. For every dependency that resolves to another module *in this graph* (i.e., another workspace package), add a frontmatter link:
+
+```yaml
+links:
+  - to: /packages/core
+    type: depends-on
+```
+
+Skip external dependencies (npm registry, crates.io, PyPI) — those are noise at this layer. If the user later wants external deps tracked, they can add a `/dependencies` collection, but don't do it automatically.
+
+#### Example: monorepo seed tree
+
+For a TypeScript monorepo with three packages and a couple of ADRs, the resulting `docs/knowledge/` (or separate repo root) looks like:
+
+```
+docs/knowledge/
+├── index.md
+├── README.md
+├── packages/
+│   ├── index.md
+│   ├── design.md
+│   ├── core/index.md          # name: core, description: from package.json, links: [depends-on /packages/utils]
+│   ├── cli/index.md           # links: [depends-on /packages/core]
+│   └── utils/index.md
+├── architecture/
+│   ├── index.md
+│   └── overview.md
+└── adrs/
+    ├── index.md
+    ├── 0001-storage-choice.md
+    └── 0002-auth-model.md
+```
 
 ### Explain the directory-per-node pattern
 
@@ -135,6 +234,16 @@ Propose links based on what you found in the content — co-occurrence, name ref
 Ask about key relationships between collections:
 
 > "How do these connect? Do clients link to projects? Do people link to clients they manage?"
+
+### Path C (code repo)
+
+Structural `depends-on` links between modules were already seeded from manifest dependencies in Level 3. The user only needs to add *semantic* relationships beyond those — the ones the manifest can't express:
+
+- **Module → domain** (`owns`, `implements`) — "the `billing` service owns the `invoicing` domain."
+- **ADR → module/architecture** (`affects`, `supersedes`) — "ADR-0007 affects `/packages/auth`; it supersedes ADR-0003."
+- **Architecture → module** (`realized-by`) — "this architecture doc is realized by `/services/ingest` and `/services/api`."
+
+Prompt the user for a few of these; don't try to infer them. The seeded `depends-on` edges already give the graph its skeleton — semantic links add the meaning.
 
 ### Both paths
 
