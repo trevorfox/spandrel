@@ -197,22 +197,24 @@ describe("GraphQL Schema", () => {
   it("references query defaults to outgoing", async () => {
     const result = await query(`{
       references(path: "/clients/acme") {
-        path name direction
+        nodes { path name direction }
+        pageInfo { hasNextPage endCursor }
       }
     }`);
     expect(result.errors).toBeUndefined();
-    const refs = result.data!.references;
+    const refs = result.data!.references.nodes;
     expect(refs.every((r: { direction: string }) => r.direction === "outgoing")).toBe(true);
+    expect(result.data!.references.pageInfo.hasNextPage).toBe(false);
   });
 
   it("references query with direction=incoming returns backlinks", async () => {
     const result = await query(`{
       references(path: "/clients/acme", direction: incoming) {
-        path name direction
+        nodes { path name direction }
       }
     }`);
     expect(result.errors).toBeUndefined();
-    const refs = result.data!.references;
+    const refs = result.data!.references.nodes;
     expect(refs.some((r: { path: string }) => r.path === "/projects/alpha")).toBe(true);
     expect(refs.every((r: { direction: string }) => r.direction === "incoming")).toBe(true);
   });
@@ -220,11 +222,11 @@ describe("GraphQL Schema", () => {
   it("references query with direction=both returns all links", async () => {
     const result = await query(`{
       references(path: "/clients/acme", direction: both) {
-        path direction
+        nodes { path direction }
       }
     }`);
     expect(result.errors).toBeUndefined();
-    const refs = result.data!.references;
+    const refs = result.data!.references.nodes;
     expect(refs.some((r: { direction: string }) => r.direction === "outgoing")).toBe(true);
     expect(refs.some((r: { direction: string }) => r.direction === "incoming")).toBe(true);
   });
@@ -447,5 +449,82 @@ describe("GraphQL Schema", () => {
     }`);
     expect(result.errors).toBeUndefined();
     expect(result.data!.content).toBeNull();
+  });
+
+  it("children query returns NodeConnection with pageInfo", async () => {
+    const result = await query(`{
+      children(path: "/") {
+        nodes { path name }
+        pageInfo { hasNextPage endCursor }
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    const conn = result.data!.children;
+    expect(conn.nodes.length).toBe(2);
+    expect(conn.pageInfo.hasNextPage).toBe(false);
+    expect(conn.pageInfo.endCursor).toBeDefined();
+  });
+
+  it("graph query includes pageInfo", async () => {
+    const result = await query(`{
+      graph {
+        nodes { path name }
+        edges { from to type }
+        pageInfo { hasNextPage endCursor }
+      }
+    }`);
+    expect(result.errors).toBeUndefined();
+    expect(result.data!.graph.nodes.length).toBe(5);
+    expect(result.data!.graph.pageInfo.hasNextPage).toBe(false);
+  });
+
+  it("graph query with depth > 10 returns error", async () => {
+    const result = await query(`{
+      graph(depth: 11) {
+        nodes { path }
+      }
+    }`);
+    expect(result.errors).toBeDefined();
+    expect(result.errors![0].message).toContain("exceeds maximum allowed depth");
+  });
+
+  it("graph query respects first/after cursor pagination", async () => {
+    // Get first page with first=1
+    const page1 = await query(`{
+      graph(first: 1) {
+        nodes { path }
+        pageInfo { hasNextPage endCursor }
+      }
+    }`);
+    expect(page1.errors).toBeUndefined();
+    expect(page1.data!.graph.nodes.length).toBe(1);
+    expect(page1.data!.graph.pageInfo.hasNextPage).toBe(true);
+    const cursor = page1.data!.graph.pageInfo.endCursor;
+
+    // Get second page
+    const page2 = await query(`{
+      graph(first: 1, after: "${cursor}") {
+        nodes { path }
+        pageInfo { hasNextPage endCursor }
+      }
+    }`);
+    expect(page2.errors).toBeUndefined();
+    expect(page2.data!.graph.nodes.length).toBe(1);
+    // Pages should not overlap
+    expect(page2.data!.graph.nodes[0].path).not.toBe(page1.data!.graph.nodes[0].path);
+  });
+
+  it("graph with injected cycle does not cause infinite recursion", async () => {
+    const store = compile(root);
+
+    // Inject a back-edge cycle: /clients/acme -> /clients (parent)
+    const acmeNode = store.getNode("/clients/acme")!;
+    acmeNode.children = ["/clients"];
+
+    const schema = createSchema(store);
+    const result = await graphql({ schema, source: `{ graph { nodes { path } } }` });
+    expect(result.errors).toBeUndefined();
+    // Should still return nodes without stack overflow
+    expect(result.data!.graph.nodes.length).toBeGreaterThan(0);
   });
 });

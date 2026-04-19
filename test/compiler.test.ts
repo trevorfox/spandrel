@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { compile, recompileNode } from "../src/compiler/compiler.js";
+import { compile, recompileNode, MAX_FILE_SIZE_BYTES } from "../src/compiler/compiler.js";
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "spandrel-test-"));
@@ -527,5 +527,75 @@ describe("Compiler — Leaf .md Files", () => {
     await recompileNode(store, root, path.join(root, "acme.md"));
 
     expect(await store.hasNode("/acme")).toBe(false);
+  });
+});
+
+describe("Compiler — Safety Limits", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = createTempDir();
+  });
+
+  afterEach(() => {
+    rmrf(root);
+  });
+
+  it("skips leaf files exceeding MAX_FILE_SIZE_BYTES with a warning", () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+
+    const leafPath = path.join(root, "large.md");
+    fs.writeFileSync(leafPath, "---\nname: Large\ndescription: Big file\n---\n\nContent.\n");
+
+    // Monkey-patch statSync to simulate an oversized file
+    const origStatSync = fs.statSync.bind(fs);
+    (fs as unknown as Record<string, unknown>).statSync = (
+      p: fs.PathLike,
+      opts?: Parameters<typeof fs.statSync>[1]
+    ) => {
+      const stat = origStatSync(p, opts);
+      if (String(p) === leafPath) {
+        return { ...stat, size: MAX_FILE_SIZE_BYTES + 1 };
+      }
+      return stat;
+    };
+
+    try {
+      const store = compile(root);
+      expect(store.hasNode("/large")).toBe(false);
+      const warnings = store.getWarnings().filter((w) => w.type === "file_too_large");
+      expect(warnings.length).toBeGreaterThan(0);
+      expect(warnings[0].path).toBe("/large");
+    } finally {
+      (fs as unknown as Record<string, unknown>).statSync = origStatSync;
+    }
+  });
+
+  it("skips index.md files exceeding MAX_FILE_SIZE_BYTES with a warning", () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    writeIndex(path.join(root, "child"), { name: "Child", description: "Child" });
+
+    const indexPath = path.join(root, "child", "index.md");
+
+    const origStatSync = fs.statSync.bind(fs);
+    (fs as unknown as Record<string, unknown>).statSync = (
+      p: fs.PathLike,
+      opts?: Parameters<typeof fs.statSync>[1]
+    ) => {
+      const stat = origStatSync(p, opts);
+      if (String(p) === indexPath) {
+        return { ...stat, size: MAX_FILE_SIZE_BYTES + 1 };
+      }
+      return stat;
+    };
+
+    try {
+      const store = compile(root);
+      expect(store.hasNode("/child")).toBe(false);
+      const warnings = store.getWarnings().filter((w) => w.type === "file_too_large");
+      expect(warnings.length).toBeGreaterThan(0);
+    } finally {
+      (fs as unknown as Record<string, unknown>).statSync = origStatSync;
+    }
   });
 });

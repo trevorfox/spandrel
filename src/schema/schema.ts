@@ -11,6 +11,39 @@ import {
 import {
   GraphQLInputObjectType,
 } from "graphql";
+
+// Pagination constants
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+const MAX_GRAPH_DEPTH = 10;
+const QUERY_TIMEOUT_MS = 10_000;
+
+function encodeCursor(index: number): string {
+  return Buffer.from(`i:${index}`).toString("base64");
+}
+
+function decodeCursor(cursor: string): number {
+  try {
+    const decoded = Buffer.from(cursor, "base64").toString("utf-8");
+    const m = decoded.match(/^i:(\d+)$/);
+    return m ? parseInt(m[1], 10) : -1;
+  } catch {
+    return -1;
+  }
+}
+
+function paginateList<T>(
+  items: T[],
+  first?: number | null,
+  after?: string | null
+): { items: T[]; hasNextPage: boolean; endCursor: string | null } {
+  const pageSize = Math.min(first ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+  const startIndex = after != null ? decodeCursor(after) + 1 : 0;
+  const sliced = items.slice(startIndex, startIndex + pageSize);
+  const hasNextPage = startIndex + pageSize < items.length;
+  const endCursor = sliced.length > 0 ? encodeCursor(startIndex + sliced.length - 1) : null;
+  return { items: sliced, hasNextPage, endCursor };
+}
 import nodePath from "node:path";
 import type { SpandrelNode, HistoryEntry } from "../compiler/types.js";
 import type { GraphStore } from "../storage/graph-store.js";
@@ -171,11 +204,36 @@ const NavigateResultType = new GraphQLObjectType({
   },
 });
 
+const PageInfoType = new GraphQLObjectType({
+  name: "PageInfo",
+  fields: {
+    hasNextPage: { type: new GraphQLNonNull(GraphQLBoolean) },
+    endCursor: { type: GraphQLString },
+  },
+});
+
+const NodeConnectionType = new GraphQLObjectType({
+  name: "NodeConnection",
+  fields: {
+    nodes: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(NodeSummaryType))) },
+    pageInfo: { type: new GraphQLNonNull(PageInfoType) },
+  },
+});
+
+const ReferenceConnectionType = new GraphQLObjectType({
+  name: "ReferenceConnection",
+  fields: {
+    nodes: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(RichReferenceType))) },
+    pageInfo: { type: new GraphQLNonNull(PageInfoType) },
+  },
+});
+
 const GraphResultType = new GraphQLObjectType({
   name: "GraphResult",
   fields: {
     nodes: { type: new GraphQLList(new GraphQLNonNull(NodeSummaryType)) },
     edges: { type: new GraphQLList(new GraphQLNonNull(EdgeObjectType)) },
+    pageInfo: { type: new GraphQLNonNull(PageInfoType) },
   },
 });
 
@@ -333,30 +391,42 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
         },
 
         children: {
-          type: new GraphQLList(new GraphQLNonNull(NodeSummaryType)),
+          type: NodeConnectionType,
           args: {
             path: { type: new GraphQLNonNull(GraphQLString) },
             depth: { type: GraphQLInt },
+            first: { type: GraphQLInt },
+            after: { type: GraphQLString },
           },
-          resolve: async (_root, args: { path: string; depth?: number }) => {
+          resolve: async (_root, args: { path: string; depth?: number; first?: number; after?: string }) => {
             const level = checkAccess(args.path);
-            if (!accessLevelAtLeast(level, "description")) return [];
-            const children = await resolveChildren(store, args.path, args.depth ?? 1);
-            return filterAccessible(children);
+            if (!accessLevelAtLeast(level, "description")) {
+              return { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } };
+            }
+            const allChildren = await resolveChildren(store, args.path, args.depth ?? 1);
+            const accessible = await filterAccessible(allChildren);
+            const { items, hasNextPage, endCursor } = paginateList(accessible, args.first, args.after);
+            return { nodes: items, pageInfo: { hasNextPage, endCursor } };
           },
         },
 
         references: {
-          type: new GraphQLList(new GraphQLNonNull(RichReferenceType)),
+          type: ReferenceConnectionType,
           args: {
             path: { type: new GraphQLNonNull(GraphQLString) },
             direction: { type: DirectionEnum },
+            first: { type: GraphQLInt },
+            after: { type: GraphQLString },
           },
-          resolve: async (_root, args: { path: string; direction?: string }) => {
+          resolve: async (_root, args: { path: string; direction?: string; first?: number; after?: string }) => {
             const level = checkAccess(args.path);
-            if (!accessLevelAtLeast(level, "description")) return [];
-            const refs = await resolveReferences(store, args.path, args.direction ?? "outgoing");
-            return filterAccessible(refs);
+            if (!accessLevelAtLeast(level, "description")) {
+              return { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } };
+            }
+            const allRefs = await resolveReferences(store, args.path, args.direction ?? "outgoing");
+            const accessible = await filterAccessible(allRefs);
+            const { items, hasNextPage, endCursor } = paginateList(accessible, args.first, args.after);
+            return { nodes: items, pageInfo: { hasNextPage, endCursor } };
           },
         },
 
@@ -394,22 +464,33 @@ export function createSchema(store: GraphStore, ctx?: SchemaContext): GraphQLSch
           args: {
             path: { type: GraphQLString },
             depth: { type: GraphQLInt },
+            first: { type: GraphQLInt },
+            after: { type: GraphQLString },
           },
           resolve: async (
             _root,
-            args: { path?: string; depth?: number }
+            args: { path?: string; depth?: number; first?: number; after?: string }
           ) => {
-            const result = await resolveGraph(
-              store,
-              args.path ?? "/",
-              args.depth ?? 999
-            );
+            const requestedDepth = args.depth ?? MAX_GRAPH_DEPTH;
+            if (requestedDepth > MAX_GRAPH_DEPTH) {
+              throw new Error(
+                `Depth ${requestedDepth} exceeds maximum allowed depth of ${MAX_GRAPH_DEPTH}`
+              );
+            }
+            const result = await resolveGraph(store, args.path ?? "/", requestedDepth);
             result.nodes = await filterAccessible(result.nodes);
             const visiblePaths = new Set(result.nodes.map((n) => n.path));
             result.edges = result.edges.filter(
               (e) => visiblePaths.has(e.from) && visiblePaths.has(e.to)
             );
-            return result;
+            const { items, hasNextPage, endCursor } = paginateList(
+              result.nodes, args.first, args.after
+            );
+            return {
+              nodes: items,
+              edges: result.edges,
+              pageInfo: { hasNextPage, endCursor },
+            };
           },
         },
 
@@ -960,12 +1041,14 @@ async function resolveGraph(
   rootPath: string,
   depth: number
 ) {
+  const deadline = Date.now() + QUERY_TIMEOUT_MS;
   const collectedNodes = new Set<string>();
   const toVisit: Array<{ path: string; d: number }> = [{ path: rootPath, d: depth }];
 
   while (toVisit.length > 0) {
+    if (Date.now() > deadline) break; // query timeout guard
     const { path: p, d } = toVisit.pop()!;
-    if (collectedNodes.has(p)) continue;
+    if (collectedNodes.has(p)) continue; // cycle detection
     collectedNodes.add(p);
     if (d <= 0) continue;
     const node = await store.getNode(p);

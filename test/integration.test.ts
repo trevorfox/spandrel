@@ -344,12 +344,13 @@ describe("E2E: Self-contained knowledge graph", () => {
         schema,
         source: `{
           references(path: "/architecture/graphql", direction: both) {
-            path name direction
+            nodes { path name direction }
+            pageInfo { hasNextPage endCursor }
           }
         }`,
       });
       expect(result.errors).toBeUndefined();
-      const refs = result.data!.references;
+      const refs = result.data!.references.nodes;
       expect(refs.some((r: { direction: string }) => r.direction === "outgoing")).toBe(true);
       expect(refs.some((r: { direction: string }) => r.direction === "incoming")).toBe(true);
     });

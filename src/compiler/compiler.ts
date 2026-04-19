@@ -12,6 +12,12 @@ import { InMemoryGraphStore } from "../storage/in-memory-graph-store.js";
 
 const INLINE_LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/g;
 
+/** Max file size in bytes — files larger than this are skipped with a warning */
+export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+
+/** Max compile time per node in ms — nodes that take longer are skipped with a warning */
+export const COMPILE_TIMEOUT_MS = 30_000; // 30 seconds
+
 /** Markdown files that should never become leaf nodes */
 export const EXCLUDED_LEAF_MD_FILES = new Set([
   "design.md",
@@ -49,15 +55,16 @@ export async function recompileNode(
   );
 
   // Re-parse if file still exists
+  const compileWarnings: ValidationWarning[] = [];
   if (fs.existsSync(filePath)) {
     const basename = path.basename(filePath);
     let node: SpandrelNode | null = null;
 
     if (basename === "index.md") {
       const dir = path.dirname(filePath);
-      node = parseNode(rootDir, dir, filePath);
+      node = parseNode(rootDir, dir, filePath, compileWarnings);
     } else if (basename.endsWith(".md") && !EXCLUDED_LEAF_MD_FILES.has(basename)) {
-      node = parseLeafNode(rootDir, filePath);
+      node = parseLeafNode(rootDir, filePath, compileWarnings);
     }
 
     if (node) {
@@ -79,8 +86,8 @@ export async function recompileNode(
   // Rebuild children lists
   await rebuildChildren(store);
 
-  // Re-validate
-  const warnings: ValidationWarning[] = [];
+  // Re-validate (merge compile warnings with validation warnings)
+  const warnings: ValidationWarning[] = [...compileWarnings];
   const allNodes = new Map<string, SpandrelNode>();
   for (const node of await store.getAllNodes()) allNodes.set(node.path, node);
   validate(allNodes, await store.getEdges(), warnings);
@@ -111,9 +118,11 @@ function walkTree(
   const nodePath = dirToNodePath(rootDir, currentDir);
 
   if (indexPath) {
-    const node = parseNode(rootDir, currentDir, indexPath);
-    nodes.set(node.path, node);
-    extractEdges(node, edges);
+    const node = parseNode(rootDir, currentDir, indexPath, warnings);
+    if (node) {
+      nodes.set(node.path, node);
+      extractEdges(node, edges);
+    }
   } else if (nodePath !== "/") {
     // Directory without index.md — create a minimal node
     const children = getContentSubdirs(currentDir);
@@ -161,7 +170,8 @@ function walkTree(
   // Process leaf .md files in this directory
   const leafFiles = getLeafMdFiles(currentDir);
   for (const leafFile of leafFiles) {
-    const leafNode = parseLeafNode(rootDir, leafFile);
+    const leafNode = parseLeafNode(rootDir, leafFile, warnings);
+    if (!leafNode) continue;
     nodes.set(leafNode.path, leafNode);
     extractEdges(leafNode, edges);
 
@@ -236,12 +246,40 @@ function leafFileToNodePath(rootDir: string, filePath: string): string {
   return "/" + withoutExt.split(path.sep).join("/");
 }
 
-function parseLeafNode(rootDir: string, filePath: string): SpandrelNode {
+function parseLeafNode(
+  rootDir: string,
+  filePath: string,
+  warnings?: ValidationWarning[]
+): SpandrelNode | null {
+  const nodePath = leafFileToNodePath(rootDir, filePath);
+
+  const stat = fs.statSync(filePath);
+  if (stat.size > MAX_FILE_SIZE_BYTES) {
+    const msg = `Skipping ${filePath}: file size ${stat.size} bytes exceeds ${MAX_FILE_SIZE_BYTES} byte limit`;
+    if (warnings) {
+      warnings.push({ path: nodePath, type: "file_too_large", message: msg });
+    } else {
+      console.warn(`[spandrel] ${msg}`);
+    }
+    return null;
+  }
+
+  const startTime = Date.now();
   const raw = fs.readFileSync(filePath, "utf-8");
   const { data, content } = matter(raw);
-  const nodePath = leafFileToNodePath(rootDir, filePath);
-  const stem = path.basename(filePath, ".md");
+  const elapsed = Date.now() - startTime;
 
+  if (elapsed > COMPILE_TIMEOUT_MS) {
+    const msg = `Skipping ${filePath}: compile took ${elapsed}ms, exceeded ${COMPILE_TIMEOUT_MS}ms limit`;
+    if (warnings) {
+      warnings.push({ path: nodePath, type: "compile_timeout", message: msg });
+    } else {
+      console.warn(`[spandrel] ${msg}`);
+    }
+    return null;
+  }
+
+  const stem = path.basename(filePath, ".md");
   return {
     path: nodePath,
     name: (data.name as string) || stem,
@@ -274,13 +312,38 @@ function parentPath(nodePath: string): string | null {
 function parseNode(
   rootDir: string,
   dir: string,
-  indexPath: string
-): SpandrelNode {
+  indexPath: string,
+  warnings?: ValidationWarning[]
+): SpandrelNode | null {
+  const nodePath = dirToNodePath(rootDir, dir);
+
+  const stat = fs.statSync(indexPath);
+  if (stat.size > MAX_FILE_SIZE_BYTES) {
+    const msg = `Skipping ${indexPath}: file size ${stat.size} bytes exceeds ${MAX_FILE_SIZE_BYTES} byte limit`;
+    if (warnings) {
+      warnings.push({ path: nodePath, type: "file_too_large", message: msg });
+    } else {
+      console.warn(`[spandrel] ${msg}`);
+    }
+    return null;
+  }
+
+  const startTime = Date.now();
   const raw = fs.readFileSync(indexPath, "utf-8");
   const { data, content } = matter(raw);
-  const nodePath = dirToNodePath(rootDir, dir);
-  const subdirs = getContentSubdirs(dir);
+  const elapsed = Date.now() - startTime;
 
+  if (elapsed > COMPILE_TIMEOUT_MS) {
+    const msg = `Skipping ${indexPath}: compile took ${elapsed}ms, exceeded ${COMPILE_TIMEOUT_MS}ms limit`;
+    if (warnings) {
+      warnings.push({ path: nodePath, type: "compile_timeout", message: msg });
+    } else {
+      console.warn(`[spandrel] ${msg}`);
+    }
+    return null;
+  }
+
+  const subdirs = getContentSubdirs(dir);
   return {
     path: nodePath,
     name: (data.name as string) || path.basename(dir),
