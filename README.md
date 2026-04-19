@@ -143,7 +143,7 @@ Markdown files → Compiler → Storage (in-memory, Postgres, etc.) → GraphQL
                                                           MCP        Web UI
 ```
 
-The compiler walks the file tree, parses frontmatter, builds nodes and edges, validates. The storage layer is backend-agnostic — in-memory for local dev, Postgres (Supabase) for production. All clients go through GraphQL, which enforces access control. MCP and web UIs are thin clients of the GraphQL surface.
+The compiler walks the file tree, parses frontmatter, builds nodes and edges, validates. The storage layer is backend-agnostic — in-memory for local dev, a Postgres-compatible backend for production. All queries go through GraphQL, which enforces access control. MCP and web UIs are thin consumers of the GraphQL surface.
 
 Each subsystem has a `design.md` companion file in `src/` defining the implementation-agnostic spec. See `docs/architecture/` or explore via MCP for the [full architecture](docs/architecture/index.md).
 

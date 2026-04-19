@@ -71,7 +71,7 @@ This keeps the markdown files as the source of truth. The storage layer is alway
 
 For local development, the MCP server runs over stdio (piped from Claude Desktop or Claude Code). The GraphQL server runs as a local HTTP server.
 
-For production, both run as serverless functions on Vercel:
+For production, both run as serverless functions (or long-running HTTP handlers) on whatever runtime the operator chooses:
 - GraphQL endpoint: standard HTTP
 - MCP endpoint: streamable HTTP (MCP over HTTP transport)
 

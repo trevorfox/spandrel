@@ -26,7 +26,7 @@ This is the default for `spandrel dev` and is appropriate for single-user local 
 
 The design supports but does not prescribe:
 
-- **Postgres** (via Supabase) — for hosted production. Nodes as rows, frontmatter as JSONB, edges as a join table. Enables pgvector for embeddings and full-text search via Postgres. Appropriate for multi-user deployments with authentication.
+- **Postgres** — for persistent production deployments. Nodes as rows, frontmatter as JSONB, edges as a join table. Enables pgvector for embeddings and full-text search via Postgres. Appropriate for deployments that need concurrent reads and authenticated access. Works with any Postgres host (managed services such as Supabase, Neon, or RDS; or self-hosted).
 - **SQLite** — for local persistence and ingestion. Single file, FTS5 for search, sqlite-vec for embeddings. Appropriate for power users who want persistence between restarts and the ingestion pipeline's scratch database.
 - **Flat files** (JSON) — for serverless deployment. The compiler outputs a static JSON artifact that the GraphQL server hydrates into memory on cold start. No runtime database dependency. Appropriate for read-heavy deployments on platforms without persistent storage.
 
