@@ -420,6 +420,19 @@ async function rebuildChildren(store: GraphStore): Promise<void> {
   }
 }
 
+const LINK_TYPE_PATH_PREFIX = "/linkTypes/";
+
+function collectDeclaredLinkTypes(nodes: Map<string, SpandrelNode>): Set<string> {
+  const result = new Set<string>();
+  for (const node of nodes.values()) {
+    if (!node.path.startsWith(LINK_TYPE_PATH_PREFIX)) continue;
+    const rest = node.path.slice(LINK_TYPE_PATH_PREFIX.length);
+    if (rest.length === 0 || rest.includes("/")) continue;
+    result.add(rest);
+  }
+  return result;
+}
+
 function validate(
   nodes: Map<string, SpandrelNode>,
   edges: SpandrelEdge[],
@@ -453,6 +466,26 @@ function validate(
           message: `Node ${edge.from} links to ${edge.to} which does not exist`,
         });
       }
+    }
+  }
+
+  // Undeclared linkType warnings — only active once the graph has opted into
+  // a typed vocabulary by declaring at least one /linkTypes/{stem}.md.
+  const declaredLinkTypes = collectDeclaredLinkTypes(nodes);
+  if (declaredLinkTypes.size > 0) {
+    const seen = new Set<string>();
+    for (const edge of edges) {
+      if (edge.type !== "link") continue;
+      if (!edge.linkType) continue;
+      if (declaredLinkTypes.has(edge.linkType)) continue;
+      const key = `${edge.from}\u0000${edge.linkType}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      warnings.push({
+        path: edge.from,
+        type: "undeclared_link_type",
+        message: `Link edge uses undeclared linkType "${edge.linkType}" — add /linkTypes/${edge.linkType}.md to document the relationship.`,
+      });
     }
   }
 

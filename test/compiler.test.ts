@@ -269,6 +269,125 @@ describe("Compiler — Validation", () => {
   });
 });
 
+describe("Compiler — undeclared_link_type warnings", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = createTempDir();
+  });
+
+  afterEach(() => {
+    rmrf(root);
+  });
+
+  function writeLinkType(stem: string, name: string, description: string) {
+    fs.mkdirSync(path.join(root, "linkTypes"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "linkTypes", `${stem}.md`),
+      `---\nname: ${name}\ndescription: ${description}\n---\n`
+    );
+  }
+
+  it("warns when a frontmatter link uses a linkType not declared in /linkTypes/", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
+    writeLinkType("owns", "owns", "Operational control.");
+    writeLinkType("depends-on", "depends-on", "Runtime dependency.");
+    writeIndex(path.join(root, "a"), {
+      name: "A",
+      description: "A",
+      links: [{ to: "/b", type: "foo" }],
+    });
+    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
+
+    const store = await compile(root);
+    const undeclared = (await store.getWarnings()).filter(
+      (w) => w.type === "undeclared_link_type"
+    );
+    expect(undeclared).toHaveLength(1);
+    expect(undeclared[0].path).toBe("/a");
+    expect(undeclared[0].message).toContain('"foo"');
+    expect(undeclared[0].message).toContain("/linkTypes/foo.md");
+  });
+
+  it("emits zero undeclared_link_type warnings when the graph has no /linkTypes/ collection", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    writeIndex(path.join(root, "a"), {
+      name: "A",
+      description: "A",
+      links: [{ to: "/b", type: "foo" }, { to: "/b", type: "bar" }],
+    });
+    writeIndex(path.join(root, "b"), { name: "B", description: "B" }, "See [B-prime](/b-prime).");
+    writeIndex(path.join(root, "b-prime"), { name: "B-prime", description: "B-prime" });
+
+    const store = await compile(root);
+    const undeclared = (await store.getWarnings()).filter(
+      (w) => w.type === "undeclared_link_type"
+    );
+    expect(undeclared).toHaveLength(0);
+  });
+
+  it("does not warn on inline [label](/path) mentions when /linkTypes/mentions.md is declared", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
+    writeLinkType("mentions", "mentions", "Incidental prose reference.");
+    writeIndex(
+      path.join(root, "a"),
+      { name: "A", description: "A" },
+      "See [B](/b) for details."
+    );
+    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
+
+    const store = await compile(root);
+    const undeclared = (await store.getWarnings()).filter(
+      (w) => w.type === "undeclared_link_type"
+    );
+    expect(undeclared).toHaveLength(0);
+  });
+
+  it("warns on implicit 'mentions' edges when other linkTypes are declared but mentions is not", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
+    writeLinkType("owns", "owns", "Operational control.");
+    writeIndex(
+      path.join(root, "a"),
+      { name: "A", description: "A" },
+      "See [B](/b) for details."
+    );
+    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
+
+    const store = await compile(root);
+    const undeclared = (await store.getWarnings()).filter(
+      (w) => w.type === "undeclared_link_type"
+    );
+    expect(undeclared).toHaveLength(1);
+    expect(undeclared[0].path).toBe("/a");
+    expect(undeclared[0].message).toContain('"mentions"');
+  });
+
+  it("dedupes multiple edges from the same source using the same undeclared type", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
+    writeLinkType("owns", "owns", "Operational control.");
+    writeIndex(path.join(root, "a"), {
+      name: "A",
+      description: "A",
+      links: [
+        { to: "/b", type: "foo" },
+        { to: "/c", type: "foo" },
+      ],
+    });
+    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
+    writeIndex(path.join(root, "c"), { name: "C", description: "C" });
+
+    const store = await compile(root);
+    const undeclared = (await store.getWarnings()).filter(
+      (w) => w.type === "undeclared_link_type" && w.path === "/a"
+    );
+    expect(undeclared).toHaveLength(1);
+  });
+});
+
 describe("Compiler — Graph Structure", () => {
   let root: string;
 

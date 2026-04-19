@@ -23,7 +23,7 @@ export interface SpandrelEdge {
 
 export interface ValidationWarning {
   path: string;
-  type: "missing_index" | "missing_name" | "missing_description" | "broken_link" | "unlisted_child" | "file_too_large" | "compile_timeout";
+  type: "missing_index" | "missing_name" | "missing_description" | "broken_link" | "unlisted_child" | "file_too_large" | "compile_timeout" | "undeclared_link_type";
   message: string;
 }
 

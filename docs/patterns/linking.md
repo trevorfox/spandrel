@@ -72,6 +72,8 @@ Undeclared linkTypes keep working; `linkTypeDescription` is simply `null` on tho
 
 The compiler already emits `linkType: "mentions"` for inline-markdown links (see below). Adding `/linkTypes/mentions.md` automatically gives those edges a description — no other changes required.
 
+Once you declare at least one linkType, the compiler emits `undeclared_link_type` warnings for edges that reference a type without a matching `/linkTypes/{stem}.md`. Declaring zero linkTypes keeps soft typing — warnings only apply once you've opted into the vocabulary.
+
 ## Backlinks
 
 The compiler generates backlinks automatically. If `/clients/acme` links to `/people/jane`, then querying Jane's node shows Acme as a backlink. You don't need to declare both directions.
