@@ -412,8 +412,58 @@
   display: block;
 }
 
+.graph-pane svg {
+  /* Stop the browser treating two-finger/trackpad gestures on the graph as
+   * scroll — that was eating the pointermove sequence after the first few
+   * pixels and aborting the drag. */
+  touch-action: none;
+}
+
 .graph-pane .node {
-  cursor: pointer;
+  cursor: grab;
+}
+
+.graph-pane .node:active {
+  cursor: grabbing;
+}
+
+/* Floating tooltip shown on node hover. Custom HTML rather than SVG
+ * <title> because native SVG tooltip rendering is inconsistent across
+ * browsers — some delay it a full second, some skip it when a handler
+ * is attached to the parent group. */
+.graph-pane .node-tooltip {
+  position: absolute;
+  pointer-events: none;
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  letter-spacing: var(--ls-smcaps);
+  text-transform: uppercase;
+  color: var(--fg);
+  background: var(--bg-elevated);
+  border: var(--rule) solid var(--rule-color);
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 80ms ease;
+  transform: translate(-50%, -100%);
+}
+
+.graph-pane .node-tooltip.visible {
+  opacity: 1;
+}
+
+.graph-pane .node-tooltip .desc {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.9em;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--fg-muted);
+  font-family: var(--font-serif);
+  max-width: 18rem;
+  white-space: normal;
 }
 
 .graph-pane .node circle {
@@ -516,6 +566,15 @@
 .graph-pane[data-highlight-collection] .link {
   opacity: 0.1;
   transition: opacity 120ms ease;
+}
+
+.graph-pane .empty[hidden] {
+  /* The `hidden` attribute implies `display: none`, but `.graph-pane .empty`
+   * below has higher specificity than `[hidden]`, so without this rule the
+   * overlay stays in the layout — and since it's absolutely positioned
+   * covering the whole pane, it silently intercepts every pointer event
+   * (drag, hover, click) intended for the graph nodes behind it. */
+  display: none;
 }
 
 .graph-pane .empty {

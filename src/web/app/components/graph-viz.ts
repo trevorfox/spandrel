@@ -50,10 +50,11 @@ const COLLECTION_PALETTE = [
 ];
 
 export function mountGraphViz(root: HTMLElement): void {
-  root.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Knowledge graph"></svg><div class="empty" hidden>No graph loaded.</div><div class="legend" hidden></div>`;
+  root.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Knowledge graph"></svg><div class="empty" hidden>No graph loaded.</div><div class="legend" hidden></div><div class="node-tooltip" aria-hidden="true"></div>`;
   const svgEl = root.querySelector("svg") as SVGSVGElement;
   const emptyEl = root.querySelector(".empty") as HTMLElement;
   const legendEl = root.querySelector(".legend") as HTMLElement;
+  const tooltipEl = root.querySelector(".node-tooltip") as HTMLElement;
 
   const svg = select(svgEl);
   const gLinks = svg.append("g").attr("class", "links");
@@ -70,6 +71,29 @@ export function mountGraphViz(root: HTMLElement): void {
   // up) can be swallowed before it triggers navigation.
   const setJustDragged = (v: boolean): void => {
     justDragged = v;
+  };
+
+  // ── tooltip ───────────────────────────────────────────────────────────
+  const rootRect = () => root.getBoundingClientRect();
+  const showTooltip = (d: VizNode, event: MouseEvent) => {
+    if (justDragged) return;
+    const descNode = derived$.get()?.nodeByPath.get(d.id);
+    const desc = descNode?.description ?? "";
+    tooltipEl.innerHTML = `${escapeHtml(d.name || d.id)}${
+      desc ? `<span class="desc">${escapeHtml(desc)}</span>` : ""
+    }`;
+    positionTooltip(event);
+    tooltipEl.classList.add("visible");
+  };
+  const positionTooltip = (event: MouseEvent) => {
+    const r = rootRect();
+    const x = event.clientX - r.left;
+    const y = event.clientY - r.top - 12;
+    tooltipEl.style.left = `${x}px`;
+    tooltipEl.style.top = `${y}px`;
+  };
+  const hideTooltip = () => {
+    tooltipEl.classList.remove("visible");
   };
 
   const rebuild = (graph: Graph | null) => {
@@ -132,11 +156,18 @@ export function mountGraphViz(root: HTMLElement): void {
         const g = enter.append("g").attr("class", "node");
         g.append("circle");
         g.append("text").attr("y", 20);
-        // SVG <title> gives every node a native browser tooltip on hover —
-        // including the smaller dots that don't get a permanent text label.
-        // Accessible (screen readers read it), no custom tooltip UI, and
-        // cheaper than layering an HTML overlay over the SVG.
-        g.append("title");
+        // Custom HTML tooltip (not SVG <title>) — SVG title rendering is
+        // inconsistent across browsers; some delay a full second, others
+        // skip entirely when the parent has a click handler.
+        g.on("mouseenter", (event: MouseEvent, d) => {
+          showTooltip(d, event);
+        });
+        g.on("mousemove", (event: MouseEvent) => {
+          positionTooltip(event);
+        });
+        g.on("mouseleave", () => {
+          hideTooltip();
+        });
         g.on("click", (event: MouseEvent, d) => {
           // Drag-end fires a click on browsers that don't natively suppress
           // it after a drag. The `justDragged` flag is raised on drag move
@@ -166,10 +197,6 @@ export function mountGraphViz(root: HTMLElement): void {
     nodeSel
       .select<SVGTextElement>("text")
       .text((d) => (visibleLabel(d) ? d.name : ""));
-
-    nodeSel
-      .select<SVGTitleElement>("title")
-      .text((d) => d.name || d.id);
 
     // Re-init simulation.
     if (simulation) simulation.stop();
