@@ -33,3 +33,29 @@ Ask: "From how many different parts of the tree would someone link to this Thing
 - **Deep nesting to show relationships.** If `/clients/acme/projects/alpha/people/jane/` exists because Jane works on Alpha for Acme, that's three relationships encoded as hierarchy. Use [links](/content-model/links) instead: Jane lives in `/people/jane/` and has links to Acme and Alpha.
 
 - **Flat dumping.** Putting everything at the root defeats [progressive disclosure](/patterns/progressive-disclosure). Group Things that belong together.
+
+## Navigability (`kind: document` / `navigable: false`)
+
+Some Things belong in the graph but shouldn't clutter navigation — reference docs, transcripts, ambient context that's valuable when retrieved but noisy when browsed. A pair of frontmatter fields marks these:
+
+```yaml
+---
+name: Acme QBR — March 14, 2025
+description: Quarterly business review transcript
+kind: document       # default: node
+navigable: false     # default: true
+---
+```
+
+- **`kind: document`** signals this Thing is reference material, not part of the authored navigation structure. Defaults to `node`.
+- **`navigable: false`** excludes the Thing from default `get_node` child listings and from collection `index` enumerations. Full-text search still reaches it; traversal still follows edges to and from it; access control still applies.
+
+Use `navigable: false` when:
+
+- The Thing is a transcript, raw export, or research artifact cited by other nodes but not meant to be browsed
+- A collection would otherwise bury 40 cited documents under 4 authored nodes
+- You want the content searchable and linkable, but not listed
+
+Curated graph nodes (clients, decisions, people, features) stay `navigable: true` — they're what the graph is for.
+
+> **Status:** These fields are documented as a spec. Compiler support for honoring them is tracked in `ROADMAP.md` under the onboarding-redesign deferred items. Declaring them today is harmless (the compiler ignores unknown fields) and forward-compatible.

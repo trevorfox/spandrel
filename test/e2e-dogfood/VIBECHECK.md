@@ -22,9 +22,9 @@ claude --add-dir /tmp/spandrel-vibecheck
 
 Then tell it:
 
-> Read BOOTSTRAP.md and follow it to build a knowledge graph about [your topic]. Put it in /tmp/spandrel-vibecheck.
+> Read ONBOARDING.md and follow it to build a knowledge graph about [your topic]. Put it in /tmp/spandrel-vibecheck.
 
-Pick a topic you actually know — your team, a project, a hobby. The bootstrap should ask you questions, propose structure, and build incrementally. Pay attention to:
+Pick a topic you actually know — your team, a project, a hobby. Onboarding should ask you questions, propose structure, and build incrementally. Pay attention to:
 
 - **Does it ask before building?** It should learn your domain before proposing collections.
 - **Does the structure match your mental model?** The collections it creates should feel like the natural categories in your head, not a taxonomy imposed from outside.
@@ -104,7 +104,7 @@ This isn't pass/fail. You're calibrating:
 
 | Signal | Good | Bad |
 |--------|------|-----|
-| Bootstrap asks questions first | Learns domain, then proposes | Dumps a template structure |
+| Onboarding asks questions first | Learns domain, then proposes | Dumps a template structure |
 | Structure matches your head | "Yes, that's how I think about this" | "I wouldn't organize it that way" |
 | Search finds things | Top results are what you meant | Relevant things buried or missing |
 | Agent navigates without help | Follows links, finds answers | Gets lost, reads everything |

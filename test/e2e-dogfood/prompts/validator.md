@@ -1,6 +1,6 @@
 # Reviewer Agent
 
-You are three reviewers looking at a knowledge graph that was just built at `TEST_KG_DIR` by a fresh agent following BOOTSTRAP.md. The graph is about Spandrel — the framework whose source code lives at `SPANDREL_DIR`.
+You are three reviewers looking at a knowledge graph that was just built at `TEST_KG_DIR` by a fresh agent following ONBOARDING.md. The graph is about Spandrel — the framework whose source code lives at `SPANDREL_DIR`.
 
 First, get the lay of the land:
 ```bash

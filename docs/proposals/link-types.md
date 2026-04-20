@@ -113,7 +113,7 @@ test/compiler.test.ts              — compile finds /linkTypes/* (new case)
 test/schema.test.ts                — linkTypes query + linkTypeDescription on edges (new cases)
 test/storage/conformance.ts        — add conformance check for getLinkTypes()
 docs/patterns/linking.md           — document /linkTypes/ pattern
-BOOTSTRAP.md                        — Level 4: suggest declaring /linkTypes/ when user picks typed relationships
+ONBOARDING.md                       — Level 4: suggest declaring /linkTypes/ when user picks typed relationships
 ```
 
 ## Test requirements
@@ -132,7 +132,7 @@ BOOTSTRAP.md                        — Level 4: suggest declaring /linkTypes/ w
 - `npm test` — all existing 241 tests still pass, plus new tests added above
 - `npx tsc --noEmit` clean
 - `docs/patterns/linking.md` updated with the `/linkTypes/` pattern
-- `BOOTSTRAP.md` Level 4 gains a short paragraph nudging users to declare link types in `/linkTypes/` when their graph relies on typed relationships
+- `ONBOARDING.md` Level 4 gains a short paragraph nudging users to declare link types in `/linkTypes/` when their graph relies on typed relationships
 - A single commit "Typed link vocabulary: /linkTypes/ collection with navigable descriptions"
 
 ## Out of scope (explicitly)

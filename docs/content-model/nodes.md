@@ -32,6 +32,26 @@ description: One-line summary — enough to decide whether to read further
 
 Optional frontmatter includes `links`, `tags`, `author`, and any domain-specific fields.
 
+## Node vs. document (spec addition)
+
+Two optional frontmatter fields distinguish curated graph content from reference material that belongs in the graph but shouldn't clutter navigation:
+
+- **`kind`** — either `node` (default) or `document`. A `document` is reference material: a transcript, a research artifact, an ambient doc cited from curated nodes.
+- **`navigable`** — boolean, default `true`. When `false`, the Thing is excluded from default `get_node` child listings and collection index enumerations. It's still searchable, still linkable, still access-controlled.
+
+```yaml
+---
+name: Acme QBR — March 14, 2025
+description: Quarterly business review transcript
+kind: document
+navigable: false
+---
+```
+
+> **Status:** The fields are a spec. Compiler support is tracked in `ROADMAP.md` under onboarding-redesign deferred items. Declaring them today is harmless — the compiler ignores unknown fields — and forward-compatible with the eventual implementation.
+
+See [placement](/patterns/placement) for when to use `navigable: false`.
+
 ## What's not a node
 
 Files prefixed with `_` are system directories (e.g., `_access/`). Companion files (`design.md`, `SKILL.md`, `AGENT.md`, `README.md`) are not compiled as nodes — they travel with the node they describe.
