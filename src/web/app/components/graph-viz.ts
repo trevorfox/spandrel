@@ -63,6 +63,14 @@ export function mountGraphViz(root: HTMLElement): void {
   let nodes: VizNode[] = [];
   let links: VizLink[] = [];
   let collectionColors = new Map<string, string>();
+  let justDragged = false;
+
+  // Raised on every drag tick; cleared a tick after drag ends so the
+  // follow-up click event (fired synchronously by the browser after mouse-
+  // up) can be swallowed before it triggers navigation.
+  const setJustDragged = (v: boolean): void => {
+    justDragged = v;
+  };
 
   const rebuild = (graph: Graph | null) => {
     if (!graph || graph.nodes.length === 0) {
@@ -129,13 +137,22 @@ export function mountGraphViz(root: HTMLElement): void {
         // Accessible (screen readers read it), no custom tooltip UI, and
         // cheaper than layering an HTML overlay over the SVG.
         g.append("title");
-        g.on("click", (_event, d) => {
+        g.on("click", (event: MouseEvent, d) => {
+          // Drag-end fires a click on browsers that don't natively suppress
+          // it after a drag. The `justDragged` flag is raised on drag move
+          // and cleared on the next tick — block the click if we just
+          // finished dragging.
+          if (justDragged) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
           // Uniform in both modes: pathToUrl returns a hash fragment in
           // SPA mode (sets hash, fires hashchange) and a real URL in
           // static mode (full navigation to the prerendered page).
           window.location.assign(pathToUrl(d.id));
         });
-        g.call(attachDrag(() => simulation));
+        g.call(attachDrag(() => simulation, setJustDragged));
         return g;
       });
 
@@ -276,10 +293,16 @@ function renderLegend(
   el.onmouseleave = () => onHover(null);
 }
 
-function attachDrag(getSim: () => Simulation<VizNode, VizLink> | null) {
+function attachDrag(
+  getSim: () => Simulation<VizNode, VizLink> | null,
+  setJustDragged: (v: boolean) => void,
+) {
   type D3Event = D3DragEvent<SVGGElement, VizNode, VizNode>;
+  let moved = false;
   return drag<SVGGElement, VizNode>()
+    .clickDistance(5)
     .on("start", function (event: D3Event, d: VizNode) {
+      moved = false;
       const sim = getSim();
       if (!sim) return;
       if (!event.active) sim.alphaTarget(0.2).restart();
@@ -287,6 +310,7 @@ function attachDrag(getSim: () => Simulation<VizNode, VizLink> | null) {
       d.fy = d.y;
     })
     .on("drag", function (event: D3Event, d: VizNode) {
+      moved = true;
       d.fx = event.x;
       d.fy = event.y;
     })
@@ -296,6 +320,12 @@ function attachDrag(getSim: () => Simulation<VizNode, VizLink> | null) {
       if (!event.active) sim.alphaTarget(0);
       d.fx = null;
       d.fy = null;
+      if (moved) {
+        setJustDragged(true);
+        // Clear on the next event-loop tick so the synchronous click
+        // fired by the browser after mouseup sees the flag.
+        setTimeout(() => setJustDragged(false), 0);
+      }
     });
 }
 
