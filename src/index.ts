@@ -17,6 +17,10 @@ export type {
 export type { GraphStore, EdgeFilter } from "./storage/graph-store.js";
 export { InMemoryGraphStore } from "./storage/in-memory-graph-store.js";
 
+// Conformance kit — for third-party GraphStore implementations to validate
+// themselves against the interface contract.
+export { runConformanceTests } from "./storage/conformance.js";
+
 // Access control
 export {
   loadAccessConfig,

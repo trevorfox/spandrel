@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import type { GraphStore } from "../../src/storage/graph-store.js";
-import type { SpandrelNode, SpandrelEdge, ValidationWarning } from "../../src/compiler/types.js";
+import type { GraphStore } from "./graph-store.js";
+import type { SpandrelNode, SpandrelEdge, ValidationWarning } from "../compiler/types.js";
 
 function makeNode(path: string, overrides: Partial<SpandrelNode> = {}): SpandrelNode {
   return {

@@ -1,6 +1,6 @@
 {
   "name": "spandrel",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Turn markdown file trees into navigable, queryable knowledge graphs served via GraphQL and MCP",
   "type": "module",
   "license": "MIT",
