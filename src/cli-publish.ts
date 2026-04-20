@@ -9,6 +9,13 @@ import type { SpandrelNode, SpandrelEdge, ValidationWarning } from "./compiler/t
 import { InMemoryGraphStore } from "./storage/in-memory-graph-store.js";
 import type { GraphStore } from "./storage/graph-store.js";
 import { renderNodeAsMarkdown } from "./web/render-node.js";
+import {
+  buildLinkTypePredicateMap,
+  createStaticMarkdownRenderer,
+  extractShellHead,
+  nodeOutputRelPath,
+  renderPage,
+} from "./compiler/prerender.js";
 
 export interface PublishOptions {
   /** Output directory, relative to cwd. Default `_site`. */
@@ -17,12 +24,26 @@ export interface PublishOptions {
   base: string;
   /** When true (default), filter nodes/edges the anonymous public actor cannot see. */
   stripPrivate: boolean;
+  /**
+   * When true, prerender one HTML file per node under `_site/<path>/index.html`
+   * with SEO meta + JSON-LD baked in. The SPA still hydrates on top. Off by
+   * default to preserve the SPA-shell-only behavior.
+   */
+  static: boolean;
+  /**
+   * Absolute site origin (e.g. `"https://example.com"`). When set, canonical
+   * URLs emitted into SEO/meta/JSON-LD are absolute. When empty, we emit
+   * relative URLs — still valid, degrades gracefully on sub-path hosting.
+   */
+  siteUrl: string;
 }
 
 export const DEFAULT_PUBLISH_OPTIONS: PublishOptions = {
   out: "_site",
   base: "/",
   stripPrivate: true,
+  static: false,
+  siteUrl: "",
 };
 
 /**
@@ -302,8 +323,67 @@ export async function publish(
     console.log("[spandrel] Copied CNAME from graph root");
   }
 
+  if (options.static) {
+    await prerenderStaticPages(store, absOut, options);
+  }
+
   console.log(`[spandrel] Published to ${path.relative(process.cwd(), absOut) || absOut}`);
   return { outDir: absOut, wroteBundle };
+}
+
+/**
+ * Walk every node in the store and emit `<path>/index.html` alongside the
+ * existing SPA bundle. Each page carries real markdown content, SEO meta,
+ * JSON-LD, and the SPA script tags (extracted from Vite's index.html so
+ * hashed filenames aren't hardcoded). The SPA clears `#prerender-content`
+ * on mount.
+ *
+ * Assumes the SPA shell has already been copied into `absOut`. Silently
+ * skips prerender (with a warning) if the shell isn't there — there's
+ * nothing to reuse.
+ */
+async function prerenderStaticPages(
+  store: GraphStore,
+  absOut: string,
+  options: PublishOptions
+): Promise<void> {
+  const shellPath = path.join(absOut, "index.html");
+  if (!fs.existsSync(shellPath)) {
+    console.warn(
+      "[spandrel] --static requested but no SPA shell found at index.html; skipping prerender."
+    );
+    return;
+  }
+
+  const shellHtml = fs.readFileSync(shellPath, "utf-8");
+  const shellHead = extractShellHead(shellHtml);
+
+  const graph = await emitGraph(store);
+  const predicateMap = buildLinkTypePredicateMap(graph);
+  const renderBody = createStaticMarkdownRenderer(options.base);
+  const rootNode = graph.nodes.find((n) => n.path === "/");
+  const siteName = rootNode?.name ?? "";
+
+  let wrote = 0;
+  for (const node of graph.nodes) {
+    const relOut = nodeOutputRelPath(node.path);
+    const outFile = path.join(absOut, relOut);
+    fs.mkdirSync(path.dirname(outFile), { recursive: true });
+    const html = renderPage({
+      node,
+      graph,
+      predicateMap,
+      base: options.base,
+      siteUrl: options.siteUrl,
+      shellHead,
+      renderBody,
+      siteName,
+    });
+    fs.writeFileSync(outFile, html);
+    wrote++;
+  }
+
+  console.log(`[spandrel] Prerendered ${wrote} static pages (SEO + JSON-LD).`);
 }
 
 export function parsePublishArgs(argv: string[]): { rootDir: string; opts: Partial<PublishOptions> } {
@@ -324,6 +404,14 @@ export function parsePublishArgs(argv: string[]): { rootDir: string; opts: Parti
       opts.stripPrivate = true;
     } else if (a === "--no-strip-private") {
       opts.stripPrivate = false;
+    } else if (a === "--static") {
+      opts.static = true;
+    } else if (a === "--no-static") {
+      opts.static = false;
+    } else if (a === "--site-url") {
+      opts.siteUrl = argv[++i] ?? "";
+    } else if (a.startsWith("--site-url=")) {
+      opts.siteUrl = a.slice("--site-url=".length);
     } else if (!rootDir && !a.startsWith("--")) {
       rootDir = a;
     }
