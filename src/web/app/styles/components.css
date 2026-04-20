@@ -154,6 +154,43 @@
 }
 
 /* =========================================================================
+ * site-banner — sitewide masthead above the top bar.
+ * Same-size text, no H1 treatment. Journal header, not hero title.
+ * ========================================================================= */
+
+.site-banner-inner {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.6em;
+  max-width: 100%;
+  color: inherit;
+  border-bottom: 0;
+  text-decoration: none;
+}
+
+.site-banner-inner:hover {
+  color: var(--fg);
+}
+
+.site-banner-name {
+  font-family: var(--font-serif);
+  color: var(--fg);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.site-banner-sep {
+  color: var(--fg-subtle);
+}
+
+.site-banner-tagline {
+  font-family: var(--font-serif);
+  color: var(--fg-muted);
+  font-style: italic;
+  /* Same size as name — no H1/tagline hierarchy. */
+}
+
+/* =========================================================================
  * content
  * ========================================================================= */
 

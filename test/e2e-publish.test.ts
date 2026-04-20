@@ -305,10 +305,12 @@ describe("spandrel publish — --static prerender", () => {
     const html = fs.readFileSync(page, "utf-8");
 
     expect(html).toContain("<title>Acme Corp — Prerender Fixture</title>");
-    expect(html).toContain(
-      '<meta name="description" content="Flagship client account"'
+    expect(html).toMatch(
+      /<meta[^>]*name="description"[^>]*content="Flagship client account"/
     );
-    expect(html).toContain('<link rel="canonical" href="/clients/acme-corp/"');
+    expect(html).toMatch(
+      /<link[^>]*rel="canonical"[^>]*href="\/clients\/acme-corp\/"/
+    );
     expect(html).toContain('<meta property="og:title" content="Acme Corp"');
     expect(html).toContain('<meta property="og:type" content="article"');
     expect(html).toContain('<meta name="twitter:card" content="summary"');
@@ -350,7 +352,12 @@ describe("spandrel publish — --static prerender", () => {
     const html = fs.readFileSync(path.join(out, "index.html"), "utf-8");
     expect(html).toContain("<title>Prerender Fixture</title>");
     expect(html).toContain('id="prerender-content"');
-    expect(html).toContain("<h1>Prerender Fixture</h1>");
+    // The root page intentionally omits its H1 — the site-banner already
+    // renders the root name, and repeating it as an H1 produces a visible
+    // "Name / Name" stutter. Crawlers still get a strong <title> and
+    // JSON-LD name. For non-root pages the H1 is kept (tested elsewhere).
+    expect(html).toContain('<header id="site-banner"');
+    expect(html).toContain('class="site-banner-name">Prerender Fixture</span>');
   });
 
   it("respects --base when rewriting canonical URLs and internal links", async () => {
@@ -360,8 +367,8 @@ describe("spandrel publish — --static prerender", () => {
       "utf-8"
     );
     expect(html).toContain('<base href="/my-repo/"');
-    expect(html).toContain(
-      '<link rel="canonical" href="/my-repo/clients/acme-corp/"'
+    expect(html).toMatch(
+      /<link[^>]*rel="canonical"[^>]*href="\/my-repo\/clients\/acme-corp\/"/
     );
     // Internal markdown links in the body render as real URLs, not hash fragments.
     const rootHtml = fs.readFileSync(path.join(out, "index.html"), "utf-8");
@@ -379,8 +386,8 @@ describe("spandrel publish — --static prerender", () => {
       path.join(out, "clients/acme-corp/index.html"),
       "utf-8"
     );
-    expect(html).toContain(
-      '<link rel="canonical" href="https://example.com/clients/acme-corp/"'
+    expect(html).toMatch(
+      /<link[^>]*rel="canonical"[^>]*href="https:\/\/example\.com\/clients\/acme-corp\/"/
     );
     const ld = JSON.parse(
       html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]

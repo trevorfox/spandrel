@@ -161,9 +161,22 @@ textarea:focus {
  */
 #app {
   display: grid;
-  grid-template-rows: var(--top-bar-h) 1fr auto;
+  grid-template-rows: auto var(--top-bar-h) 1fr auto;
   height: 100vh;
   min-height: 0;
+}
+
+.site-banner {
+  border-bottom: var(--rule) solid var(--rule-color);
+  background: var(--bg);
+  padding: var(--s-3) var(--s-7);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: var(--fg-muted);
+}
+
+.site-banner:empty {
+  display: none;
 }
 
 .top-bar {
@@ -171,7 +184,7 @@ textarea:focus {
   background: var(--bg);
   display: flex;
   align-items: center;
-  padding: 0 var(--s-5);
+  padding: 0 var(--s-7);
   gap: var(--s-4);
   z-index: 10;
 }
@@ -185,7 +198,7 @@ textarea:focus {
 
 .content {
   overflow-y: auto;
-  padding: var(--s-7) var(--s-6);
+  padding: var(--s-7) var(--s-8);
   border-right: var(--rule) solid var(--rule-color);
 }
 

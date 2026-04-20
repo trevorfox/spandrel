@@ -447,10 +447,12 @@ describe("renderPage", () => {
     });
     expect(html).toMatch(/^<!doctype html>/);
     expect(html).toContain("<title>Acme Corp — My Graph</title>");
-    expect(html).toContain(
-      '<meta name="description" content="A sample client"'
+    expect(html).toMatch(
+      /<meta[^>]*name="description"[^>]*content="A sample client"/
     );
-    expect(html).toContain('<link rel="canonical" href="/clients/acme/"');
+    expect(html).toMatch(
+      /<link[^>]*rel="canonical"[^>]*href="\/clients\/acme\/"/
+    );
     expect(html).toContain('<meta property="og:title" content="Acme Corp"');
     expect(html).toContain('<script type="application/ld+json">');
     expect(html).toContain('assets/x.js');

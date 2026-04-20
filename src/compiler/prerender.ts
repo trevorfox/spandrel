@@ -362,6 +362,28 @@ export function renderPage(input: RenderPageInput): string {
 
   const bodyHtml = renderBody(node.content);
 
+  // Root node (if present) provides the sitewide masthead text — name +
+  // tagline. Same-size text, no H1 hierarchy. For crawlers and no-JS users
+  // this renders above the page content; the SPA rebuilds the same banner
+  // dynamically on mount so the layout stays consistent.
+  const rootNode = graph.nodes.find((n) => n.path === "/");
+  const bannerName = rootNode?.name ?? siteName ?? "";
+  const bannerTagline = rootNode?.description ?? "";
+  const bannerInner = [
+    bannerName ? `<span class="site-banner-name">${escapeHtml(bannerName)}</span>` : "",
+    bannerName && bannerTagline ? `<span class="site-banner-sep" aria-hidden="true">·</span>` : "",
+    bannerTagline ? `<span class="site-banner-tagline">${escapeHtml(bannerTagline)}</span>` : "",
+  ].join("");
+  const bannerHtml = bannerInner
+    ? `<a class="site-banner-inner" href="./">${bannerInner}</a>`
+    : "";
+
+  // For the root page, the site-banner already renders the name. Skipping
+  // the duplicate H1 avoids the "Spandrel / Spandrel" stutter that showed
+  // up in visible prerender output. Crawlers still get a strong <title>
+  // and JSON-LD `name`, so SEO is preserved.
+  const showPageHeader = node.path !== "/";
+
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -369,8 +391,8 @@ export function renderPage(input: RenderPageInput): string {
     <base href="${escapeHtml(base)}" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)}</title>
-    <meta name="description" content="${escapeHtml(description)}" />
-    <link rel="canonical" href="${escapeHtml(canonical)}" />
+    <meta id="meta-description" name="description" content="${escapeHtml(description)}" />
+    <link id="canonical" rel="canonical" href="${escapeHtml(canonical)}" />
     <meta property="og:title" content="${escapeHtml(node.name || title)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:url" content="${escapeHtml(canonical)}" />
@@ -382,15 +404,22 @@ export function renderPage(input: RenderPageInput): string {
     ${shellHead}
   </head>
   <body>
-    <div id="prerender-content">
-      <h1>${escapeHtml(node.name || node.path)}</h1>
-      ${description ? `<p>${escapeHtml(description)}</p>` : ""}
-      <article>${bodyHtml}</article>
-    </div>
     <div id="app">
+      <header id="site-banner" class="site-banner" aria-label="Site">${bannerHtml}</header>
       <header id="top-bar" class="top-bar" aria-label="Navigation"></header>
       <main id="layout" class="layout">
-        <section id="content" class="content" aria-label="Node content"></section>
+        <section id="content" class="content" aria-label="Node content">
+          <div id="prerender-content" class="content-body">
+            ${
+              showPageHeader
+                ? `<header class="meta"><h1>${escapeHtml(node.name || node.path)}</h1>${
+                    description ? `<p class="description">${escapeHtml(description)}</p>` : ""
+                  }</header>`
+                : ""
+            }
+            <article>${bodyHtml}</article>
+          </div>
+        </section>
         <aside id="graph-pane" class="graph-pane" aria-label="Graph"></aside>
       </main>
       <section id="drawer" class="drawer" aria-label="Related nodes and warnings"></section>
