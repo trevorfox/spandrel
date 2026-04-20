@@ -105,7 +105,7 @@ export function mountGraphViz(root: HTMLElement): void {
         i += 1;
       }
     }
-    renderLegend(legendEl, collectionColors, graph);
+    renderLegend(legendEl, collectionColors, graph, setCollectionHighlight);
 
     // Build/update selections.
     const linkSel = gLinks
@@ -186,6 +186,21 @@ export function mountGraphViz(root: HTMLElement): void {
     gNodes.selectAll<SVGGElement, VizNode>("g.node").classed("current", (d) => d.id === current);
   };
 
+  // Legend hover: highlight every node in the named collection and dim the
+  // rest. `null` clears highlighting. Uses a root-level data attribute plus
+  // a per-node class, so the visual state lives in CSS rather than JS.
+  const setCollectionHighlight = (coll: string | null): void => {
+    if (coll) {
+      root.setAttribute("data-highlight-collection", "true");
+      gNodes
+        .selectAll<SVGGElement, VizNode>("g.node")
+        .classed("highlighted", (d) => d.collection === coll);
+    } else {
+      root.removeAttribute("data-highlight-collection");
+      gNodes.selectAll<SVGGElement, VizNode>("g.node").classed("highlighted", false);
+    }
+  };
+
   function center(): { x: number; y: number } {
     const rect = svgEl.getBoundingClientRect();
     return { x: rect.width / 2, y: rect.height / 2 };
@@ -223,7 +238,12 @@ function stemOf(path: string): string {
   return idx >= 0 ? path.slice(idx + 1) : path;
 }
 
-function renderLegend(el: HTMLElement, colors: Map<string, string>, graph: Graph): void {
+function renderLegend(
+  el: HTMLElement,
+  colors: Map<string, string>,
+  graph: Graph,
+  onHover: (collection: string | null) => void,
+): void {
   if (colors.size <= 1) {
     el.hidden = true;
     return;
@@ -234,7 +254,9 @@ function renderLegend(el: HTMLElement, colors: Map<string, string>, graph: Graph
   for (const [collection, color] of colors) {
     if (collection === "/") continue;
     const label = nodeByPath.get(collection)?.name ?? collection.slice(1);
-    rows.push(`<div><span class="swatch" style="background:${color}"></span>${escapeHtml(label)}</div>`);
+    rows.push(
+      `<div class="legend-row" data-collection="${escapeAttr(collection)}"><span class="swatch" style="background:${color}"></span>${escapeHtml(label)}</div>`,
+    );
   }
   if (rows.length === 0) {
     el.hidden = true;
@@ -242,6 +264,16 @@ function renderLegend(el: HTMLElement, colors: Map<string, string>, graph: Graph
   }
   el.innerHTML = rows.join("");
   el.hidden = false;
+
+  // Delegated hover handlers. Using mouseover/mouseout so the highlight
+  // follows the cursor when it moves between rows without flickering off.
+  el.onmouseover = (e) => {
+    const row = (e.target as HTMLElement).closest(".legend-row") as HTMLElement | null;
+    if (!row) return;
+    const coll = row.getAttribute("data-collection");
+    if (coll) onHover(coll);
+  };
+  el.onmouseleave = () => onHover(null);
 }
 
 function attachDrag(getSim: () => Simulation<VizNode, VizLink> | null) {
@@ -265,6 +297,10 @@ function attachDrag(getSim: () => Simulation<VizNode, VizLink> | null) {
       d.fx = null;
       d.fy = null;
     });
+}
+
+function escapeAttr(s: string): string {
+  return escapeHtml(s);
 }
 
 function escapeHtml(s: string): string {
