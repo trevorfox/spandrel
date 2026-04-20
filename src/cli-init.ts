@@ -125,5 +125,61 @@ Declaring a type here attaches its description to every edge that uses it, so ag
     write(`linkTypes/${lt.stem}.md`, frontmatter(lt.name, lt.description) + "\n");
   }
 
+  write(".github/workflows/publish.yml", PUBLISH_WORKFLOW);
+
+  // Empty CNAME placeholder — users replace the contents with their apex or
+  // subdomain when they wire up a custom domain. An unwritten file would be
+  // less discoverable; a zero-byte one shows up in `ls` and the publish
+  // pipeline safely no-ops when it's empty.
+  write("CNAME", "");
+
   return { filesWritten, alreadyInitialized: false };
 }
+
+/**
+ * GitHub Actions workflow that publishes the graph to GitHub Pages on every
+ * push to `main`. Installs spandrel globally (so the workflow doesn't need a
+ * checked-in node project), then runs `spandrel publish` with `--base` set
+ * to the repo name so project pages resolve assets correctly.
+ *
+ * Users flip the Pages source to "GitHub Actions" in the repo settings; no
+ * other configuration is required.
+ */
+export const PUBLISH_WORKFLOW = `name: Publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: \${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install -g spandrel
+      - name: Publish graph
+        run: |
+          REPO="\${GITHUB_REPOSITORY##*/}"
+          spandrel publish . --out _site --base "/\${REPO}/"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
+`;

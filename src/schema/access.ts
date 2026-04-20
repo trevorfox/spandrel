@@ -26,10 +26,12 @@ export function loadAccessConfig(rootDir: string): AccessConfig | null {
   return config;
 }
 
-export function resolveRole(config: AccessConfig, identity: string): string {
-  for (const [roleName, roleConfig] of Object.entries(config.roles)) {
-    if (roleConfig.members?.includes(identity)) {
-      return roleName;
+export function resolveRole(config: AccessConfig, identity: string | null): string {
+  if (identity !== null) {
+    for (const [roleName, roleConfig] of Object.entries(config.roles)) {
+      if (roleConfig.members?.includes(identity)) {
+        return roleName;
+      }
     }
   }
 

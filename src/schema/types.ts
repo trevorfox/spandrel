@@ -1,7 +1,13 @@
 export type AccessLevel = "none" | "exists" | "description" | "content" | "traverse";
 
 export interface Actor {
-  identity: string;
+  /**
+   * Identity from the transport layer (API key, OAuth subject, ...).
+   * `null` represents an anonymous caller — used by `spandrel publish` when
+   * stripping non-public nodes for a static bundle, and any other context
+   * where no identity has been established.
+   */
+  identity: string | null;
   role?: string;
 }
 
