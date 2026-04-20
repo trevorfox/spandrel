@@ -124,6 +124,11 @@ export function mountGraphViz(root: HTMLElement): void {
         const g = enter.append("g").attr("class", "node");
         g.append("circle");
         g.append("text").attr("y", 20);
+        // SVG <title> gives every node a native browser tooltip on hover —
+        // including the smaller dots that don't get a permanent text label.
+        // Accessible (screen readers read it), no custom tooltip UI, and
+        // cheaper than layering an HTML overlay over the SVG.
+        g.append("title");
         g.on("click", (_event, d) => {
           // Uniform in both modes: pathToUrl returns a hash fragment in
           // SPA mode (sets hash, fires hashchange) and a real URL in
@@ -144,6 +149,10 @@ export function mountGraphViz(root: HTMLElement): void {
     nodeSel
       .select<SVGTextElement>("text")
       .text((d) => (visibleLabel(d) ? d.name : ""));
+
+    nodeSel
+      .select<SVGTitleElement>("title")
+      .text((d) => d.name || d.id);
 
     // Re-init simulation.
     if (simulation) simulation.stop();
