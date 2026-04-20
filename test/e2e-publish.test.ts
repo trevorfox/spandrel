@@ -522,4 +522,28 @@ describe("spandrel publish — --static prerender", () => {
       warnSpy.mockRestore();
     }
   });
+
+  it("injects <meta robots=noindex> into the SPA shell and every prerender when --noindex", async () => {
+    await publish(root, { out, static: true, noindex: true });
+    const shell = fs.readFileSync(path.join(out, "index.html"), "utf-8");
+    const page = fs.readFileSync(
+      path.join(out, "clients/acme-corp/index.html"),
+      "utf-8"
+    );
+    expect(shell).toMatch(
+      /<meta[^>]*name=["']robots["'][^>]*content=["']noindex,\s*nofollow["']/
+    );
+    expect(page).toMatch(
+      /<meta[^>]*name=["']robots["'][^>]*content=["']noindex,\s*nofollow["']/
+    );
+  });
+
+  it("does not emit <meta robots> when --noindex is off", async () => {
+    await publish(root, { out, static: true });
+    const page = fs.readFileSync(
+      path.join(out, "clients/acme-corp/index.html"),
+      "utf-8"
+    );
+    expect(page).not.toMatch(/<meta[^>]*name=["']robots["']/i);
+  });
 });

@@ -34,6 +34,7 @@ jobs:
           --out _site
           --base /spandrel/
           --static
+          --noindex
           --site-url https://trevorfox.github.io
       - uses: actions/upload-pages-artifact@v3
         with:

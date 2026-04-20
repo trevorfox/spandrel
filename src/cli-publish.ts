@@ -36,6 +36,13 @@ export interface PublishOptions {
    * relative URLs — still valid, degrades gracefully on sub-path hosting.
    */
   siteUrl: string;
+  /**
+   * When true, inject `<meta name="robots" content="noindex, nofollow">`
+   * into every emitted HTML page (both the SPA shell and, when `static` is
+   * on, every prerendered per-node page). Useful for staging deploys or
+   * sites that should not appear in search results.
+   */
+  noindex: boolean;
 }
 
 export const DEFAULT_PUBLISH_OPTIONS: PublishOptions = {
@@ -44,6 +51,7 @@ export const DEFAULT_PUBLISH_OPTIONS: PublishOptions = {
   stripPrivate: true,
   static: false,
   siteUrl: "",
+  noindex: false,
 };
 
 /**
@@ -58,6 +66,20 @@ export function rewriteHtmlBase(html: string, base: string): string {
   return html.replace(
     /<base\s+href=(["'])[^"']*\1\s*\/?>/gi,
     `<base href="${base}" />`
+  );
+}
+
+/**
+ * Inject `<meta name="robots" content="noindex, nofollow" />` into `<head>`
+ * if it isn't already present. Idempotent — re-running over an already-
+ * marked document leaves it unchanged.
+ */
+export function injectNoindex(html: string): string {
+  if (/<meta\s+name=["']robots["'][^>]*noindex/i.test(html)) return html;
+  const tag = `<meta name="robots" content="noindex, nofollow" />`;
+  return html.replace(
+    /<head(\s[^>]*)?>/i,
+    (m) => `${m}\n    ${tag}`
   );
 }
 
@@ -342,6 +364,21 @@ export async function publish(
     }
   }
 
+  // Inject robots noindex into the SPA shell. Only needed when we're not
+  // about to regenerate every HTML file via --static prerender — in that
+  // case renderPage emits the tag itself, and double-injecting would cause
+  // the shell's tag to leak into each prerender via extractShellHead.
+  if (options.noindex && !options.static) {
+    const indexPath = path.join(absOut, "index.html");
+    if (fs.existsSync(indexPath)) {
+      const html = fs.readFileSync(indexPath, "utf-8");
+      fs.writeFileSync(indexPath, injectNoindex(html));
+    }
+    console.log("[spandrel] Marked the SPA shell as noindex, nofollow.");
+  } else if (options.noindex) {
+    console.log("[spandrel] Marking every prerendered page as noindex, nofollow.");
+  }
+
   const cnameSrc = path.join(absRoot, "CNAME");
   if (fs.existsSync(cnameSrc) && fs.statSync(cnameSrc).isFile()) {
     fs.copyFileSync(cnameSrc, path.join(absOut, "CNAME"));
@@ -403,6 +440,7 @@ async function prerenderStaticPages(
       shellHead,
       renderBody,
       siteName,
+      noindex: options.noindex,
     });
     fs.writeFileSync(outFile, html);
     wrote++;
@@ -437,6 +475,10 @@ export function parsePublishArgs(argv: string[]): { rootDir: string; opts: Parti
       opts.siteUrl = argv[++i] ?? "";
     } else if (a.startsWith("--site-url=")) {
       opts.siteUrl = a.slice("--site-url=".length);
+    } else if (a === "--noindex") {
+      opts.noindex = true;
+    } else if (a === "--no-noindex") {
+      opts.noindex = false;
     } else if (!rootDir && !a.startsWith("--")) {
       rootDir = a;
     }

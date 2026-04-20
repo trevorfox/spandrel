@@ -335,6 +335,8 @@ export interface RenderPageInput {
   renderBody: (md: string) => string;
   /** Display name of the graph's root node, used in `<title>` suffix. */
   siteName: string;
+  /** When true, emit `<meta name="robots" content="noindex, nofollow">`. */
+  noindex?: boolean;
 }
 
 /**
@@ -350,6 +352,7 @@ export function renderPage(input: RenderPageInput): string {
     shellHead,
     renderBody,
     siteName,
+    noindex = false,
   } = input;
 
   const canonical = nodeCanonicalUrl(node.path, base, siteUrl);
@@ -391,7 +394,9 @@ export function renderPage(input: RenderPageInput): string {
     <base href="${escapeHtml(base)}" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)}</title>
-    <meta id="meta-description" name="description" content="${escapeHtml(description)}" />
+    <meta id="meta-description" name="description" content="${escapeHtml(description)}" />${
+      noindex ? `\n    <meta name="robots" content="noindex, nofollow" />` : ""
+    }
     <link id="canonical" rel="canonical" href="${escapeHtml(canonical)}" />
     <meta property="og:title" content="${escapeHtml(node.name || title)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
