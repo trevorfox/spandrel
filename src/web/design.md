@@ -49,7 +49,7 @@ Three commands, three moments in a repo's life:
 
 - **`spandrel init`** — one-time bootstrap in an empty directory. Scaffolds `_access/config.yaml`, `/linkTypes/` vocabulary, `.github/workflows/publish.yml`, and a `CNAME` placeholder. Run once; never again.
 - **`spandrel dev <path>`** — the authoring loop. Compiles the graph in memory, watches the filesystem, serves GraphQL, MCP, SSE, and the viewer at `localhost:4000`. This is where writing happens.
-- **`spandrel publish <path> --out _site [--base /repo/] [--strip-private] [--static]`** — the deploy step. Compiles once, writes `graph.json`, copies the SPA bundle into `--out`. That folder is the deployable.
+- **`spandrel publish <path> --out _site [--base /repo/] [--strip-private] [--static] [--site-url https://example.com]`** — the deploy step. Compiles once, writes `graph.json`, copies the SPA bundle into `--out`. That folder is the deployable.
 
 Mental model: **init = birth, dev = daily work, publish = ship.**
 
@@ -164,7 +164,11 @@ The JSON-LD uses a disciplined six-predicate whitelist, not the full internal li
 - `sameAs` — external canonical equivalents
 - `relatedLink` — generic "see also"
 
-Every declared link type in `/linkTypes/<type>/index.md` may optionally include a `schemaOrg:` frontmatter field mapping it to one of the six. Unmapped types default to `mentions`. Framing: **JSON-LD is a projection, not a mirror.** The viewer, GraphQL, and MCP continue to see the full typed vocabulary (`depends-on`, `supersedes`, `owned-by`). Only the public structured-data block is restricted. Search engines get something they understand; agents and humans get the real graph.
+Every declared link type in `/linkTypes/<type>/index.md` may optionally include a `schemaOrg:` frontmatter field mapping it to one of the six. Unmapped types default to `mentions`. Values outside the whitelist are rejected at build time with a warning and fall back to `mentions`. Framing: **JSON-LD is a projection, not a mirror.** The viewer, GraphQL, and MCP continue to see the full typed vocabulary (`depends-on`, `supersedes`, `owned-by`). Only the public structured-data block is restricted. Search engines get something they understand; agents and humans get the real graph.
+
+The `@type` for each node is inferred from its shape: `DefinedTerm` for nodes under `/linkTypes/`, `Collection` for composites, `CreativeWork` for leaves. An individual node can override via a `schemaType:` frontmatter field when a more specific type fits (e.g. `Organization`, `Person`).
+
+Canonical URL policy: `--site-url` (optional, default empty) controls whether the `<link rel="canonical">`, `og:url`, and JSON-LD `url`/`@id` fields emit absolute or relative URLs. When unset, relative URLs degrade gracefully on sub-path hosting. When set, absolute URLs land in every page — Google prefers those.
 
 ## Scope boundaries
 
@@ -190,9 +194,11 @@ Every declared link type in `/linkTypes/<type>/index.md` may optionally include 
 ### In v1.2
 
 - `--static` flag: per-node prerendered HTML
+- `--site-url` flag: absolute canonical URLs when an origin is known
 - SEO meta tags (title, description, canonical, OpenGraph, Twitter)
 - JSON-LD with six-predicate whitelist
 - Optional `schemaOrg:` mapping in `/linkTypes/` frontmatter
+- Optional per-node `schemaType:` frontmatter override for `@type` inference
 
 ### Out of scope
 
