@@ -12,6 +12,7 @@ import { loadAccessConfig } from "./schema/access.js";
 import { scaffoldInit, type InitOptions } from "./cli-init.js";
 import { publish, parsePublishArgs, resolveBundleDir } from "./cli-publish.js";
 import { emitGraph } from "./compiler/emit-graph.js";
+import { renderNodeAsMarkdown } from "./web/render-node.js";
 import { createYoga } from "graphql-yoga";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
@@ -129,6 +130,41 @@ async function dev(rootDir: string) {
       return yoga(req, res);
     }
 
+    // Per-node format routes: `/path.md` and `/path.json` serve a single
+    // node as its raw markdown source or its full JSON object. The root
+    // node is reachable at `/.md` and `/.json` to avoid colliding with the
+    // compiler's `index.md` convention. These routes are also emitted as
+    // static siblings by `spandrel publish`, so agents can `curl` either.
+    if (urlPath.endsWith(".md") && !urlPath.startsWith("/assets/")) {
+      const nodePath = extensionToNodePath(urlPath, ".md");
+      if (nodePath !== null) {
+        const node = await store.getNode(nodePath);
+        if (node) {
+          res.writeHead(200, {
+            "Content-Type": "text/markdown; charset=utf-8",
+            "Cache-Control": "no-store",
+          });
+          res.end(renderNodeAsMarkdown(node));
+          return;
+        }
+      }
+    }
+
+    if (urlPath.endsWith(".json") && urlPath !== "/graph.json") {
+      const nodePath = extensionToNodePath(urlPath, ".json");
+      if (nodePath !== null) {
+        const node = await store.getNode(nodePath);
+        if (node) {
+          res.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store",
+          });
+          res.end(JSON.stringify(node, null, 2));
+          return;
+        }
+      }
+    }
+
     // Static file from the SPA bundle. Missing files fall back to index.html
     // so hash-routing deep links work — though in practice hash routing
     // means the browser never actually requests those paths.
@@ -208,6 +244,27 @@ function handleSse(
   req.on("close", cleanup);
   req.on("end", cleanup);
   res.on("close", cleanup);
+}
+
+/**
+ * Derive a graph node path from a URL that ends in `.md` or `.json`.
+ *
+ * The root node is addressed as `/.md` or `/.json`, matching the publish-mode
+ * sibling file convention. Everything else strips the extension:
+ *   `/clients/acme-corp.md` → `/clients/acme-corp`
+ *
+ * Returns `null` for inputs that don't look like a node reference (e.g.
+ * `/assets/app.js.map`, or an unexpected `*.json` path already handled
+ * elsewhere).
+ */
+function extensionToNodePath(urlPath: string, ext: ".md" | ".json"): string | null {
+  if (!urlPath.endsWith(ext)) return null;
+  // Root node sentinel: `/.md` / `/.json`. `index.md` / `index.json` also
+  // route to the root so common conventions don't 404.
+  if (urlPath === "/" + ext || urlPath === "/index" + ext) return "/";
+  const withoutExt = urlPath.slice(0, -ext.length);
+  if (!withoutExt.startsWith("/")) return null;
+  return withoutExt;
 }
 
 const STATIC_MIME: Record<string, string> = {

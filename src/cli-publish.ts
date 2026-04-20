@@ -8,6 +8,7 @@ import type { Actor } from "./schema/types.js";
 import type { SpandrelNode, SpandrelEdge, ValidationWarning } from "./compiler/types.js";
 import { InMemoryGraphStore } from "./storage/in-memory-graph-store.js";
 import type { GraphStore } from "./storage/graph-store.js";
+import { renderNodeAsMarkdown } from "./web/render-node.js";
 
 export interface PublishOptions {
   /** Output directory, relative to cwd. Default `_site`. */
@@ -146,6 +147,39 @@ export function resolveBundleDir(): string {
   return primary;
 }
 
+/**
+ * Translate a graph node path to the on-disk sibling file location.
+ *
+ * - `/`                 → `<out>/.md`  (leading-dot file; collision-free).
+ * - `/clients`          → `<out>/clients.md`
+ * - `/clients/acme`     → `<out>/clients/acme.md`
+ *
+ * The leaf directory always exists after this call (mkdir -p).
+ */
+function nodeSiblingPath(outDir: string, nodePath: string, ext: ".md" | ".json"): string {
+  if (nodePath === "/" || nodePath === "") {
+    return path.join(outDir, ext);
+  }
+  // Normalize: drop leading slash, the rest becomes a relative path.
+  const rel = nodePath.replace(/^\/+/, "");
+  return path.join(outDir, rel + ext);
+}
+
+/**
+ * Emit `<path>.md` and `<path>.json` for every node. Returns the number of
+ * nodes processed so the caller can report progress.
+ */
+function writeNodeSiblings(outDir: string, nodes: SpandrelNode[]): number {
+  for (const node of nodes) {
+    const mdPath = nodeSiblingPath(outDir, node.path, ".md");
+    const jsonPath = nodeSiblingPath(outDir, node.path, ".json");
+    fs.mkdirSync(path.dirname(mdPath), { recursive: true });
+    fs.writeFileSync(mdPath, renderNodeAsMarkdown(node));
+    fs.writeFileSync(jsonPath, JSON.stringify(node, null, 2));
+  }
+  return nodes.length;
+}
+
 function copyDirRecursive(src: string, dest: string): void {
   fs.mkdirSync(dest, { recursive: true });
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
@@ -218,6 +252,18 @@ export async function publish(
   const graphJsonPath = path.join(absOut, "graph.json");
   fs.writeFileSync(graphJsonPath, JSON.stringify(graph));
   console.log(`[spandrel] Wrote ${path.relative(process.cwd(), graphJsonPath) || graphJsonPath}`);
+
+  // Per-node sibling files: `<out>/<path>.md` and `<out>/<path>.json` for
+  // every node. These are the static projection of the dev server's
+  // extension routes, so `curl site.example.com/clients/acme-corp.md` works
+  // the same against a live server or a published bundle.
+  //
+  // Root node lands at `<out>/.md` / `<out>/.json` — the leading-dot file
+  // is unusual but collision-free with any authored node path, and hosts
+  // serve it verbatim when asked for `/.md`. The SPA shell still lives at
+  // `<out>/index.html`.
+  const siblingCount = writeNodeSiblings(absOut, graph.nodes);
+  console.log(`[spandrel] Wrote ${siblingCount * 2} per-node sibling files (.md + .json)`);
 
   const bundleDir = resolveBundleDir();
   // A "valid" bundle means Vite's output: an index.html plus whatever assets
