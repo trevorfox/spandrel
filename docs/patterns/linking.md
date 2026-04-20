@@ -30,7 +30,7 @@ links:
 ```
 
 - `to` — required. Path to the target node.
-- `type` — optional. Freeform string describing the relationship. Not validated by the compiler — just metadata on the edge.
+- `type` — optional. Freeform string describing the relationship. Not validated by the [compiler](/architecture/compiler) — just metadata on the edge.
 - `description` — optional. Short description of why this link exists.
 
 ## Link types
@@ -45,7 +45,7 @@ The compiler doesn't enforce or validate link types. They're metadata for consum
 
 ### Declaring a typed vocabulary with `/linkTypes/`
 
-When a graph relies on a handful of recurring relationship classes, declare them as Things under a top-level `/linkTypes/` collection. Each file names and describes one relationship class:
+When a graph relies on a handful of recurring relationship classes, declare them as Things under a top-level `/linkTypes/` [collection](/patterns/collections). Each file names and describes one relationship class:
 
 ```
 docs/linkTypes/
@@ -66,7 +66,7 @@ description: The source entity has operational or legal control of the target.
 
 The compiler indexes `/linkTypes/*` by filename stem (`owns.md` → `owns`). The stem is the canonical key — it's what frontmatter `links[].type` values reference, and it stays stable across display-name renames. Hierarchical subfolders under `/linkTypes/` are out of scope for now; keep the namespace flat.
 
-When a linkType is declared, every edge using that type picks up a `linkTypeDescription` on the GraphQL side (`context`, `references`, `get_node`) — agents see the relationship's meaning without following another hop. Querying `{ linkTypes { name description path } }` returns the full declared vocabulary.
+When a linkType is declared, every edge using that type picks up a `linkTypeDescription` on the [GraphQL](/architecture/schema) side (`context`, `references`, `get_node`) — agents see the relationship's meaning without following another hop. Querying `{ linkTypes { name description path } }` returns the full declared vocabulary.
 
 Undeclared linkTypes keep working; `linkTypeDescription` is simply `null` on those edges. Declare the ones that carry load-bearing semantics in your graph.
 

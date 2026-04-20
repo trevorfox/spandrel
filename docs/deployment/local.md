@@ -10,8 +10,8 @@ links:
 
 # Local Development
 
-`spandrel dev <path>` compiles the knowledge graph into memory and starts a local GraphQL + MCP server. No database, no configuration, no setup.
+`spandrel dev <path>` compiles the knowledge graph into memory and starts a local [GraphQL](/architecture/schema) + [MCP server](/architecture/mcp). No database, no configuration, no setup.
 
-The compiler watches for file changes and recompiles affected nodes on save. The graph is rebuilt from markdown on every restart — the source files are the source of truth.
+The [compiler](/architecture/compiler) watches for file changes and recompiles affected [nodes](/content-model/nodes) on save. The graph is rebuilt from markdown on every restart — the source files are the source of truth.
 
-This mode is for authoring: writing content, testing structure, exploring the graph via MCP. Single user, single machine, ephemeral storage.
+This mode is for authoring: writing content, testing structure, exploring the graph via MCP. Single user, single machine, ephemeral [storage](/architecture/storage).

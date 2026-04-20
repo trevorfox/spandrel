@@ -29,7 +29,7 @@ A description answers: "Is this the Thing I'm looking for, and is it worth readi
 
 ## For index.md files (collections)
 
-A collection's index.md should summarize what's below. Not just list children — describe the space.
+A [collection](/patterns/collections)'s index.md should summarize what's below. Not just list children — describe the space.
 
 **Good:**
 ```markdown

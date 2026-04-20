@@ -20,7 +20,7 @@ A SKILL.md typically includes:
 
 **SKILL.md as companion file** — lives alongside code in a repo (e.g., `.claude/skills/spandrel-builder/SKILL.md`). This is for skills that operate on the repo itself. The agent framework discovers and loads them. Framework-specific by nature (`.claude/skills/` is Claude Code, other tools have their own conventions).
 
-**Skills as graph nodes** — in knowledge repos, skills are Things in the graph. They live in a `/skills` collection as regular nodes with `index.md`, frontmatter, and links to the nodes they operate on. This means they're queryable via MCP ("what skills can I use?"), travel with the knowledge, and are governed by the same access control as everything else.
+**Skills as graph nodes** — in knowledge repos, skills are Things in the graph. They live in a `/skills` [collection](/patterns/collections) as regular nodes with `index.md`, frontmatter, and [links](/content-model/links) to the nodes they operate on. This means they're queryable via [MCP](/architecture/mcp) ("what skills can I use?"), travel with the knowledge, and are governed by the same [access control](/architecture/access) as everything else.
 
 When to use which:
 - Use SKILL.md companion files for skills that develop or maintain a codebase (like the spandrel-builder skill)

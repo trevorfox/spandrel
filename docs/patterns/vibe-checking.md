@@ -24,7 +24,7 @@ After building or significantly restructuring a knowledge graph. Compile warning
 
 Start `spandrel dev` or `spandrel mcp` and read the root node. Without any prior knowledge:
 
-- Do the top-level collections make sense as a vocabulary?
+- Do the top-level [collections](/patterns/collections) make sense as a vocabulary?
 - Can you tell what the graph is about from the root description alone?
 - Can you guess where specific content lives before looking?
 
@@ -32,7 +32,7 @@ If navigation feels like guessing, the structure needs work.
 
 ### 2. Answer real questions
 
-Pick 5-10 questions that a real user of this graph would ask. Try to answer each one using only MCP tools. For example:
+Pick 5-10 questions that a real user of this graph would ask. Try to answer each one using only [MCP](/architecture/mcp) tools. For example:
 
 - "Who is responsible for this client?" — requires links between people and clients
 - "What's our positioning for this product?" — requires content depth in the right node
@@ -50,7 +50,7 @@ Search for terms a real user would search for. Check:
 
 ### 4. Follow links laterally
 
-Pick a node and follow its outgoing links. Then follow incoming links (backlinks). Does the graph connect related things, or is it a tree with no cross-links?
+Pick a [node](/content-model/nodes) and follow its outgoing [links](/content-model/links). Then follow incoming links (backlinks). Does the graph connect related things, or is it a tree with no cross-links?
 
 Good signs:
 - A client node links to team members, tools, and related projects
@@ -68,7 +68,7 @@ The strongest test: give the MCP connection to an agent that has never seen the 
 ## What compile warnings actually mean
 
 - **broken_link** — a link points to a node that doesn't exist. Fix these — they're real errors.
-- **missing_index** — a directory has children but no `index.md`. The compiler creates a synthetic node. Usually fine, but adding an `index.md` with a good description improves navigation.
+- **missing_index** — a directory has children but no `index.md`. The [compiler](/architecture/compiler) creates a synthetic node. Usually fine, but adding an `index.md` with a good description improves navigation.
 - **unlisted_child** — a parent node's body text doesn't mention a child. Advisory only. Fixing it improves the parent's content but isn't required.
 - **missing_name / missing_description** — frontmatter gaps. Fix these — they break progressive disclosure.
 

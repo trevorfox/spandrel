@@ -12,7 +12,7 @@ links:
 
 # Paths
 
-Every Thing has a path that is both its file system location and its graph address. `/clients/acme-corp` is where the markdown file lives and how you query the node through GraphQL or MCP.
+Every Thing has a path that is both its file system location and its graph address. `/clients/acme-corp` is where the markdown file lives and how you query the [node](/content-model/nodes) through [GraphQL](/architecture/schema) or [MCP](/architecture/mcp).
 
 There is no ID mapping, no database key, no indirection. The path is the identity. This means:
 

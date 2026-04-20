@@ -33,7 +33,7 @@ links:
 
 ## Link type descriptions
 
-Link types are free-form by default. To make the vocabulary navigable — so an agent reading an edge knows what `owns` or `depends-on` means in this graph — declare each type as a Thing under a top-level `/linkTypes/` collection:
+Link types are free-form by default. To make the vocabulary navigable — so an agent reading an edge knows what `owns` or `depends-on` means in this graph — declare each type as a Thing under a top-level `/linkTypes/` [collection](/patterns/collections):
 
 ```
 docs/linkTypes/
@@ -46,7 +46,7 @@ Each file is indexed by filename stem; its description appears on every edge usi
 
 ## Backlinks
 
-The compiler automatically generates backlinks. If A links to B, B knows A links to it. Backlinks are queryable through GraphQL but not stored in the markdown.
+The [compiler](/architecture/compiler) automatically generates backlinks. If A links to B, B knows A links to it. Backlinks are queryable through [GraphQL](/architecture/schema) but not stored in the markdown.
 
 ## Links vs hierarchy
 

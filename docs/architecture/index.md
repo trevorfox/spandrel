@@ -12,8 +12,8 @@ links:
 
 Spandrel has three phases: compile, store, serve.
 
-1. **Compile** — walk a directory tree of markdown files, parse frontmatter, resolve hierarchy and links, produce a graph of nodes and edges.
-2. **Store** — write the compiled graph to a storage backend. In-memory for local dev, Postgres for production. Any backend that satisfies the GraphStore interface works.
-3. **Serve** — expose the graph through GraphQL. MCP and web UIs are clients of the GraphQL API. Access control is enforced in the GraphQL layer.
+1. **Compile** — walk a directory tree of markdown files, parse frontmatter, resolve hierarchy and [links](/content-model/links), produce a graph of [nodes](/content-model/nodes) and edges.
+2. **Store** — write the compiled graph to a [storage](/architecture/storage) backend. In-memory for local dev, Postgres for production. Any backend that satisfies the GraphStore interface works.
+3. **Serve** — expose the graph through [GraphQL](/architecture/schema). [MCP](/architecture/mcp) and web UIs are clients of the GraphQL API. [Access control](/architecture/access) is enforced in the GraphQL layer.
 
 All clients — MCP, web UI, CLI — go through GraphQL. There is one query surface and one enforcement point.

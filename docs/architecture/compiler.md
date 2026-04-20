@@ -12,7 +12,7 @@ links:
 
 # Compiler
 
-The compiler walks a directory tree and produces a graph. Given a root directory of markdown files with YAML frontmatter, it outputs nodes (Things) and edges (hierarchy + links).
+The compiler walks a directory tree and produces a graph. Given a root directory of markdown files with YAML frontmatter, it outputs [nodes](/content-model/nodes) (Things) and edges (hierarchy + [links](/content-model/links)).
 
 The compiler resolves leaf vs composite nodes, parses frontmatter, extracts links, builds the parent/child hierarchy, generates backlinks, and emits validation warnings for malformed content.
 
