@@ -1,16 +1,20 @@
 ---
 name: Collections
-description: Top-level collections as domain nouns — structuring entity types during bootstrap
+description: Top-level collections as domain nouns — structuring entity types during onboarding
 links:
   - to: /content-model/nodes
     type: relates-to
   - to: /content-model/design-md
     type: relates-to
+  - to: /patterns/frameworks
+    type: relates-to
 ---
 
 # Collections Pattern
 
-Top-level collections are your nouns — the major entity types in your domain. Decide these upfront during bootstrap. They establish the vocabulary of your graph.
+Top-level collections are your nouns — the major entity types in your domain. Decide these upfront during onboarding. They establish the vocabulary of your graph.
+
+When the user's native structure is unclear, a decomposition [framework](/patterns/frameworks) can seed the top-level shape — Dunford positioning, OKRs, a service blueprint, or similar.
 
 ## What makes a good collection
 

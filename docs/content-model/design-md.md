@@ -16,7 +16,7 @@ A `design.md` is a companion file — it sits alongside a node's `index.md` but 
 
 ## Two roles
 
-**In knowledge repo collections:** A `design.md` in a [collection](/patterns/collections) like `/clients/` describes what a well-formed client Thing looks like — what frontmatter fields matter, what [links](/content-model/links) to expect, what sub-Things it should have, what to avoid. It's the schema guidance that the bootstrap process and the intake pipeline read to know how to shape content for that part of the tree. When an agent is adding a new client, it reads the design doc to understand the conventions.
+**In knowledge repo collections:** A `design.md` in a [collection](/patterns/collections) like `/clients/` describes what a well-formed client Thing looks like — what frontmatter fields matter, what [links](/content-model/links) to expect, what sub-Things it should have, what to avoid. It's the schema guidance that the onboarding process and the intake pipeline read to know how to shape content for that part of the tree. When an agent is adding a new client, it reads the design doc to understand the conventions.
 
 **In the framework repo:** A `design.md` in the framework (like `schema/design.md` or `storage/design.md`) describes how a system component should work — the design criteria, the options considered, the decisions made. It's the spec for things that haven't been built yet or guidance for things that could be built differently.
 

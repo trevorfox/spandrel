@@ -6,7 +6,7 @@ Named after the [architectural byproduct](https://en.wikipedia.org/wiki/Spandrel
 
 ## Quickstart
 
-Zero to a local MCP endpoint in five steps. For a guided walkthrough of designing a real graph, see [BOOTSTRAP.md](BOOTSTRAP.md).
+Zero to a local MCP endpoint in five steps. For a guided walkthrough of designing a real graph, see [ONBOARDING.md](ONBOARDING.md).
 
 **1. Install.**
 

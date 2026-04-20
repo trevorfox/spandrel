@@ -4,7 +4,7 @@ set -euo pipefail
 # ─── Three-Agent E2E Dogfood Test ─────────────────────────────────────────────
 #
 # Tests the full Spandrel experience with three agents:
-#   1. BUILDER  — follows BOOTSTRAP.md cold, builds a KG about Spandrel
+#   1. BUILDER  — follows ONBOARDING.md cold, builds a KG about Spandrel
 #   2. REVIEWER — evaluates the KG as information architect, context engineer,
 #                 and analyst (the three Spandrel roles)
 #   3. EXPLORER — connects to the MCP blind, tries to learn and use the graph
