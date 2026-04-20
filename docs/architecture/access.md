@@ -16,7 +16,7 @@ The access layer governs who can see and do what within a knowledge graph. It an
 2. **What role do you have?** (Authorization) — mapped from identity via `_access/config.yaml`
 3. **What can that role see and do?** (Policy) — path-based access with deny rules and access levels
 
-Access levels provide progressive disclosure at the governance layer:
+Access levels provide [progressive disclosure](/patterns/progressive-disclosure) at the governance layer:
 
 | Level | What the actor sees |
 |---|---|
@@ -26,4 +26,4 @@ Access levels provide progressive disclosure at the governance layer:
 | content | Full markdown body |
 | traverse | Full content and can follow links |
 
-Enforcement happens in the GraphQL resolvers. Every resolver calls `canAccess` before including a node in a response. MCP, web UI, and CLI all defer to GraphQL — one enforcement point, one set of rules.
+Enforcement happens in the [GraphQL](/architecture/schema) resolvers. Every resolver calls `canAccess` before including a node in a response. [MCP](/architecture/mcp), web UI, and CLI all defer to GraphQL — one enforcement point, one set of rules.

@@ -12,7 +12,7 @@ Where a Thing lives in the tree determines how discoverable it is. Place Things 
 
 ## Rules
 
-1. **The more a Thing is linked to, the higher it should live.** A person referenced from 12 nodes should be in a top-level `/people/` collection, not nested inside `/projects/alpha/team/jane/`.
+1. **The more a Thing is linked to, the higher it should live.** A person referenced from 12 [nodes](/content-model/nodes) should be in a top-level `/people/` [collection](/patterns/collections), not nested inside `/projects/alpha/team/jane/`.
 
 2. **Things relevant to one context nest inside that context.** A meeting note only relevant to one project lives inside that project's directory.
 
@@ -30,6 +30,6 @@ Ask: "From how many different parts of the tree would someone link to this Thing
 
 ## Anti-patterns
 
-- **Deep nesting to show relationships.** If `/clients/acme/projects/alpha/people/jane/` exists because Jane works on Alpha for Acme, that's three relationships encoded as hierarchy. Use links instead: Jane lives in `/people/jane/` and has links to Acme and Alpha.
+- **Deep nesting to show relationships.** If `/clients/acme/projects/alpha/people/jane/` exists because Jane works on Alpha for Acme, that's three relationships encoded as hierarchy. Use [links](/content-model/links) instead: Jane lives in `/people/jane/` and has links to Acme and Alpha.
 
-- **Flat dumping.** Putting everything at the root defeats progressive disclosure. Group Things that belong together.
+- **Flat dumping.** Putting everything at the root defeats [progressive disclosure](/patterns/progressive-disclosure). Group Things that belong together.

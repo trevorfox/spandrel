@@ -29,7 +29,7 @@ An LLM agent sees `linkType: "owns"` and has to guess whether that means legal o
 
 ## Proposal
 
-**Link types become first-class nodes** under a `/linkTypes/` collection. Each `linkType` node has `name` and `description`. The compiler indexes the collection and exposes per-type descriptions everywhere an edge appears.
+**Link types become first-class nodes** under a `/linkTypes/` [collection](/patterns/collections). Each `linkType` node has `name` and `description`. The [compiler](/architecture/compiler) indexes the collection and exposes per-type descriptions everywhere an edge appears.
 
 ### 1. `/linkTypes/` collection
 
@@ -144,6 +144,6 @@ BOOTSTRAP.md                        — Level 4: suggest declaring /linkTypes/ w
 
 ## Backwards compatibility
 
-- Graphs without `/linkTypes/`: `linkTypes` field is empty, `linkTypeDescription` is null on every edge, MCP instructions omit the block. No behavioral change.
+- Graphs without `/linkTypes/`: `linkTypes` field is empty, `linkTypeDescription` is null on every edge, [MCP](/architecture/mcp) instructions omit the block. No behavioral change.
 - `Link.linkType` field retains its current free-form `string | null` shape — no enum, no required whitelist.
 - Existing tests pass without modification; only new tests are added for the new surface.

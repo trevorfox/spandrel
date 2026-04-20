@@ -12,7 +12,7 @@ links:
 
 # Schema
 
-The GraphQL schema is the single query interface for the knowledge graph. Every client — MCP, web UI, CLI — queries through GraphQL. This means access control is enforced in one place and all clients get the same view of the graph.
+The GraphQL schema is the single query interface for the knowledge graph. Every client — [MCP](/architecture/mcp), web UI, CLI — queries through GraphQL. This means [access control](/architecture/access) is enforced in one place and all clients get the same view of the graph.
 
 The schema exposes queries for:
 - **node** — get a single node with optional depth and content

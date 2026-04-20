@@ -15,7 +15,7 @@ A node is a Thing in the graph. Every node has a `name` and `description` in its
 ## Two forms
 
 - **Leaf node** — a single file like `foo.md`. Cannot have children. Good for simple Things that won't grow.
-- **Composite node** — a directory with `foo/index.md`. Can have children (other files in the directory) and companion files. Good for Things that have sub-Things or need design docs.
+- **Composite node** — a directory with `foo/index.md`. Can have children (other files in the directory) and companion files. Good for Things that have sub-Things or need [design docs](/content-model/design-md).
 
 If both `foo.md` and `foo/index.md` exist, the directory wins.
 
