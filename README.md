@@ -8,11 +8,10 @@ Named after the [architectural byproduct](https://en.wikipedia.org/wiki/Spandrel
 
 Zero to a local MCP endpoint in five steps. For a guided walkthrough of designing a real graph, see [BOOTSTRAP.md](BOOTSTRAP.md).
 
-**1. Install.** Not yet on npm — clone and link:
+**1. Install.**
 
 ```bash
-git clone https://github.com/trevorfox/spandrel.git
-cd spandrel && npm install && npm link
+npm install -g spandrel
 ```
 
 **2. Create a graph.** Scaffolds the root node plus a `/linkTypes` collection seeded with the baseline vocabulary (`owns`, `depends-on`, `relates-to`, …).
