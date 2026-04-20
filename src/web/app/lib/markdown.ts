@@ -7,9 +7,17 @@
  *
  * External links (http, https, mailto, tel, relative) pass through
  * unchanged.
+ *
+ * Implementation note: we mutate the token's `href` via `walkTokens` rather
+ * than overriding the `link` renderer. marked v14's default link renderer
+ * relies on `this.parser.parseInline(token.tokens)` to render inline child
+ * content, and that binding only exists while marked is actively parsing.
+ * A standalone `Renderer` instance (the shape we'd need to override link on)
+ * has no `parser` attached, so any link containing inline text would throw.
+ * Mutating the href in `walkTokens` lets marked's own renderer do its job.
  */
 
-import { marked, Renderer, type Tokens } from "marked";
+import { marked, type Tokens } from "marked";
 import { pathToUrl } from "./mode.js";
 
 function isInternalPath(href: string | null | undefined): boolean {
@@ -25,17 +33,15 @@ function rewriteHref(href: string): string {
   return pathToUrl(href);
 }
 
-const renderer = new Renderer();
-const baseLink = renderer.link.bind(renderer);
-renderer.link = function (token: Tokens.Link): string {
-  const rewritten = { ...token, href: rewriteHref(token.href) };
-  return baseLink(rewritten);
-};
-
 marked.use({
   gfm: true,
   breaks: false,
-  renderer,
+  walkTokens(token) {
+    if (token.type === "link") {
+      const link = token as Tokens.Link;
+      link.href = rewriteHref(link.href);
+    }
+  },
 });
 
 export function renderMarkdown(md: string): string {
