@@ -29,7 +29,12 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Publish docs/ graph
-        run: node dist/cli.js publish docs --out _site --base /spandrel/
+        run: >-
+          node dist/cli.js publish docs
+          --out _site
+          --base /spandrel/
+          --static
+          --site-url https://trevorfox.github.io/spandrel
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
