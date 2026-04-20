@@ -1,0 +1,193 @@
+{
+  "nodes": [
+    {
+      "path": "/",
+      "name": "Fixture Graph",
+      "description": "Hand-authored fixture exercising the shapes the SPA and emitter must handle.",
+      "nodeType": "composite",
+      "depth": 0,
+      "parent": null,
+      "children": ["/clients", "/projects", "/people", "/linkTypes"],
+      "content": "Root index. Used as the home node when the SPA opens without a hash route.",
+      "frontmatter": { "name": "Fixture Graph", "description": "Hand-authored fixture exercising the shapes the SPA and emitter must handle." },
+      "created": "2026-04-20T00:00:00Z",
+      "updated": "2026-04-20T00:00:00Z",
+      "author": null
+    },
+    {
+      "path": "/clients",
+      "name": "Clients",
+      "description": "Client accounts.",
+      "nodeType": "composite",
+      "depth": 1,
+      "parent": "/",
+      "children": ["/clients/acme-corp"],
+      "content": "Composite node with one child. Tests collection rendering.",
+      "frontmatter": { "name": "Clients", "description": "Client accounts." },
+      "created": null,
+      "updated": null,
+      "author": null
+    },
+    {
+      "path": "/clients/acme-corp",
+      "name": "Acme Corp",
+      "description": "Primary client for the fixture.",
+      "nodeType": "leaf",
+      "depth": 2,
+      "parent": "/clients",
+      "children": [],
+      "content": "A leaf node with several typed outgoing links. Used to test the related-nodes drawer.",
+      "frontmatter": {
+        "name": "Acme Corp",
+        "description": "Primary client for the fixture.",
+        "links": [
+          { "to": "/people/jane-doe", "type": "owned-by" },
+          { "to": "/projects/migration", "type": "depends-on" },
+          { "to": "/projects/missing-project", "type": "depends-on" }
+        ]
+      },
+      "created": null,
+      "updated": null,
+      "author": null
+    },
+    {
+      "path": "/projects",
+      "name": "Projects",
+      "description": "Active engagements.",
+      "nodeType": "composite",
+      "depth": 1,
+      "parent": "/",
+      "children": ["/projects/migration"],
+      "content": "",
+      "frontmatter": { "name": "Projects", "description": "Active engagements." },
+      "created": null,
+      "updated": null,
+      "author": null
+    },
+    {
+      "path": "/projects/migration",
+      "name": "Database Migration",
+      "description": "Postgres-to-Supabase migration for Acme.",
+      "nodeType": "leaf",
+      "depth": 2,
+      "parent": "/projects",
+      "children": [],
+      "content": "Leaf node with a link that carries no linkType — tests untyped edges.",
+      "frontmatter": {
+        "name": "Database Migration",
+        "description": "Postgres-to-Supabase migration for Acme.",
+        "links": [{ "to": "/people/jane-doe" }]
+      },
+      "created": null,
+      "updated": null,
+      "author": null
+    },
+    {
+      "path": "/people",
+      "name": "People",
+      "description": "",
+      "nodeType": "composite",
+      "depth": 1,
+      "parent": "/",
+      "children": ["/people/jane-doe", "/people/john-doe"],
+      "content": "Collection with a missing description — tests the missing_description warning path.",
+      "frontmatter": { "name": "People" },
+      "created": null,
+      "updated": null,
+      "author": null
+    },
+    {
+      "path": "/people/jane-doe",
+      "name": "Jane Doe",
+      "description": "Principal at Acme.",
+      "nodeType": "leaf",
+      "depth": 2,
+      "parent": "/people",
+      "children": [],
+      "content": "A person referenced by multiple nodes — tests incoming-edge counts.",
+      "frontmatter": { "name": "Jane Doe", "description": "Principal at Acme." },
+      "created": null,
+      "updated": null,
+      "author": null
+    },
+    {
+      "path": "/people/john-doe",
+      "name": "John Doe",
+      "description": "Engineer at Acme.",
+      "nodeType": "leaf",
+      "depth": 2,
+      "parent": "/people",
+      "children": [],
+      "content": "A person with no incoming links — tests orphan handling in the graph viz.",
+      "frontmatter": { "name": "John Doe", "description": "Engineer at Acme." },
+      "created": null,
+      "updated": null,
+      "author": null
+    },
+    {
+      "path": "/linkTypes",
+      "name": "Link Types",
+      "description": "Vocabulary of typed relationships used in this graph.",
+      "nodeType": "composite",
+      "depth": 1,
+      "parent": "/",
+      "children": ["/linkTypes/owned-by", "/linkTypes/depends-on"],
+      "content": "",
+      "frontmatter": { "name": "Link Types", "description": "Vocabulary of typed relationships used in this graph." },
+      "created": null,
+      "updated": null,
+      "author": null
+    },
+    {
+      "path": "/linkTypes/owned-by",
+      "name": "Owned By",
+      "description": "Source node is owned, managed, or stewarded by the target.",
+      "nodeType": "leaf",
+      "depth": 2,
+      "parent": "/linkTypes",
+      "children": [],
+      "content": "",
+      "frontmatter": { "name": "Owned By", "description": "Source node is owned, managed, or stewarded by the target." },
+      "created": null,
+      "updated": null,
+      "author": null
+    },
+    {
+      "path": "/linkTypes/depends-on",
+      "name": "Depends On",
+      "description": "Source node requires the target to function correctly.",
+      "nodeType": "leaf",
+      "depth": 2,
+      "parent": "/linkTypes",
+      "children": [],
+      "content": "",
+      "frontmatter": { "name": "Depends On", "description": "Source node requires the target to function correctly." },
+      "created": null,
+      "updated": null,
+      "author": null
+    }
+  ],
+  "edges": [
+    { "from": "/", "to": "/clients", "type": "hierarchy" },
+    { "from": "/", "to": "/projects", "type": "hierarchy" },
+    { "from": "/", "to": "/people", "type": "hierarchy" },
+    { "from": "/", "to": "/linkTypes", "type": "hierarchy" },
+    { "from": "/clients", "to": "/clients/acme-corp", "type": "hierarchy" },
+    { "from": "/projects", "to": "/projects/migration", "type": "hierarchy" },
+    { "from": "/people", "to": "/people/jane-doe", "type": "hierarchy" },
+    { "from": "/people", "to": "/people/john-doe", "type": "hierarchy" },
+    { "from": "/linkTypes", "to": "/linkTypes/owned-by", "type": "hierarchy" },
+    { "from": "/linkTypes", "to": "/linkTypes/depends-on", "type": "hierarchy" },
+    { "from": "/clients/acme-corp", "to": "/people/jane-doe", "type": "link", "linkType": "owned-by", "description": "Acme is owned by Jane Doe" },
+    { "from": "/clients/acme-corp", "to": "/projects/migration", "type": "link", "linkType": "depends-on" },
+    { "from": "/projects/migration", "to": "/people/jane-doe", "type": "link" }
+  ],
+  "linkTypes": [
+    { "name": "Owned By", "description": "Source node is owned, managed, or stewarded by the target.", "path": "/linkTypes/owned-by" },
+    { "name": "Depends On", "description": "Source node requires the target to function correctly.", "path": "/linkTypes/depends-on" }
+  ],
+  "warnings": [
+    { "path": "/people", "type": "missing_description", "message": "Node /people has no description frontmatter." },
+    { "path": "/clients/acme-corp", "type": "broken_link", "message": "Link from /clients/acme-corp to /projects/missing-project: target does not exist." }
+  ]
+}
