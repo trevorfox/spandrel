@@ -79,10 +79,17 @@ export function mountTopBar(root: HTMLElement): void {
   // so "Copy Link" in the address bar yields a real, shareable URL that
   // works for humans, curl, and any agent without needing MCP.
   const rawHref = (nodePath: string, ext: "md" | "json"): string => {
+    // Directory-style canonical form: the node is a directory, its formats
+    // are files inside it. Matches how the prerendered HTML is served
+    // (at `<path>/`, i.e. `<path>/index.html`) and avoids the dot-prefix
+    // MIME trap on GitHub Pages — bare `.json` files come back as
+    // application/octet-stream and force a download rather than display
+    // inline.
+    //
     // Relative hrefs resolve against <base href>, so the same code works
     // in dev (base=/) and in a subpath deploy (base=/spandrel/).
     if (nodePath === "/" || nodePath === "") return `index.${ext}`;
-    return `${nodePath.replace(/^\/+/, "")}.${ext}`;
+    return `${nodePath.replace(/^\/+/, "")}/index.${ext}`;
   };
 
   const renderFormatLinks = () => {

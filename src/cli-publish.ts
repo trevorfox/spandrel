@@ -210,15 +210,19 @@ function nodeSiblingPath(outDir: string, nodePath: string, ext: ".md" | ".json")
 
 /**
  * Emit `<path>.md` and `<path>.json` for every node, plus `index.md` /
- * `index.json` inside each composite node's directory so they mirror the
- * directory-style URLs used by the prerendered `index.html`. Returns the
- * number of nodes processed.
+ * `index.json` inside every node's directory so the canonical directory-
+ * style URL (`<path>/index.md`, `<path>/index.json`) resolves for leaves,
+ * composites, and root alike. Returns the number of nodes processed.
  *
  * Address scheme after this runs:
- *   /                 → `<out>/.md`  and `<out>/index.md`
- *   /clients          → `<out>/clients.md` (leaf)
- *   /clients (comp.)  → `<out>/clients.md` and `<out>/clients/index.md`
- *   /clients/acme     → `<out>/clients/acme.md`
+ *   /                  → `<out>/.md`  and `<out>/index.md`
+ *   /clients           → `<out>/clients.md`  and `<out>/clients/index.md`
+ *   /clients/acme      → `<out>/clients/acme.md`  and `<out>/clients/acme/index.md`
+ *
+ * The directory-style form is the one the UI links to — it matches the
+ * `<path>/index.html` shape of prerendered HTML, and avoids the dot-file
+ * MIME trap on GitHub Pages (bare `.json` files come back as
+ * application/octet-stream and force a download).
  */
 function writeNodeSiblings(outDir: string, nodes: SpandrelNode[]): number {
   for (const node of nodes) {
@@ -231,19 +235,16 @@ function writeNodeSiblings(outDir: string, nodes: SpandrelNode[]): number {
     fs.writeFileSync(mdPath, md);
     fs.writeFileSync(jsonPath, json);
 
-    // Composite nodes and the root also get index.md / index.json inside
-    // their directory. That makes `https://host/spandrel/index.json` and
-    // `https://host/spandrel/architecture/index.json` both work, matching
-    // user intuition from the directory-style `index.html` prerender.
-    if (node.nodeType === "composite" || node.path === "/") {
-      const dir =
-        node.path === "/"
-          ? outDir
-          : path.join(outDir, node.path.replace(/^\/+/, ""));
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, "index.md"), md);
-      fs.writeFileSync(path.join(dir, "index.json"), json);
-    }
+    // Directory-style aliases for every node — leaves, composites, and
+    // root. The index.{md,json} form is the canonical UI link target, so
+    // every node needs a directory that resolves it.
+    const dir =
+      node.path === "/"
+        ? outDir
+        : path.join(outDir, node.path.replace(/^\/+/, ""));
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "index.md"), md);
+    fs.writeFileSync(path.join(dir, "index.json"), json);
   }
   return nodes.length;
 }
