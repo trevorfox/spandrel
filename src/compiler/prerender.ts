@@ -17,7 +17,7 @@
  *      into the shared head, emit one file per node.
  */
 
-import { Marked, Renderer, type Tokens } from "marked";
+import { Marked, type Tokens } from "marked";
 import type { SpandrelNode, SpandrelEdge } from "./types.js";
 import type { Graph } from "../web/types.js";
 
@@ -259,26 +259,35 @@ export function buildJsonLd(
  * crawler-facing HTML and the SPA-navigated HTML disagree here by design.
  */
 export function createStaticMarkdownRenderer(base: string) {
-  const renderer = new Renderer();
-  const baseLink = renderer.link.bind(renderer);
   const trimmedBase = base.endsWith("/") ? base : `${base}/`;
-
-  renderer.link = function (token: Tokens.Link): string {
-    const href = token.href;
-    let rewritten = href;
-    if (
-      href &&
-      href.startsWith("/") &&
-      !href.startsWith("//") &&
-      !/^[a-z]+:\/\//i.test(href)
-    ) {
-      const rel = href.slice(1);
-      rewritten = `${trimmedBase}${rel}${rel.endsWith("/") || rel.length === 0 ? "" : "/"}`;
-    }
-    return baseLink({ ...token, href: rewritten });
-  };
-
-  const instance = new Marked().use({ gfm: true, breaks: false, renderer });
+  const instance = new Marked();
+  instance.use({
+    gfm: true,
+    breaks: false,
+    renderer: {
+      link(token: Tokens.Link): string {
+        const href = token.href ?? "";
+        let rewritten = href;
+        if (
+          href &&
+          href.startsWith("/") &&
+          !href.startsWith("//") &&
+          !/^[a-z]+:\/\//i.test(href)
+        ) {
+          const rel = href.slice(1);
+          rewritten = `${trimmedBase}${rel}${rel.endsWith("/") || rel.length === 0 ? "" : "/"}`;
+        }
+        // Delegate to the default renderer by calling the parent on `this`.
+        // `this.parser.parseInline` renders the token text recursively.
+        const self = this as unknown as {
+          parser: { parseInline: (tokens: Tokens.Generic[]) => string };
+        };
+        const text = self.parser.parseInline(token.tokens ?? []);
+        const titleAttr = token.title ? ` title="${escapeHtml(token.title)}"` : "";
+        return `<a href="${escapeHtml(rewritten)}"${titleAttr}>${text}</a>`;
+      },
+    },
+  });
   return (md: string): string => {
     if (!md || !md.trim()) return "";
     return instance.parse(md, { async: false }) as string;

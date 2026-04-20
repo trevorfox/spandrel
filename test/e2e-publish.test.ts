@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -218,5 +218,253 @@ describe("spandrel publish — --strip-private", () => {
     const paths = graph.nodes.map((n) => n.path).sort();
     expect(paths).toContain("/");
     expect(paths).toContain("/leaf");
+  });
+});
+
+describe("spandrel publish — --static prerender", () => {
+  let root: string;
+  let out: string;
+
+  beforeEach(() => {
+    root = mkRoot();
+    out = path.join(root, "_site");
+    createThing(root, "/", {
+      name: "Prerender Fixture",
+      description: "E2E fixture for --static",
+      content: "# Welcome\n\nContains: [Clients](/clients).",
+    });
+    createThing(root, "/clients", {
+      name: "Clients",
+      description: "Client collection",
+      content: "Collection of clients. See [Acme](/clients/acme-corp).",
+    });
+    createThing(root, "/clients/acme-corp", {
+      name: "Acme Corp",
+      description: "Flagship client account",
+      content: "## About\n\nAcme is a customer.",
+    });
+  });
+
+  afterEach(() => {
+    rmrf(root);
+  });
+
+  it("emits _site/clients/acme-corp/index.html with baked body, meta, and JSON-LD", async () => {
+    await publish(root, { out, static: true });
+    const page = path.join(out, "clients/acme-corp/index.html");
+    expect(fs.existsSync(page)).toBe(true);
+
+    const html = fs.readFileSync(page, "utf-8");
+
+    expect(html).toContain("<title>Acme Corp — Prerender Fixture</title>");
+    expect(html).toContain(
+      '<meta name="description" content="Flagship client account"'
+    );
+    expect(html).toContain('<link rel="canonical" href="/clients/acme-corp/"');
+    expect(html).toContain('<meta property="og:title" content="Acme Corp"');
+    expect(html).toContain('<meta property="og:type" content="article"');
+    expect(html).toContain('<meta name="twitter:card" content="summary"');
+
+    // Prerendered body block with heading and rendered content
+    expect(html).toContain('id="prerender-content"');
+    expect(html).toContain("<h1>Acme Corp</h1>");
+    expect(html).toMatch(/<h2[^>]*>About<\/h2>/);
+
+    // SPA hydration target
+    expect(html).toContain('id="app"');
+
+    // JSON-LD is present, valid JSON, and has the required fields
+    const match = html.match(
+      /<script type="application\/ld\+json">([\s\S]*?)<\/script>/
+    );
+    expect(match).toBeTruthy();
+    const ld = JSON.parse(match![1]);
+    expect(ld["@context"]).toBe("https://schema.org");
+    expect(ld["@type"]).toBe("CreativeWork");
+    expect(ld.name).toBe("Acme Corp");
+    expect(ld.isPartOf).toEqual({ "@id": "/clients/" });
+  });
+
+  it("emits hasPart on composite nodes", async () => {
+    await publish(root, { out, static: true });
+    const page = path.join(out, "clients/index.html");
+    const html = fs.readFileSync(page, "utf-8");
+    const match = html.match(
+      /<script type="application\/ld\+json">([\s\S]*?)<\/script>/
+    );
+    const ld = JSON.parse(match![1]);
+    expect(ld["@type"]).toBe("Collection");
+    expect(ld.hasPart).toEqual([{ "@id": "/clients/acme-corp/" }]);
+  });
+
+  it("replaces the SPA shell at _site/index.html with the root node's prerender", async () => {
+    await publish(root, { out, static: true });
+    const html = fs.readFileSync(path.join(out, "index.html"), "utf-8");
+    expect(html).toContain("<title>Prerender Fixture</title>");
+    expect(html).toContain('id="prerender-content"');
+    expect(html).toContain("<h1>Prerender Fixture</h1>");
+  });
+
+  it("respects --base when rewriting canonical URLs and internal links", async () => {
+    await publish(root, { out, static: true, base: "/my-repo/" });
+    const html = fs.readFileSync(
+      path.join(out, "clients/acme-corp/index.html"),
+      "utf-8"
+    );
+    expect(html).toContain('<base href="/my-repo/"');
+    expect(html).toContain(
+      '<link rel="canonical" href="/my-repo/clients/acme-corp/"'
+    );
+    // Internal markdown links in the body render as real URLs, not hash fragments.
+    const rootHtml = fs.readFileSync(path.join(out, "index.html"), "utf-8");
+    expect(rootHtml).toContain('href="/my-repo/clients/"');
+    expect(rootHtml).not.toContain('href="#/clients"');
+  });
+
+  it("emits absolute URLs when --site-url is provided", async () => {
+    await publish(root, {
+      out,
+      static: true,
+      siteUrl: "https://example.com",
+    });
+    const html = fs.readFileSync(
+      path.join(out, "clients/acme-corp/index.html"),
+      "utf-8"
+    );
+    expect(html).toContain(
+      '<link rel="canonical" href="https://example.com/clients/acme-corp/"'
+    );
+    const ld = JSON.parse(
+      html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]
+    );
+    expect(ld.url).toBe("https://example.com/clients/acme-corp/");
+    expect(ld.isPartOf).toEqual({ "@id": "https://example.com/clients/" });
+  });
+
+  it("does not emit per-node files when --static is not set", async () => {
+    await publish(root, { out });
+    expect(fs.existsSync(path.join(out, "clients/acme-corp/index.html"))).toBe(
+      false
+    );
+    // Root index.html is the SPA shell, not a prerender.
+    const rootHtml = fs.readFileSync(path.join(out, "index.html"), "utf-8");
+    expect(rootHtml).not.toContain('id="prerender-content"');
+  });
+
+  it("projects typed link edges through the schemaOrg predicate whitelist", async () => {
+    // Seed a linkType node with a legal schemaOrg mapping.
+    fs.mkdirSync(path.join(root, "linkTypes"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "linkTypes/equivalent-to.md"),
+      [
+        "---",
+        "name: equivalent-to",
+        "description: External canonical equivalents",
+        "schemaOrg: sameAs",
+        "---",
+        "",
+      ].join("\n")
+    );
+    // Target node under a new collection.
+    createThing(root, "/people", {
+      name: "People",
+      description: "People collection",
+      content: "",
+    });
+    createThing(root, "/people/alice", {
+      name: "Alice",
+      description: "Person",
+      content: "",
+    });
+    // Rewrite acme-corp as a leaf .md with a typed frontmatter link using our linkType.
+    fs.rmSync(path.join(root, "clients/acme-corp"), { recursive: true, force: true });
+    fs.writeFileSync(
+      path.join(root, "clients/acme-corp.md"),
+      [
+        "---",
+        "name: Acme Corp",
+        "description: Flagship client account",
+        "links:",
+        "  - to: /people/alice",
+        "    type: equivalent-to",
+        "---",
+        "## About",
+        "",
+        "Acme is a customer.",
+        "",
+      ].join("\n")
+    );
+
+    await publish(root, { out, static: true });
+    const html = fs.readFileSync(
+      path.join(out, "clients/acme-corp/index.html"),
+      "utf-8"
+    );
+    const ld = JSON.parse(
+      html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]
+    );
+    expect(ld.sameAs).toEqual([{ "@id": "/people/alice/" }]);
+  });
+
+  it("falls back to mentions and warns when a linkType's schemaOrg is not in the whitelist", async () => {
+    fs.mkdirSync(path.join(root, "linkTypes"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "linkTypes/bogus.md"),
+      [
+        "---",
+        "name: bogus",
+        "description: Has a bad mapping",
+        "schemaOrg: notARealThing",
+        "---",
+        "",
+      ].join("\n")
+    );
+    createThing(root, "/targets", {
+      name: "Targets",
+      description: "Targets collection",
+      content: "",
+    });
+    createThing(root, "/targets/t1", {
+      name: "Target One",
+      description: "Target",
+      content: "",
+    });
+    fs.rmSync(path.join(root, "clients/acme-corp"), { recursive: true, force: true });
+    fs.writeFileSync(
+      path.join(root, "clients/acme-corp.md"),
+      [
+        "---",
+        "name: Acme Corp",
+        "description: Flagship client account",
+        "links:",
+        "  - to: /targets/t1",
+        "    type: bogus",
+        "---",
+        "body",
+        "",
+      ].join("\n")
+    );
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await publish(root, { out, static: true });
+      const html = fs.readFileSync(
+        path.join(out, "clients/acme-corp/index.html"),
+        "utf-8"
+      );
+      const ld = JSON.parse(
+        html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]
+      );
+      // Bad predicate falls back to "mentions".
+      expect(ld.mentions).toEqual([{ "@id": "/targets/t1/" }]);
+      expect(ld.sameAs).toBeUndefined();
+      // The warning surfaced.
+      const warnCalls = warnSpy.mock.calls.map((c) => String(c[0]));
+      expect(
+        warnCalls.some((m) => /notARealThing/.test(m) && /mentions/.test(m))
+      ).toBe(true);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
