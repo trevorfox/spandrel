@@ -4,8 +4,8 @@ import {
   currentPath$,
   derived$,
   graph$,
-  pathToHash,
 } from "../state.js";
+import { pathToUrl } from "../lib/mode.js";
 import { currentTheme, toggleTheme } from "../lib/theme.js";
 import type { SearchHit } from "./search.js";
 
@@ -43,7 +43,7 @@ export function mountTopBar(root: HTMLElement): void {
     parts.push(
       path === "/"
         ? `<span class="crumb-current">${escapeHtml(rootName)}</span>`
-        : `<a href="${pathToHash("/")}">${escapeHtml(rootName)}</a>`,
+        : `<a href="${pathToUrl("/")}">${escapeHtml(rootName)}</a>`,
     );
     let acc = "";
     segs.forEach((seg, i) => {
@@ -53,7 +53,7 @@ export function mountTopBar(root: HTMLElement): void {
       if (i === segs.length - 1) {
         parts.push(`<span class="crumb-current">${escapeHtml(label)}</span>`);
       } else {
-        parts.push(`<a href="${pathToHash(acc)}">${escapeHtml(label)}</a>`);
+        parts.push(`<a href="${pathToUrl(acc)}">${escapeHtml(label)}</a>`);
       }
     });
     crumbEl.innerHTML = parts.join(" ");
@@ -135,7 +135,9 @@ export function mountTopBar(root: HTMLElement): void {
   const go = (path: string) => {
     closeResults();
     input.value = "";
-    window.location.hash = pathToHash(path);
+    // Works in both modes: pathToUrl returns `#/path` in SPA mode (sets hash,
+    // fires hashchange) and `path/` in static mode (full page navigation).
+    window.location.assign(pathToUrl(path));
   };
 
   input.addEventListener("input", runSearch);

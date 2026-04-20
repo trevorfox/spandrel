@@ -6,6 +6,7 @@
  */
 
 import { graph$ } from "../state.js";
+import { pathToUrl } from "../lib/mode.js";
 
 function escapeHtml(s: string): string {
   return String(s).replace(/[&<>"']/g, (c) => {
@@ -46,7 +47,7 @@ export function mountSiteBanner(el: HTMLElement): void {
       if (parts.length) parts.push(`<span class="site-banner-sep" aria-hidden="true">·</span>`);
       parts.push(`<span class="site-banner-tagline">${escapeHtml(root.description)}</span>`);
     }
-    el.innerHTML = `<a class="site-banner-inner" href="#/">${parts.join("")}</a>`;
+    el.innerHTML = `<a class="site-banner-inner" href="${pathToUrl("/")}">${parts.join("")}</a>`;
   }
 
   graph$.subscribe(render);

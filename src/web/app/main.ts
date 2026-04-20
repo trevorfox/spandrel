@@ -9,7 +9,7 @@ import { mountDrawer } from "./components/drawer.js";
 import { mountSiteBanner } from "./components/site-banner.js";
 import { startSse } from "./lib/sse.js";
 import { updateMeta } from "./lib/meta.js";
-import { setStaticMode } from "./lib/markdown.js";
+import { setStaticMode } from "./lib/mode.js";
 
 function syncRouteFromHash(): void {
   const { path, format } = parseHash(window.location.hash);

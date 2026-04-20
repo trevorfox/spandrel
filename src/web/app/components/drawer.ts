@@ -1,6 +1,7 @@
 /** Bottom drawer: related nodes by link type + warnings strip. Collapsible. */
 
-import { currentPath$, derived$, pathToHash } from "../state.js";
+import { currentPath$, derived$ } from "../state.js";
+import { pathToUrl } from "../lib/mode.js";
 import type { LinkTypeInfo, SpandrelEdge } from "../../types.js";
 
 export function mountDrawer(root: HTMLElement): void {
@@ -88,7 +89,7 @@ function renderRelated(
               const d = e.description ?? target?.description ?? "";
               return `
                 <li>
-                  <a href="${pathToHash(e.to)}">${escapeHtml(name)}</a>
+                  <a href="${pathToUrl(e.to)}">${escapeHtml(name)}</a>
                   ${d ? `<span class="rel-desc">${escapeHtml(d)}</span>` : ""}
                 </li>`;
             })

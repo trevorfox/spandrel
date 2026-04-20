@@ -21,7 +21,8 @@ import { select, type Selection } from "d3-selection";
 import { drag, type D3DragEvent } from "d3-drag";
 import "d3-transition";
 
-import { currentPath$, derived$, graph$, pathToHash, collectionOfPath } from "../state.js";
+import { currentPath$, derived$, graph$, collectionOfPath } from "../state.js";
+import { pathToUrl } from "../lib/mode.js";
 import type { Graph, SpandrelEdge, SpandrelNode } from "../../types.js";
 
 interface VizNode extends SimulationNodeDatum {
@@ -124,7 +125,10 @@ export function mountGraphViz(root: HTMLElement): void {
         g.append("circle");
         g.append("text").attr("y", 20);
         g.on("click", (_event, d) => {
-          window.location.hash = pathToHash(d.id);
+          // Uniform in both modes: pathToUrl returns a hash fragment in
+          // SPA mode (sets hash, fires hashchange) and a real URL in
+          // static mode (full navigation to the prerendered page).
+          window.location.assign(pathToUrl(d.id));
         });
         g.call(attachDrag(() => simulation));
         return g;

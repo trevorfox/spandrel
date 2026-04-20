@@ -1,8 +1,9 @@
 /** Content pane: metadata header + node body in the selected format. */
 
-import { currentPath$, derived$, pathToHash, viewFormat$ } from "../state.js";
+import { currentPath$, derived$, viewFormat$ } from "../state.js";
 import { renderMarkdown } from "../lib/markdown.js";
 import { renderNodeAsMarkdown } from "../lib/render-node-markdown.js";
+import { pathToUrl } from "../lib/mode.js";
 import type { SpandrelNode } from "../../types.js";
 
 export function mountContent(root: HTMLElement): void {
@@ -23,7 +24,7 @@ export function mountContent(root: HTMLElement): void {
             <p class="description">No node exists at this path.</p>
           </header>
           <article>
-            <p><a href="${pathToHash("/")}">Back to root</a></p>
+            <p><a href="${pathToUrl("/")}">Back to root</a></p>
           </article>
         </div>
       `;
@@ -80,7 +81,7 @@ function renderNode(
                 const desc = child?.description ?? "";
                 return `
                   <li>
-                    <a href="${pathToHash(p)}">${escapeHtml(name)}</a>
+                    <a href="${pathToUrl(p)}">${escapeHtml(name)}</a>
                     ${desc ? `<span class="child-desc">${escapeHtml(desc)}</span>` : ""}
                   </li>`;
               })
