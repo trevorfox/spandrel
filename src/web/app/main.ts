@@ -9,6 +9,7 @@ import { mountDrawer } from "./components/drawer.js";
 import { mountSiteBanner } from "./components/site-banner.js";
 import { startSse } from "./lib/sse.js";
 import { updateMeta } from "./lib/meta.js";
+import { setStaticMode } from "./lib/markdown.js";
 
 function syncRouteFromHash(): void {
   const { path, format } = parseHash(window.location.hash);
@@ -72,12 +73,19 @@ function init(): void {
     throw new Error("App layout elements missing from index.html");
   }
 
-  // Remove the prerendered content block now that the SPA is taking over.
-  // The prerender exists only for crawlers and no-JS users; once we're
-  // mounted, keeping it around would visually duplicate every node body
-  // above the SPA's own render. The SEO value is already captured in the
-  // initial HTML the server sent.
-  document.getElementById("prerender-content")?.remove();
+  // Presence of a prerender block signals `spandrel publish --static`
+  // produced this bundle, so every node path has a real HTML page behind
+  // it. Flip the markdown renderer to emit real URLs instead of hash
+  // routes — clicks navigate to prerendered pages directly, which behaves
+  // better for Copy Link, crawlers, and users who share URLs.
+  const prerender = document.getElementById("prerender-content");
+  setStaticMode(prerender !== null);
+
+  // Remove the prerender now that the SPA is taking over. It exists only
+  // for crawlers and no-JS users; once we're mounted, keeping it around
+  // would visually duplicate every node body above the SPA's own render.
+  // The SEO value is already captured in the initial HTML the server sent.
+  prerender?.remove();
 
   mountSiteBanner(siteBanner);
   mountTopBar(topBar);

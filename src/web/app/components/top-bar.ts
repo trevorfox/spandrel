@@ -5,9 +5,6 @@ import {
   derived$,
   graph$,
   pathToHash,
-  viewFormat$,
-  buildHash,
-  type ViewFormat,
 } from "../state.js";
 import { currentTheme, toggleTheme } from "../lib/theme.js";
 import type { SearchHit } from "./search.js";
@@ -20,9 +17,9 @@ export function mountTopBar(root: HTMLElement): void {
       <div class="results" role="listbox" hidden></div>
     </div>
     <div class="format-toggle" role="group" aria-label="View format">
-      <button type="button" data-format="rendered" title="Rendered" aria-label="Rendered">R</button>
-      <button type="button" data-format="markdown" title="Markdown" aria-label="Markdown">M</button>
-      <button type="button" data-format="json" title="JSON" aria-label="JSON">J</button>
+      <button type="button" data-format="rendered" class="active" aria-pressed="true" title="Rendered" aria-label="Rendered">R</button>
+      <a data-format="markdown" class="format-link" title="View raw markdown" aria-label="Markdown" href="">M</a>
+      <a data-format="json" class="format-link" title="View raw JSON" aria-label="JSON" href="">J</a>
     </div>
     <button type="button" class="theme-toggle" aria-label="Toggle theme"></button>
   `;
@@ -32,7 +29,7 @@ export function mountTopBar(root: HTMLElement): void {
   const input = searchWrap.querySelector("input") as HTMLInputElement;
   const resultsEl = searchWrap.querySelector(".results") as HTMLElement;
   const formatGroup = root.querySelector(".format-toggle") as HTMLElement;
-  const formatButtons = formatGroup.querySelectorAll<HTMLButtonElement>("button[data-format]");
+  const formatLinks = formatGroup.querySelectorAll<HTMLAnchorElement>("a.format-link");
   const themeBtn = root.querySelector(".theme-toggle") as HTMLButtonElement;
 
   const renderBreadcrumb = () => {
@@ -73,28 +70,29 @@ export function mountTopBar(root: HTMLElement): void {
     renderTheme();
   });
 
-  // ── format toggle (rendered / markdown / json)
-  const renderFormat = () => {
-    const active = viewFormat$.get();
-    formatButtons.forEach((btn) => {
-      const fmt = btn.getAttribute("data-format") as ViewFormat;
-      const isActive = fmt === active;
-      btn.setAttribute("aria-pressed", isActive ? "true" : "false");
-      btn.classList.toggle("active", isActive);
-    });
+  // ── format links (markdown / json)
+  //
+  // R is always "you are here" — the SPA only renders the rendered view.
+  // M and J are real anchor links to the sibling static files emitted by
+  // `spandrel publish` (and served by the dev server via extension routing).
+  // Clicking them navigates the browser away from the SPA to the raw file,
+  // so "Copy Link" in the address bar yields a real, shareable URL that
+  // works for humans, curl, and any agent without needing MCP.
+  const rawHref = (nodePath: string, ext: "md" | "json"): string => {
+    // Relative hrefs resolve against <base href>, so the same code works
+    // in dev (base=/) and in a subpath deploy (base=/spandrel/).
+    if (nodePath === "/" || nodePath === "") return `index.${ext}`;
+    return `${nodePath.replace(/^\/+/, "")}.${ext}`;
   };
 
-  formatGroup.addEventListener("click", (e) => {
-    const target = (e.target as HTMLElement).closest(
-      "button[data-format]"
-    ) as HTMLButtonElement | null;
-    if (!target) return;
-    const fmt = target.getAttribute("data-format") as ViewFormat;
-    if (!fmt || fmt === viewFormat$.get()) return;
-    // Update the hash; the hashchange listener in main.ts will push into
-    // currentPath$ and viewFormat$, so a single source of truth drives the UI.
-    window.location.hash = buildHash(currentPath$.get(), fmt);
-  });
+  const renderFormatLinks = () => {
+    const p = currentPath$.get();
+    formatLinks.forEach((a) => {
+      const fmt = a.getAttribute("data-format");
+      const ext = fmt === "markdown" ? "md" : "json";
+      a.href = rawHref(p, ext);
+    });
+  };
 
   // ── search
   let selectedIndex = -1;
@@ -192,12 +190,14 @@ export function mountTopBar(root: HTMLElement): void {
   // ── wiring
   renderTheme();
   renderBreadcrumb();
-  renderFormat();
+  renderFormatLinks();
 
-  currentPath$.subscribe(() => renderBreadcrumb());
+  currentPath$.subscribe(() => {
+    renderBreadcrumb();
+    renderFormatLinks();
+  });
   graph$.subscribe(() => renderBreadcrumb());
   derived$.subscribe(() => renderBreadcrumb());
-  viewFormat$.subscribe(() => renderFormat());
 }
 
 function escapeHtml(s: string): string {
