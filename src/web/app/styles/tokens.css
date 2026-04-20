@@ -1,0 +1,94 @@
+/* Limestone + candlelit-stone design tokens.
+ * Only one set of rules is active at a time via :root[data-theme].
+ * Colors are warm, muted; rules are hairline; accents are ochre/amber.
+ */
+
+:root {
+  /* Typography */
+  --font-serif: "Source Serif 4", "Source Serif Pro", Georgia, "Times New Roman", serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-base: 1.0625rem;
+  --fs-md: 1.125rem;
+  --fs-lg: 1.375rem;
+  --fs-xl: 1.75rem;
+  --fs-xxl: 2.25rem;
+
+  --lh-tight: 1.25;
+  --lh-normal: 1.6;
+  --lh-loose: 1.75;
+
+  --ls-smcaps: 0.08em;
+
+  /* Spacing */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.5rem;
+  --s-6: 2rem;
+  --s-7: 3rem;
+  --s-8: 4rem;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+
+  /* Hairline rule weight */
+  --rule: 1px;
+
+  /* Layout */
+  --top-bar-h: 3.25rem;
+  --drawer-h: 14rem;
+  --content-max-w: 44rem;
+}
+
+/* Light — limestone. Warm off-white, deep graphite, soft ochre. */
+:root[data-theme="light"] {
+  --bg: #f4efe6;
+  --bg-elevated: #ede7db;
+  --bg-sunken: #ece5d6;
+  --fg: #2a2825;
+  --fg-muted: #6a6559;
+  --fg-subtle: #948d7d;
+  --accent: #a67c3c;
+  --accent-muted: #c9a770;
+  --warning-bg: #efe1c4;
+  --warning-fg: #6b4c14;
+  --rule-color: #d6cdb9;
+  --rule-strong: #b8ae96;
+  --selection: #e6d6a8;
+  --node-fill: #e6dcc4;
+  --node-stroke: #6a6559;
+  --edge-stroke: #b8ae96;
+  --current-fill: #a67c3c;
+  --current-stroke: #6b4c14;
+  --link-color: #7a5a26;
+  color-scheme: light;
+}
+
+/* Dark — candlelit stone. Warm charcoal, cream, amber. */
+:root[data-theme="dark"] {
+  --bg: #1e1c19;
+  --bg-elevated: #26231f;
+  --bg-sunken: #181614;
+  --fg: #ebe3d4;
+  --fg-muted: #a49c8c;
+  --fg-subtle: #756d60;
+  --accent: #c9953a;
+  --accent-muted: #a67c3c;
+  --warning-bg: #302617;
+  --warning-fg: #e6c58a;
+  --rule-color: #3a362f;
+  --rule-strong: #514b41;
+  --selection: #3a2f1b;
+  --node-fill: #2e2a23;
+  --node-stroke: #756d60;
+  --edge-stroke: #3a362f;
+  --current-fill: #c9953a;
+  --current-stroke: #e6c58a;
+  --link-color: #d9ac5a;
+  color-scheme: dark;
+}

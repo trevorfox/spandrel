@@ -42,27 +42,39 @@
     "model-context-protocol"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc",
+    "build": "rm -rf dist && tsc && npm run build:web",
+    "build:web": "vite build --config src/web/app/vite.config.ts",
     "prepublishOnly": "npm run build",
     "dev": "tsx src/cli.ts dev",
+    "dev:web": "vite --config src/web/app/vite.config.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
+    "d3-drag": "^3.0.0",
+    "d3-force": "^3.0.0",
+    "d3-selection": "^3.0.0",
+    "d3-transition": "^3.0.1",
     "globby": "^14.1.0",
     "graphql": "^16.10.0",
     "graphql-yoga": "^5.12.0",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.1",
+    "marked": "^14.1.3",
     "simple-git": "^3.27.0"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "1.26.0",
+    "@types/d3-drag": "^3.0.7",
+    "@types/d3-force": "^3.0.10",
+    "@types/d3-selection": "^3.0.11",
+    "@types/d3-transition": "^3.0.9",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.15.3",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
+    "vite": "^5.4.10",
     "vitest": "^3.1.2"
   },
   "peerDependencies": {

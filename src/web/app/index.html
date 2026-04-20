@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spandrel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300..700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      // Inlined theme bootstrap to prevent flash-of-unstyled-theme. Runs
+      // before any CSS is parsed so :root[data-theme] is set from the start.
+      (function () {
+        try {
+          var stored = localStorage.getItem("spandrel.theme");
+          var theme =
+            stored === "light" || stored === "dark"
+              ? stored
+              : window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+          document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="./styles/tokens.css" />
+    <link rel="stylesheet" href="./styles/base.css" />
+    <link rel="stylesheet" href="./styles/components.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="top-bar" class="top-bar" aria-label="Navigation"></header>
+      <main id="layout" class="layout">
+        <section id="content" class="content" aria-label="Node content"></section>
+        <aside id="graph-pane" class="graph-pane" aria-label="Graph"></aside>
+      </main>
+      <section id="drawer" class="drawer" aria-label="Related nodes and warnings"></section>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
