@@ -30,22 +30,68 @@ export class Signal<T> {
   }
 }
 
-/** Normalize a hash fragment to a graph path.
- *  "" or "#" or "#/" → "/"
- *  "#/foo/bar"       → "/foo/bar"
- *  strips trailing "/" except for the root.
+/** The three ways to view a node.
+ *
+ * `rendered` is the default HTML surface; `markdown` and `json` expose the
+ * raw shapes used by the CLI's `.md` / `.json` extension routes so the
+ * SPA, dev server, and publish bundle all agree on the same three formats.
  */
-export function hashToPath(hash: string): string {
+export type ViewFormat = "rendered" | "markdown" | "json";
+
+/** Parse a hash fragment into `{ path, format }`.
+ *
+ * Accepts:
+ *   ""           → { path: "/",        format: "rendered" }
+ *   "#/"         → { path: "/",        format: "rendered" }
+ *   "#/.md"      → { path: "/",        format: "markdown" }
+ *   "#/.json"    → { path: "/",        format: "json"     }
+ *   "#/foo/bar"      → { path: "/foo/bar", format: "rendered" }
+ *   "#/foo/bar.md"   → { path: "/foo/bar", format: "markdown" }
+ *   "#/foo/bar.json" → { path: "/foo/bar", format: "json"     }
+ */
+export function parseHash(hash: string): { path: string; format: ViewFormat } {
   let h = hash || "";
   if (h.startsWith("#")) h = h.slice(1);
-  if (!h || h === "/") return "/";
-  if (h.length > 1 && h.endsWith("/")) h = h.slice(0, -1);
+  if (!h) return { path: "/", format: "rendered" };
+
+  // Normalize to start with "/".
   if (!h.startsWith("/")) h = "/" + h;
-  return h;
+
+  // Format suffix. Recognize ".md" and ".json" at the very end, but only
+  // if we're not looking at a path like "/foo.md/" (trailing slash) or
+  // something else suspicious.
+  let format: ViewFormat = "rendered";
+  if (h.endsWith(".md")) {
+    format = "markdown";
+    h = h.slice(0, -3);
+  } else if (h.endsWith(".json")) {
+    format = "json";
+    h = h.slice(0, -5);
+  }
+
+  // After stripping the extension, the root may have collapsed to "".
+  if (!h || h === "/") return { path: "/", format };
+
+  // Strip trailing slash (non-root).
+  if (h.length > 1 && h.endsWith("/")) h = h.slice(0, -1);
+
+  return { path: h, format };
+}
+
+/** Compatibility shim for the path-only callsites. */
+export function hashToPath(hash: string): string {
+  return parseHash(hash).path;
+}
+
+/** Build a hash string for `{ path, format }` suitable for `window.location.hash`. */
+export function buildHash(path: string, format: ViewFormat = "rendered"): string {
+  const suffix = format === "markdown" ? ".md" : format === "json" ? ".json" : "";
+  if (path === "/" || path === "") return `#/${suffix}`;
+  return `#${path}${suffix}`;
 }
 
 export function pathToHash(path: string): string {
-  return `#${path}`;
+  return buildHash(path, "rendered");
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -65,6 +111,7 @@ export interface DerivedMaps {
 
 export const graph$ = new Signal<Graph | null>(null);
 export const currentPath$ = new Signal<string>("/");
+export const viewFormat$ = new Signal<ViewFormat>("rendered");
 export const error$ = new Signal<string | null>(null);
 export const derived$ = new Signal<DerivedMaps | null>(null);
 

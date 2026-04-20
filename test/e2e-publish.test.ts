@@ -2,9 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import matter from "gray-matter";
 import { publish } from "../src/cli-publish.js";
 import { createThing } from "../src/server/writer.js";
 import type { Graph } from "../src/web/types.js";
+import type { SpandrelNode } from "../src/compiler/types.js";
 
 /**
  * E2E coverage for `spandrel publish`: compile a tmp graph to a real
@@ -126,6 +128,52 @@ describe("spandrel publish — graph.json + bundle", () => {
   it("does not create CNAME when the source is absent", async () => {
     await publish(root, { out });
     expect(fs.existsSync(path.join(out, "CNAME"))).toBe(false);
+  });
+
+  it("emits per-node `.md` and `.json` sibling files for every node", async () => {
+    await publish(root, { out });
+
+    // Leaf node at /things/one → siblings at _site/things/one.{md,json}
+    const leafMd = path.join(out, "things", "one.md");
+    const leafJson = path.join(out, "things", "one.json");
+    expect(fs.existsSync(leafMd)).toBe(true);
+    expect(fs.existsSync(leafJson)).toBe(true);
+
+    // Composite collection at /things → siblings at _site/things.{md,json}
+    const collectionMd = path.join(out, "things.md");
+    const collectionJson = path.join(out, "things.json");
+    expect(fs.existsSync(collectionMd)).toBe(true);
+    expect(fs.existsSync(collectionJson)).toBe(true);
+
+    // Root node at / → siblings at _site/.md and _site/.json
+    expect(fs.existsSync(path.join(out, ".md"))).toBe(true);
+    expect(fs.existsSync(path.join(out, ".json"))).toBe(true);
+  });
+
+  it("sibling .md parses back to the node's name/description via gray-matter", async () => {
+    await publish(root, { out });
+
+    const leafMd = fs.readFileSync(path.join(out, "things", "one.md"), "utf-8");
+    const parsed = matter(leafMd);
+    expect(parsed.data.name).toBe("One");
+    expect(parsed.data.description).toBe("The only item.");
+    expect(parsed.content).toContain("The single leaf");
+  });
+
+  it("sibling .json is the full node object", async () => {
+    await publish(root, { out });
+
+    const leafJson: SpandrelNode = JSON.parse(
+      fs.readFileSync(path.join(out, "things", "one.json"), "utf-8")
+    );
+    expect(leafJson.path).toBe("/things/one");
+    expect(leafJson.name).toBe("One");
+    expect(leafJson.description).toBe("The only item.");
+    expect(typeof leafJson.content).toBe("string");
+    // Full node shape is present.
+    expect(leafJson).toHaveProperty("frontmatter");
+    expect(leafJson).toHaveProperty("nodeType");
+    expect(leafJson).toHaveProperty("depth");
   });
 });
 
