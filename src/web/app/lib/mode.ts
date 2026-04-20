@@ -36,3 +36,33 @@ export function pathToUrl(path: string): string {
   if (path === "/" || path === "") return "./";
   return path.replace(/^\/+/, "") + "/";
 }
+
+/**
+ * Read the current node path from the browser's address bar.
+ *
+ * - Static mode: the real URL *is* the route. Strip `<base href>` off
+ *   `location.pathname`, drop any `/index.html` or trailing slash, and
+ *   what's left is the graph node's path. The hash is ignored; a real
+ *   navigation set the URL, not the hash.
+ * - Non-static mode: hash routing. Returns `null` so the caller falls
+ *   through to `parseHash(location.hash)`.
+ *
+ * Returns `null` when not in static mode so the caller can run the
+ * existing hash-parsing path without branching on mode.
+ */
+export function staticPathFromLocation(): string | null {
+  if (!staticMode) return null;
+  let basePath = "/";
+  try {
+    basePath = new URL(".", document.baseURI).pathname;
+  } catch {
+    /* fall through */
+  }
+  let p = window.location.pathname;
+  if (basePath !== "/" && p.startsWith(basePath)) {
+    p = "/" + p.slice(basePath.length);
+  }
+  p = p.replace(/\/index\.html$/, "");
+  if (p.length > 1) p = p.replace(/\/$/, "");
+  return p || "/";
+}

@@ -9,9 +9,19 @@ import { mountDrawer } from "./components/drawer.js";
 import { mountSiteBanner } from "./components/site-banner.js";
 import { startSse } from "./lib/sse.js";
 import { updateMeta } from "./lib/meta.js";
-import { setStaticMode } from "./lib/mode.js";
+import { setStaticMode, staticPathFromLocation } from "./lib/mode.js";
 
-function syncRouteFromHash(): void {
+function syncRoute(): void {
+  // In static mode the real URL carries the route — a click or direct
+  // visit to `/spandrel/architecture/compiler/` must land on that node,
+  // not on whatever the (empty) hash parses to. When the static-path
+  // helper returns null we're in SPA mode; fall through to hash parsing.
+  const staticPath = staticPathFromLocation();
+  if (staticPath !== null) {
+    currentPath$.set(staticPath);
+    viewFormat$.set("rendered");
+    return;
+  }
   const { path, format } = parseHash(window.location.hash);
   currentPath$.set(path);
   viewFormat$.set(format);
@@ -99,8 +109,9 @@ function init(): void {
   });
 
   // Route.
-  syncRouteFromHash();
-  window.addEventListener("hashchange", syncRouteFromHash);
+  syncRoute();
+  window.addEventListener("hashchange", syncRoute);
+  window.addEventListener("popstate", syncRoute);
 
   // Keep <title>, <meta description>, and <link rel=canonical> in sync with
   // whichever node we're viewing. Canonical resolves against document.baseURI
