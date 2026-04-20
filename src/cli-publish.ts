@@ -187,16 +187,41 @@ function nodeSiblingPath(outDir: string, nodePath: string, ext: ".md" | ".json")
 }
 
 /**
- * Emit `<path>.md` and `<path>.json` for every node. Returns the number of
- * nodes processed so the caller can report progress.
+ * Emit `<path>.md` and `<path>.json` for every node, plus `index.md` /
+ * `index.json` inside each composite node's directory so they mirror the
+ * directory-style URLs used by the prerendered `index.html`. Returns the
+ * number of nodes processed.
+ *
+ * Address scheme after this runs:
+ *   /                 → `<out>/.md`  and `<out>/index.md`
+ *   /clients          → `<out>/clients.md` (leaf)
+ *   /clients (comp.)  → `<out>/clients.md` and `<out>/clients/index.md`
+ *   /clients/acme     → `<out>/clients/acme.md`
  */
 function writeNodeSiblings(outDir: string, nodes: SpandrelNode[]): number {
   for (const node of nodes) {
+    const md = renderNodeAsMarkdown(node);
+    const json = JSON.stringify(node, null, 2);
+
     const mdPath = nodeSiblingPath(outDir, node.path, ".md");
     const jsonPath = nodeSiblingPath(outDir, node.path, ".json");
     fs.mkdirSync(path.dirname(mdPath), { recursive: true });
-    fs.writeFileSync(mdPath, renderNodeAsMarkdown(node));
-    fs.writeFileSync(jsonPath, JSON.stringify(node, null, 2));
+    fs.writeFileSync(mdPath, md);
+    fs.writeFileSync(jsonPath, json);
+
+    // Composite nodes and the root also get index.md / index.json inside
+    // their directory. That makes `https://host/spandrel/index.json` and
+    // `https://host/spandrel/architecture/index.json` both work, matching
+    // user intuition from the directory-style `index.html` prerender.
+    if (node.nodeType === "composite" || node.path === "/") {
+      const dir =
+        node.path === "/"
+          ? outDir
+          : path.join(outDir, node.path.replace(/^\/+/, ""));
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "index.md"), md);
+      fs.writeFileSync(path.join(dir, "index.json"), json);
+    }
   }
   return nodes.length;
 }
