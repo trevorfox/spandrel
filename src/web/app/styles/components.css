@@ -113,6 +113,46 @@
   border-color: var(--rule-color);
 }
 
+/* format toggle: three-way R | M | J */
+.top-bar .format-toggle {
+  display: inline-flex;
+  align-items: stretch;
+  border: var(--rule) solid var(--rule-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-right: var(--s-2);
+}
+
+.top-bar .format-toggle button {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-smcaps);
+  background: transparent;
+  border: 0;
+  color: var(--fg-subtle);
+  padding: var(--s-1) var(--s-3);
+  cursor: pointer;
+  min-width: 2rem;
+  border-right: var(--rule) solid var(--rule-color);
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.top-bar .format-toggle button:last-child {
+  border-right: 0;
+}
+
+.top-bar .format-toggle button:hover {
+  color: var(--fg-muted);
+  background: var(--bg-sunken);
+}
+
+.top-bar .format-toggle button.active,
+.top-bar .format-toggle button[aria-pressed="true"] {
+  color: var(--fg);
+  background: var(--bg-sunken);
+}
+
 /* =========================================================================
  * content
  * ========================================================================= */
@@ -237,6 +277,81 @@
   color: var(--fg-muted);
   font-size: var(--fs-sm);
   margin-top: 2px;
+}
+
+/* =========================================================================
+ * raw-format views (markdown / json)
+ *
+ * These are "printed manuscript" views of the same node the rendered
+ * surface shows. Monospace body, hairline frame, muted syntax tinting.
+ * Explicitly not a rainbow — we stay inside the limestone palette.
+ * ========================================================================= */
+
+.content-body.raw header.meta .ext {
+  color: var(--fg-subtle);
+  margin-left: 0.2em;
+}
+
+.content-body.raw header.meta .label {
+  display: inline-block;
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-smcaps);
+  color: var(--fg-subtle);
+  margin-top: var(--s-2);
+}
+
+.content-body .raw-markdown,
+.content-body .raw-json {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: var(--fg);
+  background: var(--bg-sunken);
+  border: var(--rule) solid var(--rule-color);
+  border-radius: var(--radius-sm);
+  padding: var(--s-4) var(--s-5);
+  white-space: pre;
+  overflow-x: auto;
+  margin: 0;
+}
+
+/* Markdown source highlighting — restrained palette. */
+.content-body .raw-markdown .md-fence {
+  color: var(--fg-subtle);
+}
+.content-body .raw-markdown .md-key {
+  color: var(--fg-muted);
+}
+.content-body .raw-markdown .md-string {
+  color: var(--accent);
+}
+.content-body .raw-markdown .md-comment {
+  color: var(--fg-subtle);
+  font-style: italic;
+}
+.content-body .raw-markdown .md-num,
+.content-body .raw-markdown .md-lit {
+  color: var(--fg-muted);
+}
+.content-body .raw-markdown .md-punct {
+  color: var(--fg-subtle);
+}
+
+/* JSON highlighting — keys vs values, same discipline. */
+.content-body .raw-json .j-key {
+  color: var(--fg-muted);
+}
+.content-body .raw-json .j-string {
+  color: var(--accent);
+}
+.content-body .raw-json .j-num,
+.content-body .raw-json .j-lit {
+  color: var(--fg-muted);
+}
+.content-body .raw-json .j-punct {
+  color: var(--fg-subtle);
 }
 
 /* =========================================================================
