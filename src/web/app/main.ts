@@ -1,6 +1,6 @@
 /** App entry. Wires route, data, and component mounts. */
 
-import { currentPath$, graph$, hashToPath, error$ } from "./state.js";
+import { currentPath$, graph$, parseHash, viewFormat$, error$ } from "./state.js";
 import { fetchGraph } from "./graph-data.js";
 import { mountTopBar } from "./components/top-bar.js";
 import { mountContent } from "./components/content.js";
@@ -9,7 +9,9 @@ import { mountDrawer } from "./components/drawer.js";
 import { startSse } from "./lib/sse.js";
 
 function syncRouteFromHash(): void {
-  currentPath$.set(hashToPath(window.location.hash));
+  const { path, format } = parseHash(window.location.hash);
+  currentPath$.set(path);
+  viewFormat$.set(format);
 }
 
 async function loadGraph(): Promise<void> {

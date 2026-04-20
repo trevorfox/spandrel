@@ -1,6 +1,14 @@
-/** Top bar: breadcrumb, search, theme toggle. */
+/** Top bar: breadcrumb, search, format toggle, theme toggle. */
 
-import { currentPath$, derived$, graph$, pathToHash } from "../state.js";
+import {
+  currentPath$,
+  derived$,
+  graph$,
+  pathToHash,
+  viewFormat$,
+  buildHash,
+  type ViewFormat,
+} from "../state.js";
 import { currentTheme, toggleTheme } from "../lib/theme.js";
 import type { SearchHit } from "./search.js";
 
@@ -11,6 +19,11 @@ export function mountTopBar(root: HTMLElement): void {
       <input type="search" placeholder="Search nodes…" aria-label="Search nodes" autocomplete="off" />
       <div class="results" role="listbox" hidden></div>
     </div>
+    <div class="format-toggle" role="group" aria-label="View format">
+      <button type="button" data-format="rendered" title="Rendered" aria-label="Rendered">R</button>
+      <button type="button" data-format="markdown" title="Markdown" aria-label="Markdown">M</button>
+      <button type="button" data-format="json" title="JSON" aria-label="JSON">J</button>
+    </div>
     <button type="button" class="theme-toggle" aria-label="Toggle theme"></button>
   `;
 
@@ -18,6 +31,8 @@ export function mountTopBar(root: HTMLElement): void {
   const searchWrap = root.querySelector(".search") as HTMLElement;
   const input = searchWrap.querySelector("input") as HTMLInputElement;
   const resultsEl = searchWrap.querySelector(".results") as HTMLElement;
+  const formatGroup = root.querySelector(".format-toggle") as HTMLElement;
+  const formatButtons = formatGroup.querySelectorAll<HTMLButtonElement>("button[data-format]");
   const themeBtn = root.querySelector(".theme-toggle") as HTMLButtonElement;
 
   const renderBreadcrumb = () => {
@@ -56,6 +71,29 @@ export function mountTopBar(root: HTMLElement): void {
   themeBtn.addEventListener("click", () => {
     toggleTheme();
     renderTheme();
+  });
+
+  // ── format toggle (rendered / markdown / json)
+  const renderFormat = () => {
+    const active = viewFormat$.get();
+    formatButtons.forEach((btn) => {
+      const fmt = btn.getAttribute("data-format") as ViewFormat;
+      const isActive = fmt === active;
+      btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+      btn.classList.toggle("active", isActive);
+    });
+  };
+
+  formatGroup.addEventListener("click", (e) => {
+    const target = (e.target as HTMLElement).closest(
+      "button[data-format]"
+    ) as HTMLButtonElement | null;
+    if (!target) return;
+    const fmt = target.getAttribute("data-format") as ViewFormat;
+    if (!fmt || fmt === viewFormat$.get()) return;
+    // Update the hash; the hashchange listener in main.ts will push into
+    // currentPath$ and viewFormat$, so a single source of truth drives the UI.
+    window.location.hash = buildHash(currentPath$.get(), fmt);
   });
 
   // ── search
@@ -154,10 +192,12 @@ export function mountTopBar(root: HTMLElement): void {
   // ── wiring
   renderTheme();
   renderBreadcrumb();
+  renderFormat();
 
   currentPath$.subscribe(() => renderBreadcrumb());
   graph$.subscribe(() => renderBreadcrumb());
   derived$.subscribe(() => renderBreadcrumb());
+  viewFormat$.subscribe(() => renderFormat());
 }
 
 function escapeHtml(s: string): string {

@@ -150,7 +150,7 @@ async function dev(rootDir: string) {
       }
     }
 
-    if (urlPath.endsWith(".json") && urlPath !== "/graph.json") {
+    if (urlPath.endsWith(".json") && urlPath !== "/graph.json" && !urlPath.startsWith("/assets/")) {
       const nodePath = extensionToNodePath(urlPath, ".json");
       if (nodePath !== null) {
         const node = await store.getNode(nodePath);
