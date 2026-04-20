@@ -124,11 +124,26 @@ export async function stripPrivateNodes(
  *
  * Uses `import.meta.url` so it works both when `spandrel` is installed
  * globally (`npm i -g`) and when linked locally from a source checkout.
- * Agent B builds to `dist/web/`; we resolve to `./web/` relative to this
- * file (which lives at `dist/cli-publish.js` in published form).
+ *
+ * - Published / compiled path: this module lives at `dist/cli-publish.js`,
+ *   so `./web/` resolves to `dist/web/`. This is the common case.
+ * - Source checkout via tsx (`npm run dev`): this module lives at
+ *   `src/cli-publish.ts`, and `./web/` resolves to `src/web/` — which holds
+ *   the Vite source, not the built bundle. Fall back to `../dist/web/`
+ *   relative to the source tree so a previous `npm run build:web` is picked
+ *   up automatically.
+ *
+ * If neither exists, return the primary path so the caller's existence
+ * check fails and the placeholder path is taken.
  */
 export function resolveBundleDir(): string {
-  return fileURLToPath(new URL("./web/", import.meta.url));
+  const primary = fileURLToPath(new URL("./web/", import.meta.url));
+  if (fs.existsSync(path.join(primary, "index.html"))) return primary;
+
+  const sourceFallback = fileURLToPath(new URL("../dist/web/", import.meta.url));
+  if (fs.existsSync(path.join(sourceFallback, "index.html"))) return sourceFallback;
+
+  return primary;
 }
 
 function copyDirRecursive(src: string, dest: string): void {
