@@ -94,6 +94,29 @@ describe("spandrel init — scaffold", () => {
       expect(stems.has(required)).toBe(true);
     }
   });
+
+  it("scaffolds a GitHub Pages publish workflow", () => {
+    const result = scaffoldInit(root, { name: "x", description: "y" });
+    expect(result.filesWritten).toContain(".github/workflows/publish.yml");
+
+    const yml = fs.readFileSync(
+      path.join(root, ".github/workflows/publish.yml"),
+      "utf-8"
+    );
+    expect(yml).toContain("npm install -g spandrel");
+    expect(yml).toContain("spandrel publish");
+    expect(yml).toContain("actions/upload-pages-artifact@v3");
+    expect(yml).toContain("actions/deploy-pages@v4");
+    expect(yml).toContain("--base");
+  });
+
+  it("scaffolds an empty CNAME placeholder at the graph root", () => {
+    const result = scaffoldInit(root, { name: "x", description: "y" });
+    expect(result.filesWritten).toContain("CNAME");
+    const cnamePath = path.join(root, "CNAME");
+    expect(fs.existsSync(cnamePath)).toBe(true);
+    expect(fs.statSync(cnamePath).size).toBe(0);
+  });
 });
 
 describe("spandrel init — idempotency", () => {
