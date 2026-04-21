@@ -60,22 +60,40 @@ An agent doesn't get everything dumped into its context window. It reads the roo
 
 The [philosophy](docs/philosophy.md) and [content model](docs/content-model/index.md) are documented as a Spandrel knowledge graph in `docs/` — explorable via `spandrel mcp docs/`, or **browse it live** at [trevorfox.github.io/spandrel](https://trevorfox.github.io/spandrel/).
 
-## Viewer
+## Three ways to serve a Spandrel graph
 
-Every Spandrel graph comes with a visual viewer — local during development, static when published.
+One compiled graph, three deployment patterns — pick whichever the use case needs.
 
-**Local.** `spandrel dev .` serves the viewer at `localhost:4000` alongside GraphQL and MCP. It reloads automatically when you edit a markdown file. Read nodes, follow typed links, navigate by clicking the d3-force graph, watch the warnings drawer catch broken links as you write.
-
-**Published.** `spandrel publish . --out _site` produces a self-contained static bundle: `graph.json`, the SPA, and optional per-node `.md` and `.json` files for agent scraping. Drop it on GitHub Pages, Netlify, or any static host.
+### 1. Local dev
 
 ```bash
-spandrel publish . --out _site --base /my-repo/   # project pages
-spandrel publish . --out _site --static           # prerender per-node HTML with SEO meta
+spandrel dev ./my-graph
 ```
 
-`spandrel init` scaffolds a `.github/workflows/publish.yml` wired to deploy-pages. Flip Pages source to "GitHub Actions" in repo settings and every push to `main` republishes.
+Compiles in-memory, serves GraphQL + MCP + a visual viewer at `localhost:4000`. Watches files; reloads the viewer on save. The authoring loop.
 
-The framework's own docs KG at [trevorfox.github.io/spandrel](https://trevorfox.github.io/spandrel/) is published this way from the `docs/` directory.
+### 2. Static bundle (read-only, anywhere)
+
+```bash
+spandrel publish ./my-graph --out _site --static
+```
+
+Emits a self-contained bundle: structural `graph.json`, per-node `.md` + `.json` for agent scraping, prerendered HTML for humans and crawlers, the SPA for interactive browsing, `robots.txt` pointing search at the canonical pages. Drop `_site/` on GitHub Pages, Netlify, Vercel's CDN, or any directory of an existing site.
+
+```bash
+spandrel publish ./my-graph --out _site --base /kb/ --static    # embed in existing site at /kb/
+spandrel publish ./my-graph --out _site --static --noindex      # staging: meta-robots noindex on every page
+```
+
+Add a thin MCP shim on a serverless function alongside the bundle and agents can speak MCP over flat files — see [`docs/deployment/static-mcp.md`](docs/deployment/static-mcp.md).
+
+`spandrel init` scaffolds a `.github/workflows/publish.yml` for GitHub Pages. Flip Pages source to "GitHub Actions" in repo settings and every push to `main` republishes.
+
+### 3. Live backend
+
+For graphs that need writes, identity-aware reads, or federation: run the Spandrel server against a persistent store (Postgres). Implement the `GraphStore` interface; hand the store to `createSchema` + `createMcpServer`; deploy anywhere.
+
+The framework's own docs KG at [trevorfox.github.io/spandrel](https://trevorfox.github.io/spandrel/) uses mode 2 — static publish from `docs/`.
 
 ## Knowledge Repo Structure
 
