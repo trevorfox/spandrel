@@ -17,11 +17,33 @@ Any conforming storage backend must support:
 
 The interface is deliberately minimal. Complex queries (search, graph traversal, subtree resolution) are handled by the GraphQL resolvers, not the storage layer. The storage layer is a persistence mechanism, not a query engine.
 
-## Reference implementation: in-memory
+## Reference implementations
 
-The reference implementation uses a JavaScript `Map<string, SpandrelNode>` for nodes and an array for edges. It requires no setup, has no persistence, and rebuilds from source files on every restart.
+Two reference implementations ship in this repo:
 
-This is the default for `spandrel dev` and is appropriate for single-user local authoring.
+### In-memory (`InMemoryGraphStore`)
+
+A JavaScript `Map<string, SpandrelNode>` for nodes and an array for edges. Requires no setup, has no persistence, and rebuilds from source files on every restart. Writable.
+
+Default for `spandrel dev`. Appropriate for single-user local authoring and for any server that compiles-on-start.
+
+### Remote / flat-file (`RemoteGraphStore`)
+
+A read-only store that reads from a published bundle over HTTP:
+
+- `graph.json` — the structural skeleton (nodes without content, edges, linkTypes, warnings). Fetched once, cached.
+- `<path>/index.json` — a single node's full payload (including content). Fetched on demand the first time a path is read at full fidelity, then cached.
+
+Pairs with `spandrel publish` on the producer side. Pairs with the existing MCP server on the consumer side — the MCP code calls the `GraphStore` interface and doesn't know or care that the data is coming from flat files. Swap the store, the same MCP server now serves a bundle hosted on a CDN.
+
+Read-only: write methods throw. The "write path" for a RemoteGraphStore deployment is `spandrel publish` itself — republish the bundle, the next request sees the new state.
+
+Appropriate for:
+- Read-only public knowledge bases published to GitHub Pages / Netlify / Vercel's CDN
+- Agents reading a governed graph via MCP from a serverless function (Vercel Edge, Cloudflare Worker, Netlify Function) with zero runtime compile cost
+- Dropping a bundle into a directory on an existing website, optionally behind Basic Auth or Cloudflare Access
+
+Not appropriate for: any deployment that needs writes from agents/users, per-user identity-aware filtering, or federation across multiple repos.
 
 ## Alternative backends
 
@@ -29,9 +51,8 @@ The design supports but does not prescribe:
 
 - **Postgres** — for persistent production deployments. Nodes as rows, frontmatter as JSONB, edges as a join table. Enables pgvector for embeddings and full-text search via Postgres. Appropriate for deployments that need concurrent reads and authenticated access. Works with any Postgres host (managed services such as Supabase, Neon, or RDS; or self-hosted).
 - **SQLite** — for local persistence and ingestion. Single file, FTS5 for search, sqlite-vec for embeddings. Appropriate for power users who want persistence between restarts and the ingestion pipeline's scratch database.
-- **Flat files** (JSON) — for serverless deployment. The compiler outputs a static JSON artifact that the GraphQL server hydrates into memory on cold start. No runtime database dependency. Appropriate for read-heavy deployments on platforms without persistent storage.
 
-Each alternative must satisfy the same interface. The conformance test suite (`test/storage/conformance.ts`, when it exists) validates any backend against the contract.
+Each alternative must satisfy the same interface. The conformance test suite (`src/storage/conformance.ts`) validates any backend against the contract.
 
 ## Decision: storage is not a query engine
 

@@ -76,3 +76,33 @@ For production, both run as serverless functions (or long-running HTTP handlers)
 - MCP endpoint: streamable HTTP (MCP over HTTP transport)
 
 The same code serves both modes — the transport layer is the only difference.
+
+### Static-bundle deployment
+
+The MCP server works unchanged against a published static bundle. The pattern:
+
+1. `spandrel publish` writes the bundle (`graph.json` + per-node `.md`/`.json` files + SPA + optional prerendered HTML) to a directory.
+2. Host the directory anywhere static files are served (GitHub Pages, Netlify, Vercel's CDN, S3, a subdirectory of an existing site).
+3. Deploy a thin HTTP handler (Vercel Edge Function, Cloudflare Worker, Netlify Function, plain Node) that constructs a `RemoteGraphStore` pointed at the bundle URL and hands it to the standard MCP server factory.
+
+The MCP server code is unchanged — it reads the `GraphStore` interface, which `RemoteGraphStore` satisfies by fetching bundle files on demand. Tool calls resolve to HTTP fetches against the CDN. Write tools reject at the store layer.
+
+Shape of the handler — construct the store, build the schema, build the MCP server, wrap in the MCP SDK's streamable-HTTP transport:
+
+```ts
+import { createSchema } from "spandrel/schema";
+import { createMcpServer } from "spandrel/server/mcp";
+import { RemoteGraphStore } from "spandrel/storage/remote-graph-store";
+
+const store = new RemoteGraphStore({
+  bundleUrl: process.env.SPANDREL_BUNDLE_URL!,
+});
+const schema = createSchema(store);
+const mcp = await createMcpServer(schema, { graph: store });
+// Wire `mcp` to the runtime's HTTP surface via the MCP SDK's
+// StreamableHTTPServerTransport. See docs/deployment/static-mcp.md.
+```
+
+The handler ships as a single serverless function alongside the bundle it reads. No database, no compile step at request time, no runtime state except the in-memory cache of fetched node files.
+
+Access control in this mode happens at the HTTP layer in front of the handler (Basic Auth, Cloudflare Access, a custom header check). Per-user identity-aware filtering is out of scope — for that, use a writable backend (Postgres-backed GraphStore) instead.
