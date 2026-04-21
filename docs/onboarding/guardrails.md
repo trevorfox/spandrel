@@ -31,7 +31,7 @@ mkdir -p clients/acme clients/globex clients/initech
 
 Corollary: when a fan-out completes, run `find <kb-root> -type d -empty -delete` before compile to catch any planning-phase leftovers.
 
-## 3. Version-check the CLI
+## 3. Version-check the CLI (and know the npx fallback)
 
 `npm link` points the global `spandrel` CLI at whatever the local build was the last time `npm run build` ran. It drifts. Before trusting any compile output, confirm:
 
@@ -41,6 +41,16 @@ spandrel --version
 ```
 
 If they don't match, `npm run build && npm link` in the spandrel repo. A stale CLI will report node counts from the old build and silently miss new fields.
+
+**Fallback for when the global `spandrel` isn't available** (permission denied, PATH issues, stale link you don't want to rebuild): run the local source directly.
+
+```bash
+npx tsx /path/to/spandrel/src/cli.ts compile /path/to/kb
+npx tsx /path/to/spandrel/src/cli.ts dev /path/to/kb
+npx tsx /path/to/spandrel/src/cli.ts mcp /path/to/kb
+```
+
+Works from any agent's shell, always runs the source in its current state, no global install needed.
 
 ## 4. Exemplar-first fan-out
 
@@ -65,6 +75,24 @@ Mitigation:
 ## 6. Scope git adds
 
 When agents commit their work, they must use explicit `git add <paths>`, never `git add -A` or `git add .`. Parallel agents can otherwise step on each other's staging or commit unrelated changes from the worktree.
+
+## 7. Quote frontmatter values that contain colons
+
+YAML treats `:` as the key/value separator. A frontmatter line like:
+
+```yaml
+description: Fractional sales management. EA scope: SEO + Google Ads.
+```
+
+fails to parse — the second colon turns the value into a malformed key. Quote the whole value when it contains a colon:
+
+```yaml
+description: "Fractional sales management. EA scope: SEO + Google Ads."
+```
+
+Or rephrase to avoid the colon (use an em-dash instead: `EA scope — SEO + Google Ads`).
+
+This is the single most common parse error when agents write rich descriptions in bulk. Catches that slip through break compile hard with a `YAMLException` rather than a friendly warning — so prefer quoting up front.
 
 ---
 
