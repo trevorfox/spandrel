@@ -214,6 +214,18 @@ export function mountGraphViz(root: HTMLElement): void {
       .alphaDecay(0.035);
 
     simulation.on("tick", () => {
+      // Clamp every node to the visible viewport minus a padding equal to
+      // the largest node radius. Without this the force-sim can fling
+      // nodes off-screen and leave the user chasing nothing — especially
+      // bad on phones, where "off-screen" is a few hundred pixels away.
+      const rect = svgEl.getBoundingClientRect();
+      const pad = 14;
+      const maxX = Math.max(pad, rect.width - pad);
+      const maxY = Math.max(pad, rect.height - pad);
+      for (const d of nodes) {
+        d.x = Math.max(pad, Math.min(maxX, d.x ?? rect.width / 2));
+        d.y = Math.max(pad, Math.min(maxY, d.y ?? rect.height / 2));
+      }
       linkSel
         .attr("x1", (d) => (d.source as VizNode).x ?? 0)
         .attr("y1", (d) => (d.source as VizNode).y ?? 0)
@@ -250,10 +262,40 @@ export function mountGraphViz(root: HTMLElement): void {
     return { x: rect.width / 2, y: rect.height / 2 };
   }
 
+  // Last viewport the simulation was centered for. When the pane resizes
+  // significantly (e.g., hidden → visible on mobile, or browser window
+  // resize) we redistribute every node around the new center rather than
+  // trust positions from the old viewport — those positions can sit well
+  // outside the new bounds and take seconds to drift back.
+  let lastCenter = { x: 0, y: 0 };
+
   function reheat(): void {
     if (!simulation) return;
-    simulation.force("center", forceCenter(center().x, center().y));
-    simulation.alpha(0.5).restart();
+    const c = center();
+    // No meaningful size yet — bail rather than recentering to 0,0. The
+    // next ResizeObserver tick (once display flips to block, say) will
+    // come back through here with real dimensions.
+    if (c.x < 1 || c.y < 1) return;
+    simulation.force("center", forceCenter(c.x, c.y));
+
+    const dx = Math.abs(c.x - lastCenter.x);
+    const dy = Math.abs(c.y - lastCenter.y);
+    const sizeChanged = dx > 40 || dy > 40 || lastCenter.x === 0;
+    if (sizeChanged) {
+      // Lay nodes out on a ring around the new center. Small enough to
+      // start bunched (forces will expand them out); large enough that
+      // they don't all stack on top of each other.
+      const r = Math.min(c.x, c.y) * 0.5;
+      nodes.forEach((d, i) => {
+        const theta = (i / Math.max(1, nodes.length)) * Math.PI * 2;
+        d.x = c.x + Math.cos(theta) * r;
+        d.y = c.y + Math.sin(theta) * r;
+        d.vx = 0;
+        d.vy = 0;
+      });
+      lastCenter = c;
+    }
+    simulation.alpha(0.8).restart();
   }
 
   // Initial render + subscriptions.
