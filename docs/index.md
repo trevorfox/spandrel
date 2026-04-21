@@ -20,4 +20,4 @@ Spandrel is a [compiler](/architecture/compiler), [GraphQL server](/architecture
 
 The name comes from evolutionary biology — a spandrel is a structural feature that emerges necessarily from the way an arch is built, then becomes useful in its own right. In Spandrel knowledge graphs, structure emerges from the content rather than being imposed on it.
 
-This knowledge graph describes the framework itself: its [philosophy](/philosophy), [content model](/content-model), [architecture](/architecture), [patterns](/patterns), [onboarding](/onboarding) flow, [deployment](/deployment) options, and open [proposals](/proposals). Explore via `spandrel dev docs/` or browse the markdown files directly.
+This knowledge graph describes the framework itself: its [philosophy](/philosophy), [content model](/content-model), [architecture](/architecture), [patterns](/patterns), [onboarding](/onboarding) flow, and [deployment](/deployment) options. Explore via `spandrel dev docs/` or browse the markdown files directly.
