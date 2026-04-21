@@ -2,24 +2,33 @@
 
 import { currentPath$, derived$ } from "../state.js";
 import { pathToUrl } from "../lib/mode.js";
+import { rawHref } from "../lib/raw-href.js";
 import type { LinkTypeInfo, SpandrelEdge } from "../../types.js";
 
+// Mobile collapses the drawer by default — on a 375px viewport an open
+// drawer eats the stage, and "related" is a secondary surface. Desktop
+// has room and keeps it open so users see relations alongside content.
+const MOBILE_BP = 600;
+
 export function mountDrawer(root: HTMLElement): void {
-  root.setAttribute("data-collapsed", "false");
+  const startCollapsed = window.innerWidth <= MOBILE_BP;
+  root.setAttribute("data-collapsed", String(startCollapsed));
   root.innerHTML = `
-    <button type="button" class="drawer-handle" aria-expanded="true">
+    <button type="button" class="drawer-handle" aria-expanded="${!startCollapsed}">
       <span class="title">Related &amp; warnings</span>
       <span class="chev" aria-hidden="true">▾</span>
     </button>
     <div class="drawer-body">
       <div class="related"></div>
       <div class="warnings"></div>
+      <div class="source-line"></div>
     </div>
   `;
 
   const handle = root.querySelector(".drawer-handle") as HTMLButtonElement;
   const relatedEl = root.querySelector(".related") as HTMLElement;
   const warningsEl = root.querySelector(".warnings") as HTMLElement;
+  const sourceEl = root.querySelector(".source-line") as HTMLElement;
 
   handle.addEventListener("click", () => {
     const collapsed = root.getAttribute("data-collapsed") === "true";
@@ -44,6 +53,11 @@ export function mountDrawer(root: HTMLElement): void {
     // Warnings for this path.
     const warnings = maps.warningsByPath.get(path) ?? [];
     warningsEl.innerHTML = warnings.length > 0 ? renderWarnings(warnings) : "";
+
+    // Source footer — subtle .md / .json links. Lives here rather than in
+    // the top bar so mobile's slim bar stays slim and so the links sit
+    // next to the node's other meta (relations, warnings).
+    sourceEl.innerHTML = renderSourceLine(path);
   };
 
   render();
@@ -98,6 +112,11 @@ function renderRelated(
       </div>`);
   }
   return blocks.join("");
+}
+
+function renderSourceLine(path: string): string {
+  const display = path === "" ? "/" : path;
+  return `<span class="src-path">${escapeHtml(display)}</span><a href="${rawHref(path, "md")}">.md</a><span class="src-sep" aria-hidden="true">·</span><a href="${rawHref(path, "json")}">.json</a>`;
 }
 
 function renderWarnings(warnings: { type: string; message: string }[]): string {

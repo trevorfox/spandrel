@@ -161,8 +161,14 @@ textarea:focus {
  */
 #app {
   display: grid;
+  /* Explicit single-column template. Without this, the implicit column
+   * is max-content — any unbreakable descendant (the banner's
+   * nowrap+ellipsis tagline, a long raw-view line) would force the grid
+   * wider than the viewport and push the whole layout sideways. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto var(--top-bar-h) 1fr auto;
   height: 100vh;
+  height: 100dvh;
   min-height: 0;
 }
 
@@ -193,6 +199,7 @@ textarea:focus {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -200,12 +207,19 @@ textarea:focus {
   overflow-y: auto;
   padding: var(--s-7) var(--s-8);
   border-right: var(--rule) solid var(--rule-color);
+  min-width: 0;
 }
 
 .graph-pane {
   position: relative;
   overflow: hidden;
   background: var(--bg);
+  /* Grid items default to min-content min-width, which for an SVG
+   * containing force-simulated nodes can balloon to several hundred px
+   * and shove the whole grid column past the viewport edge. Pin it to
+   * zero so the SVG stays inside the cell we allocated for it. */
+  min-width: 0;
+  min-height: 0;
 }
 
 .drawer {
@@ -229,5 +243,49 @@ textarea:focus {
   .content {
     border-right: 0;
     border-bottom: var(--rule) solid var(--rule-color);
+  }
+}
+
+/* Phone layout.
+ *
+ * One stage at a time. `#app[data-view]` toggles which of the two grid
+ * children fills the stage — Read shows .content and hides .graph-pane;
+ * Map does the inverse. The grid itself collapses to a single 1fr row.
+ * Padding tightens to match the narrower column; the stage owns almost
+ * the entire viewport since the drawer starts collapsed and the top
+ * bar is a single hairline row.
+ */
+@media (max-width: 600px) {
+  .site-banner {
+    padding: var(--s-3) var(--s-4);
+  }
+  .top-bar {
+    padding: 0 var(--s-3);
+    gap: var(--s-2);
+  }
+  .content {
+    padding: var(--s-4);
+    border-right: 0;
+    border-bottom: 0;
+  }
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  /* Default on mobile: content visible, graph hidden. This is also what
+   * the initial render must look like — if graph-pane defaulted to
+   * visible, it would share the single grid row with .content before the
+   * view-pill finishes mounting (and sets data-view="read"), producing a
+   * torn layout on first paint. Explicitly hide it here and let data-view
+   * flip it back on for Map. */
+  .graph-pane {
+    display: none;
+  }
+  #app[data-view="map"] .graph-pane {
+    display: block;
+  }
+  #app[data-view="map"] .content {
+    display: none;
   }
 }

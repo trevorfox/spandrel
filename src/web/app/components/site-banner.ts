@@ -3,6 +3,12 @@
  * node's name and description as same-size text — think journal masthead,
  * not hero title. Stays visible across all routes so readers always know
  * what graph they're in.
+ *
+ * Tagline is one-line-with-ellipsis by default. When the text fits (wide
+ * viewport) nothing is truncated and the banner looks the same as it used
+ * to. When it doesn't fit (phones, narrow windows) the CSS ellipsis
+ * appears; tapping the tagline toggles a data-expanded flag that lets it
+ * wrap to its natural height. Tapping again collapses back to one line.
  */
 
 import { graph$ } from "../state.js";
@@ -28,6 +34,8 @@ function escapeHtml(s: string): string {
 }
 
 export function mountSiteBanner(el: HTMLElement): void {
+  el.setAttribute("data-expanded", "false");
+
   function render(): void {
     const g = graph$.get();
     if (!g) {
@@ -39,15 +47,35 @@ export function mountSiteBanner(el: HTMLElement): void {
       el.innerHTML = "";
       return;
     }
-    const parts: string[] = [];
-    if (root.name) {
-      parts.push(`<span class="site-banner-name">${escapeHtml(root.name)}</span>`);
+
+    const homeHref = pathToUrl("/");
+    const name = root.name ? escapeHtml(root.name) : "";
+    const tagline = root.description ? escapeHtml(root.description) : "";
+
+    el.innerHTML = `
+      <div class="site-banner-inner">
+        <a class="site-banner-home" href="${homeHref}">
+          <span class="site-banner-name">${name}</span>
+        </a>
+        ${
+          tagline
+            ? `
+              <span class="site-banner-sep" aria-hidden="true">·</span>
+              <button type="button" class="site-banner-tagline" aria-expanded="false" aria-label="Toggle tagline">${tagline}</button>
+            `
+            : ""
+        }
+      </div>
+    `;
+
+    const tag = el.querySelector<HTMLButtonElement>(".site-banner-tagline");
+    if (tag) {
+      tag.addEventListener("click", () => {
+        const next = el.getAttribute("data-expanded") !== "true";
+        el.setAttribute("data-expanded", String(next));
+        tag.setAttribute("aria-expanded", String(next));
+      });
     }
-    if (root.description) {
-      if (parts.length) parts.push(`<span class="site-banner-sep" aria-hidden="true">·</span>`);
-      parts.push(`<span class="site-banner-tagline">${escapeHtml(root.description)}</span>`);
-    }
-    el.innerHTML = `<a class="site-banner-inner" href="${pathToUrl("/")}">${parts.join("")}</a>`;
   }
 
   graph$.subscribe(render);

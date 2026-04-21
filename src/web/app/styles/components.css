@@ -170,16 +170,22 @@
  * ========================================================================= */
 
 .site-banner-inner {
-  display: inline-flex;
+  display: flex;
   align-items: baseline;
   gap: 0.6em;
   max-width: 100%;
   color: inherit;
-  border-bottom: 0;
-  text-decoration: none;
+  min-width: 0;
 }
 
-.site-banner-inner:hover {
+.site-banner-home {
+  color: inherit;
+  border-bottom: 0;
+  text-decoration: none;
+  flex: 0 0 auto;
+}
+
+.site-banner-home:hover {
   color: var(--fg);
 }
 
@@ -192,13 +198,41 @@
 
 .site-banner-sep {
   color: var(--fg-subtle);
+  flex: 0 0 auto;
 }
 
+/* Tagline collapses to one line with a CSS ellipsis when its container
+ * is too narrow — the "…" is the natural overflow indicator, no extra
+ * button needed. Tapping it toggles data-expanded on the banner root,
+ * which removes the truncation and lets it wrap. Rendered as a <button>
+ * so it's keyboard-focusable and has correct semantics; styled to look
+ * like plain text. */
 .site-banner-tagline {
   font-family: var(--font-serif);
-  color: var(--fg-muted);
+  font-size: inherit;
   font-style: italic;
-  /* Same size as name — no H1/tagline hierarchy. */
+  color: var(--fg-muted);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.site-banner-tagline:hover {
+  color: var(--fg);
+}
+
+#site-banner[data-expanded="true"] .site-banner-tagline {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 /* =========================================================================
@@ -523,6 +557,15 @@
   max-width: 16rem;
 }
 
+/* Legend would eat two-thirds of the graph at phone width — the
+ * collections are already visible as node colors, and the palette is
+ * memorable enough. Hide and trust the viz. */
+@media (max-width: 600px) {
+  .graph-pane .legend {
+    display: none;
+  }
+}
+
 .graph-pane .legend .swatch {
   display: inline-block;
   width: 8px;
@@ -596,7 +639,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--s-2) var(--s-5);
+  padding: var(--s-3) var(--s-5);
+  min-height: 44px;
   cursor: pointer;
   user-select: none;
   border-bottom: var(--rule) solid var(--rule-color);
@@ -611,7 +655,10 @@
 }
 
 .drawer .drawer-handle .chev {
-  color: var(--fg-subtle);
+  color: var(--fg-muted);
+  font-size: var(--fs-md);
+  line-height: 1;
+  padding: var(--s-1) var(--s-2);
   transition: transform 180ms ease;
 }
 
@@ -726,4 +773,128 @@
   font-family: var(--font-mono);
   margin-right: var(--s-2);
   opacity: 0.7;
+}
+
+/* Source footer — `path .md · .json` as a subtle line at the bottom of
+ * the drawer body. Takes the role the top-bar format toggle plays on
+ * desktop; on mobile, where the format toggle is hidden, this is the
+ * only affordance for raw-format views. */
+.drawer .drawer-body .source-line {
+  grid-column: 1 / -1;
+  margin-top: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: var(--rule) solid var(--rule-color);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg-subtle);
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+.drawer .drawer-body .source-line .src-path {
+  color: var(--fg-subtle);
+}
+
+.drawer .drawer-body .source-line .src-sep {
+  color: var(--fg-subtle);
+}
+
+.drawer .drawer-body .source-line a {
+  color: var(--link-color);
+  border-bottom: var(--rule) solid var(--rule-color);
+  padding: 2px 0;
+}
+
+.drawer .drawer-body .source-line a:hover {
+  border-bottom-color: var(--accent);
+}
+
+/* =========================================================================
+ * view-pill — mobile-only floating Read/Map switcher.
+ *
+ * Apple Maps / Google Maps pattern: one control, thumb-zone, centered,
+ * rounded to visually separate it from the rectangular stage chrome.
+ * Sits above the drawer handle at rest; slides up when the drawer is
+ * expanded so it never covers related items. Bottom offset includes
+ * env(safe-area-inset-bottom) so it clears the iPhone home indicator.
+ * ========================================================================= */
+
+.view-pill {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .view-pill {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(44px + var(--s-4) + env(safe-area-inset-bottom, 0px));
+    z-index: 30;
+    display: inline-flex;
+    background: var(--bg-elevated);
+    border: var(--rule) solid var(--rule-strong);
+    border-radius: 999px;
+    padding: 4px;
+    box-shadow:
+      0 6px 20px rgba(0, 0, 0, 0.14),
+      0 1px 2px rgba(0, 0, 0, 0.08);
+    transition: bottom 180ms ease;
+  }
+
+  /* When the drawer is expanded, the pill sits just above the handle
+   * plus the ~14rem drawer body so nothing gets occluded. */
+  #app:has(.drawer[data-collapsed="false"]) .view-pill {
+    bottom: calc(var(--drawer-h) + var(--s-3) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .view-pill button {
+    font-family: var(--font-sans);
+    font-size: var(--fs-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-smcaps);
+    padding: var(--s-2) var(--s-5);
+    min-width: 4rem;
+    min-height: 40px;
+    background: transparent;
+    color: var(--fg-muted);
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+  }
+
+  .view-pill button[aria-pressed="true"] {
+    background: var(--fg);
+    color: var(--bg);
+  }
+}
+
+/* =========================================================================
+ * phone overrides — top bar slimmed to search + theme only.
+ *
+ * Breadcrumb is hidden (the H1 already shows where you are). Format
+ * toggle (R/M/J) is also hidden — those links move into the drawer
+ * source footer. Search grows to take the freed space.
+ * ========================================================================= */
+@media (max-width: 600px) {
+  .top-bar .breadcrumb {
+    display: none;
+  }
+  .top-bar .format-toggle {
+    display: none;
+  }
+  .top-bar .search {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .top-bar .search .results {
+    max-height: 60vh;
+  }
+  .top-bar .theme-toggle {
+    padding: var(--s-1) var(--s-2);
+    white-space: nowrap;
+  }
+
 }

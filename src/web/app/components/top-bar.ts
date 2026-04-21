@@ -6,6 +6,7 @@ import {
   graph$,
 } from "../state.js";
 import { pathToUrl } from "../lib/mode.js";
+import { rawHref } from "../lib/raw-href.js";
 import { currentTheme, toggleTheme } from "../lib/theme.js";
 import type { SearchHit } from "./search.js";
 
@@ -78,20 +79,6 @@ export function mountTopBar(root: HTMLElement): void {
   // Clicking them navigates the browser away from the SPA to the raw file,
   // so "Copy Link" in the address bar yields a real, shareable URL that
   // works for humans, curl, and any agent without needing MCP.
-  const rawHref = (nodePath: string, ext: "md" | "json"): string => {
-    // Directory-style canonical form: the node is a directory, its formats
-    // are files inside it. Matches how the prerendered HTML is served
-    // (at `<path>/`, i.e. `<path>/index.html`) and avoids the dot-prefix
-    // MIME trap on GitHub Pages — bare `.json` files come back as
-    // application/octet-stream and force a download rather than display
-    // inline.
-    //
-    // Relative hrefs resolve against <base href>, so the same code works
-    // in dev (base=/) and in a subpath deploy (base=/spandrel/).
-    if (nodePath === "/" || nodePath === "") return `index.${ext}`;
-    return `${nodePath.replace(/^\/+/, "")}/index.${ext}`;
-  };
-
   const renderFormatLinks = () => {
     const p = currentPath$.get();
     formatLinks.forEach((a) => {

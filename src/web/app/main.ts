@@ -7,6 +7,7 @@ import { mountContent } from "./components/content.js";
 import { mountGraphViz } from "./components/graph-viz.js";
 import { mountDrawer } from "./components/drawer.js";
 import { mountSiteBanner } from "./components/site-banner.js";
+import { mountViewPill } from "./components/view-pill.js";
 import { startSse } from "./lib/sse.js";
 import { updateMeta } from "./lib/meta.js";
 import { setStaticMode, staticPathFromLocation } from "./lib/mode.js";
@@ -79,8 +80,9 @@ function init(): void {
   const content = document.getElementById("content") as HTMLElement;
   const graphPane = document.getElementById("graph-pane") as HTMLElement;
   const drawer = document.getElementById("drawer") as HTMLElement;
+  const viewPill = document.getElementById("view-pill") as HTMLElement;
 
-  if (!siteBanner || !topBar || !content || !graphPane || !drawer) {
+  if (!siteBanner || !topBar || !content || !graphPane || !drawer || !viewPill) {
     throw new Error("App layout elements missing from index.html");
   }
 
@@ -103,6 +105,7 @@ function init(): void {
   mountContent(content);
   mountGraphViz(graphPane);
   mountDrawer(drawer);
+  mountViewPill(viewPill);
 
   // Surface fatal fetch errors in the content pane.
   error$.subscribe((msg) => {
