@@ -57,7 +57,6 @@ With 20 active clients, 30 engagements, and 10 framework nodes populated:
 - **Pipeline tracking.** If the firm starts tracking pipeline, add `/prospects/` before `/clients/` so the progression prospect → client is traceable. Usually only worth it at 5+ active sales motions.
 - **Outcome logging.** Add an `/outcomes/` collection when the firm wants to quantify impact per engagement. Outcomes link back to `/engagements/` via `measured-from`.
 - **Evolving toward sales-memory.** Firms that sell into the same accounts repeatedly often find [sales-memory](/onboarding/templates/sales-memory) patterns useful alongside — especially `/commitments/` to track what was promised in SOWs.
-- **Practices building their own products.** Many consulting shops also build internal apps, tools, lead-gen sites, or SaaS spinoffs. Add `/projects/` alongside clients (with `kind: app | tool | site | library | experiment` per node) to track what the firm owns. At higher volume of product work, consider layering in the [product-strategy](/onboarding/templates/product-strategy) template above `/projects/`.
 
 ## Example traversal
 
