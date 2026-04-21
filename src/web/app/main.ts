@@ -10,6 +10,7 @@ import { mountSiteBanner } from "./components/site-banner.js";
 import { startSse } from "./lib/sse.js";
 import { updateMeta } from "./lib/meta.js";
 import { setStaticMode, staticPathFromLocation } from "./lib/mode.js";
+import { startNodeLoader } from "./lib/node-loader.js";
 
 function syncRoute(): void {
   // In static mode the real URL carries the route — a click or direct
@@ -112,6 +113,10 @@ function init(): void {
   syncRoute();
   window.addEventListener("hashchange", syncRoute);
   window.addEventListener("popstate", syncRoute);
+
+  // Lazy content loader — fetches the current node's body when the route
+  // lands, caches it, and fires contentCache$ so the content pane renders.
+  startNodeLoader();
 
   // Keep <title>, <meta description>, and <link rel=canonical> in sync with
   // whichever node we're viewing. Canonical resolves against document.baseURI

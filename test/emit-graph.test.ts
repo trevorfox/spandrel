@@ -76,6 +76,34 @@ describe("emitGraph", () => {
     expect(graph.warnings).toEqual([]);
   });
 
+  it("strips the content field from every node — graph.json is a skeleton, bodies travel separately", async () => {
+    const store = new InMemoryGraphStore();
+    await store.setNode(
+      node({
+        path: "/",
+        name: "Root",
+        description: "the root",
+        content: "# Hello\n\nBody that must NOT appear in graph.json.",
+      }),
+    );
+    await store.setNode(
+      node({
+        path: "/a",
+        name: "A",
+        content: "Another body that must not leak.",
+      }),
+    );
+
+    const graph = await emitGraph(store);
+
+    for (const n of graph.nodes) {
+      expect(n).not.toHaveProperty("content");
+    }
+    // Structural fields stay.
+    expect(graph.nodes.find((n) => n.path === "/")?.name).toBe("Root");
+    expect(graph.nodes.find((n) => n.path === "/a")?.description).toBe("");
+  });
+
   it("flattens the linkTypes Map into an array preserving each entry's shape", async () => {
     const store = new InMemoryGraphStore();
     await store.setNode(

@@ -41,9 +41,17 @@ import type {
  *
  * Arrays throughout — Maps are for the in-memory store, not the wire format.
  * The SPA can rebuild its own indexes if it needs Map-style lookups.
+ *
+ * Nodes in `graph.json` carry only the skeleton — name, description, path,
+ * structural pointers — with `content` stripped. Clients that need a body
+ * fetch it separately from the node's per-path files:
+ *   `<path>/index.json` — full SpandrelNode with content
+ *   `<path>.md` (or `<path>/index.md`) — raw markdown
+ * Keeps graph.json small as graphs grow; scales past the monolithic-blob
+ * pattern that wedges at a few thousand nodes.
  */
 export interface Graph {
-  nodes: SpandrelNode[];
+  nodes: Omit<SpandrelNode, "content">[];
   edges: SpandrelEdge[];
   linkTypes: LinkTypeInfo[];
   warnings: ValidationWarning[];

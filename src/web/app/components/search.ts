@@ -6,6 +6,10 @@
 
 import type { SpandrelNode } from "../../types.js";
 
+/** Search reads only name/description/path — content is unused, so we
+ *  accept either the full node or the skeleton shape from graph.json. */
+type SearchableNode = Pick<SpandrelNode, "path" | "name" | "description">;
+
 export interface SearchEntry {
   path: string;
   name: string;
@@ -24,7 +28,7 @@ export interface SearchHit {
   score: number;
 }
 
-export function buildSearchIndex(nodes: SpandrelNode[]): SearchIndex {
+export function buildSearchIndex(nodes: readonly SearchableNode[]): SearchIndex {
   const entries: SearchEntry[] = nodes.map((n) => ({
     path: n.path,
     name: n.name ?? n.path,

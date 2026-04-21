@@ -19,8 +19,14 @@ export async function emitGraph(store: GraphStore): Promise<Graph> {
     store.getWarnings(),
   ]);
 
+  // Strip content at the wire boundary. graph.json is the structural index;
+  // bodies live in the per-node files (`<path>/index.json`, `<path>.md`)
+  // and are fetched on demand by the SPA or any other consumer that needs
+  // them. Keeps the initial payload small and scales as the graph grows.
+  const wireNodes = nodes.map(({ content: _content, ...rest }) => rest);
+
   return {
-    nodes,
+    nodes: wireNodes,
     edges,
     linkTypes: Array.from(linkTypesMap.values()),
     warnings,

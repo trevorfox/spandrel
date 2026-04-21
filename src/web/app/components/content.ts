@@ -1,6 +1,6 @@
 /** Content pane: metadata header + node body in the selected format. */
 
-import { currentPath$, derived$, viewFormat$ } from "../state.js";
+import { contentCache$, currentPath$, derived$, viewFormat$ } from "../state.js";
 import { renderMarkdown } from "../lib/markdown.js";
 import { renderNodeAsMarkdown } from "../lib/render-node-markdown.js";
 import { pathToUrl } from "../lib/mode.js";
@@ -14,8 +14,8 @@ export function mountContent(root: HTMLElement): void {
       root.innerHTML = `<div class="content-body"><p class="empty">Loading graph…</p></div>`;
       return;
     }
-    const node = maps.nodeByPath.get(path);
-    if (!node) {
+    const skeleton = maps.nodeByPath.get(path);
+    if (!skeleton) {
       root.innerHTML = `
         <div class="content-body">
           <header class="meta">
@@ -30,13 +30,19 @@ export function mountContent(root: HTMLElement): void {
       `;
       return;
     }
+    // Compose a full node from the skeleton (graph.json) + lazy-loaded body
+    // (contentCache$). The cache is `undefined` while the fetch is in
+    // flight; the body renderer shows a loading placeholder in that case.
+    const cached = contentCache$.get().get(path);
+    const node: SpandrelNode = { ...skeleton, content: cached ?? "" };
     const format = viewFormat$.get();
     if (format === "markdown") {
       root.innerHTML = renderNodeRawMarkdown(node);
     } else if (format === "json") {
       root.innerHTML = renderNodeJson(node);
     } else {
-      root.innerHTML = renderNode(node, maps);
+      const loading = cached === undefined;
+      root.innerHTML = renderNode(node, maps, loading);
     }
     // Scroll to top for the new node.
     root.scrollTop = 0;
@@ -46,11 +52,13 @@ export function mountContent(root: HTMLElement): void {
   currentPath$.subscribe(render);
   derived$.subscribe(render);
   viewFormat$.subscribe(render);
+  contentCache$.subscribe(render);
 }
 
 function renderNode(
   node: SpandrelNode,
   maps: NonNullable<ReturnType<typeof derived$.get>>,
+  loading: boolean,
 ): string {
   const fmPairs = collectFrontmatterPairs(node.frontmatter);
   const fmHtml =
@@ -63,9 +71,11 @@ function renderNode(
           .join("")}</dl>`
       : "";
 
-  const bodyHtml = node.content && node.content.trim()
-    ? renderMarkdown(node.content)
-    : `<p class="empty">No body content.</p>`;
+  const bodyHtml = loading
+    ? `<p class="empty">Loading…</p>`
+    : node.content && node.content.trim()
+      ? renderMarkdown(node.content)
+      : `<p class="empty">No body content.</p>`;
 
   const childIds = maps.hierarchyChildren.get(node.path) ?? node.children ?? [];
   const childrenHtml =

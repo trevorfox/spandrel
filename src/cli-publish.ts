@@ -262,26 +262,17 @@ function copyDirRecursive(src: string, dest: string): void {
   }
 }
 
-const PLACEHOLDER_INDEX_HTML = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Spandrel — viewer bundle not built</title>
-  <base href="/" />
-</head>
-<body>
-  <main style="font-family: system-ui, sans-serif; max-width: 42rem; margin: 4rem auto; padding: 0 1.5rem;">
-    <h1>SPA bundle not built</h1>
-    <p>The Spandrel web viewer bundle is not present in this install. Run <code>npm run build</code> in the spandrel source tree to produce <code>dist/web/</code>, or install a published version that ships the bundle.</p>
-    <p>The raw graph data is still available at <a href="./graph.json"><code>graph.json</code></a>.</p>
-  </main>
-</body>
-</html>
+/**
+ * `robots.txt` that keeps search engines off the raw-file URLs.
+ *
+ * The HTML pages are the canonical representations of each node. The `.md`
+ * and `.json` siblings are for scrapers, agents, and human curl — indexing
+ * them separately would create duplicate-content confusion for crawlers.
+ */
+const ROBOTS_TXT = `User-agent: *
+Disallow: /*.md$
+Disallow: /*.json$
 `;
-
-function writePlaceholderBundle(outDir: string): void {
-  fs.writeFileSync(path.join(outDir, "index.html"), PLACEHOLDER_INDEX_HTML);
-}
 
 /**
  * Compile `rootDir` and emit a self-contained static bundle to `{out}`.
@@ -331,27 +322,25 @@ export async function publish(
   // is unusual but collision-free with any authored node path, and hosts
   // serve it verbatim when asked for `/.md`. The SPA shell still lives at
   // `<out>/index.html`.
-  const siblingCount = writeNodeSiblings(absOut, graph.nodes);
+  // Siblings need the full node (body content, frontmatter) — graph.json's
+  // skeleton can't provide that. Pull from the store directly.
+  const siblingCount = writeNodeSiblings(absOut, await store.getAllNodes());
   console.log(`[spandrel] Wrote ${siblingCount * 2} per-node sibling files (.md + .json)`);
 
   const bundleDir = resolveBundleDir();
   // A "valid" bundle means Vite's output: an index.html plus whatever assets
-  // it produced. The mere presence of the dir isn't enough — in the source
-  // checkout, `src/web/` exists from Stage 0 (types.ts, design.md) long
-  // before Agent B ships the SPA, and copying it wholesale would pollute
-  // the bundle with sources.
+  // it produced. The mere presence of the dir isn't enough — `src/web/`
+  // itself contains non-bundle source files. Check for index.html as the
+  // reliable signal. If the bundle is missing, fail loudly — publish with
+  // no viewer is almost never what the user wanted.
   const bundleIndex = path.join(bundleDir, "index.html");
-  let wroteBundle = false;
-  if (fs.existsSync(bundleIndex)) {
-    copyDirRecursive(bundleDir, absOut);
-    wroteBundle = true;
-    console.log(`[spandrel] Copied SPA bundle from ${bundleDir}`);
-  } else {
-    console.warn(
-      `[spandrel] WARNING: SPA bundle not found at ${bundleDir}. Writing placeholder index.html — the graph data is still published at graph.json.`
+  if (!fs.existsSync(bundleIndex)) {
+    throw new Error(
+      `SPA bundle not found at ${bundleDir}. Run \`npm run build\` in the Spandrel source tree, or install a published version that ships the bundle.`,
     );
-    writePlaceholderBundle(absOut);
   }
+  copyDirRecursive(bundleDir, absOut);
+  console.log(`[spandrel] Copied SPA bundle from ${bundleDir}`);
 
   // Rewrite <base href> only when the user asked for a non-default base.
   // Leaving "/" alone keeps the bundle identical to what Vite produced,
@@ -390,8 +379,13 @@ export async function publish(
     await prerenderStaticPages(store, absOut, options);
   }
 
+  // robots.txt keeps crawlers on the canonical HTML pages and off the
+  // `.md` / `.json` sibling URLs. Written last so --static's prerender
+  // doesn't clobber it.
+  fs.writeFileSync(path.join(absOut, "robots.txt"), ROBOTS_TXT);
+
   console.log(`[spandrel] Published to ${path.relative(process.cwd(), absOut) || absOut}`);
-  return { outDir: absOut, wroteBundle };
+  return { outDir: absOut, wroteBundle: true };
 }
 
 /**
@@ -421,6 +415,8 @@ async function prerenderStaticPages(
   const shellHtml = fs.readFileSync(shellPath, "utf-8");
   const shellHead = extractShellHead(shellHtml);
 
+  // Skeleton graph for relationship emission (JSON-LD, banner context).
+  // Prerender needs full nodes for the body, which still live on the store.
   const graph = await emitGraph(store);
   const predicateMap = buildLinkTypePredicateMap(graph);
   const renderBody = createStaticMarkdownRenderer(options.base);
@@ -428,7 +424,7 @@ async function prerenderStaticPages(
   const siteName = rootNode?.name ?? "";
 
   let wrote = 0;
-  for (const node of graph.nodes) {
+  for (const node of await store.getAllNodes()) {
     const relOut = nodeOutputRelPath(node.path);
     const outFile = path.join(absOut, relOut);
     fs.mkdirSync(path.dirname(outFile), { recursive: true });

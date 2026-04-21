@@ -340,6 +340,21 @@ export interface RenderPageInput {
 }
 
 /**
+ * Compose the href for a sibling-format file (`.md` or `.json`).
+ *
+ * Root node uses the directory-style `index.{ext}` form because `.md` /
+ * `.json` as bare dot-files are served with `application/octet-stream` on
+ * GitHub Pages and force a download. Every other node uses the compact
+ * sibling form (`<path>.{ext}`) which scrapers, agents, and curl users
+ * find more familiar — matches raw-GitHub conventions. Both forms are
+ * emitted by `writeNodeSiblings` so the hrefs always resolve.
+ */
+function alternateHref(nodePath: string, ext: "md" | "json"): string {
+  if (nodePath === "/" || nodePath === "") return `index.${ext}`;
+  return `${nodePath.replace(/^\/+/, "")}.${ext}`;
+}
+
+/**
  * Assemble the full prerendered HTML document for a single node.
  */
 export function renderPage(input: RenderPageInput): string {
@@ -398,6 +413,8 @@ export function renderPage(input: RenderPageInput): string {
       noindex ? `\n    <meta name="robots" content="noindex, nofollow" />` : ""
     }
     <link id="canonical" rel="canonical" href="${escapeHtml(canonical)}" />
+    <link rel="alternate" type="text/markdown" href="${escapeHtml(alternateHref(node.path, "md"))}" title="Markdown" />
+    <link rel="alternate" type="application/json" href="${escapeHtml(alternateHref(node.path, "json"))}" title="JSON" />
     <meta property="og:title" content="${escapeHtml(node.name || title)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:url" content="${escapeHtml(canonical)}" />

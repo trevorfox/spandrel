@@ -98,8 +98,15 @@ export function pathToHash(path: string): string {
 // Store
 // ──────────────────────────────────────────────────────────────────────────
 
+/**
+ * Skeleton nodes in `graph.json` have no `content` field — bodies are
+ * fetched lazily per path. This alias keeps the SPA honest about what it
+ * actually has from the structural payload.
+ */
+export type WireNode = Omit<SpandrelNode, "content">;
+
 export interface DerivedMaps {
-  nodeByPath: Map<string, SpandrelNode>;
+  nodeByPath: Map<string, WireNode>;
   linkTypeByStem: Map<string, LinkTypeInfo>;
   outgoingLinks: Map<string, SpandrelEdge[]>;
   hierarchyChildren: Map<string, string[]>;
@@ -115,6 +122,15 @@ export const viewFormat$ = new Signal<ViewFormat>("rendered");
 export const error$ = new Signal<string | null>(null);
 export const derived$ = new Signal<DerivedMaps | null>(null);
 
+/**
+ * Body content by node path, populated lazily when a node is visited.
+ * Separate from `graph$` so the structural payload stays small and
+ * navigation doesn't force a content fetch for nodes the user never
+ * opens. `undefined` means "not yet loaded"; empty string means "loaded,
+ * node has no body". See `lib/node-loader.ts`.
+ */
+export const contentCache$ = new Signal<Map<string, string>>(new Map());
+
 /** Rebuild derived maps when the graph changes. */
 graph$.subscribe((g) => {
   if (!g) {
@@ -125,7 +141,7 @@ graph$.subscribe((g) => {
 });
 
 function buildDerived(g: Graph): DerivedMaps {
-  const nodeByPath = new Map<string, SpandrelNode>();
+  const nodeByPath = new Map<string, WireNode>();
   for (const n of g.nodes) nodeByPath.set(n.path, n);
 
   const linkTypeByStem = new Map<string, LinkTypeInfo>();

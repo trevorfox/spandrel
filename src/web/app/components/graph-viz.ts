@@ -21,9 +21,9 @@ import { select, type Selection } from "d3-selection";
 import { drag, type D3DragEvent } from "d3-drag";
 import "d3-transition";
 
-import { currentPath$, derived$, graph$, collectionOfPath } from "../state.js";
+import { currentPath$, derived$, graph$, collectionOfPath, type WireNode } from "../state.js";
 import { pathToUrl } from "../lib/mode.js";
-import type { Graph, SpandrelEdge, SpandrelNode } from "../../types.js";
+import type { Graph, SpandrelEdge } from "../../types.js";
 
 interface VizNode extends SimulationNodeDatum {
   id: string;
@@ -114,7 +114,7 @@ export function mountGraphViz(root: HTMLElement): void {
     // of truth; ignore edges referencing unknown nodes (keeps broken-link
     // warnings visible in the drawer without crashing the viz).
     const nodePaths = new Set<string>(graph.nodes.map((n) => n.path));
-    nodes = graph.nodes.map((n: SpandrelNode) => ({
+    nodes = graph.nodes.map((n: WireNode) => ({
       id: n.path,
       name: n.name || stemOf(n.path),
       collection: collectionOfPath(n.path),
@@ -292,7 +292,7 @@ function renderLegend(
     el.hidden = true;
     return;
   }
-  const nodeByPath = new Map<string, SpandrelNode>();
+  const nodeByPath = new Map<string, WireNode>();
   for (const n of graph.nodes) nodeByPath.set(n.path, n);
   const rows: string[] = [];
   for (const [collection, color] of colors) {

@@ -16,6 +16,10 @@
 
 import type { SpandrelNode } from "../../types.js";
 
+/** updateMeta only reads name/description/path, so it works on either the
+ *  full node or the skeleton shape from graph.json. */
+type MetaNode = Pick<SpandrelNode, "name" | "description" | "path">;
+
 function canonicalHref(nodePath: string): string {
   const rel = nodePath === "/" ? "" : nodePath.replace(/^\/+/, "") + "/";
   try {
@@ -47,7 +51,7 @@ function ensureMeta(name: string, id: string): HTMLMetaElement {
   return el;
 }
 
-export function updateMeta(node: SpandrelNode, siteName: string): void {
+export function updateMeta(node: MetaNode, siteName: string): void {
   const title =
     node.path === "/" || !siteName || node.name === siteName
       ? node.name || siteName || "Spandrel"
