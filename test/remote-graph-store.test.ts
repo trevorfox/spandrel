@@ -142,6 +142,20 @@ describe("RemoteGraphStore — round-trip against a published bundle", () => {
     // Fixture has no /linkTypes/ collection — empty.
     expect(map.size).toBe(0);
   });
+
+  it("reports accurate nodeCount / edgeCount after the store has been warmed", async () => {
+    // Use a fresh store so we can observe the transition from 0 (uninitialized)
+    // to >0 (after a read method warms the graph).
+    const fresh = new RemoteGraphStore({
+      bundleUrl: "http://fixture/",
+      fetch: fileFetch(outDir),
+    });
+    expect(fresh.nodeCount).toBe(0);
+    expect(fresh.edgeCount).toBe(0);
+    await fresh.getAllNodes();
+    expect(fresh.nodeCount).toBeGreaterThan(0);
+    expect(fresh.edgeCount).toBeGreaterThan(0);
+  });
 });
 
 describe("RemoteGraphStore — write methods reject", () => {

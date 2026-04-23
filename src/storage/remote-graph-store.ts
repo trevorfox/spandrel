@@ -59,6 +59,10 @@ export class RemoteGraphStore implements GraphStore {
   private readonly requestInit?: RequestInit;
 
   private graphPromise?: Promise<Graph>;
+  /** Resolved graph.json, cached synchronously once loadGraph() has settled.
+   *  Lets the sync `nodeCount` / `edgeCount` getters return real values after
+   *  the store has been warmed by any read method. */
+  private resolvedGraph: Graph | null = null;
   /** Full-node cache populated on first getNode/getNodes call per path. */
   private readonly nodeCache = new Map<string, Promise<SpandrelNode | undefined>>();
 
@@ -82,7 +86,9 @@ export class RemoteGraphStore implements GraphStore {
         if (!res.ok) {
           throw new Error(`Failed to fetch graph.json: ${res.status} ${res.statusText}`);
         }
-        return (await res.json()) as Graph;
+        const graph = (await res.json()) as Graph;
+        this.resolvedGraph = graph;
+        return graph;
       })();
     }
     return this.graphPromise;
@@ -213,9 +219,6 @@ export class RemoteGraphStore implements GraphStore {
   }
 
   private cachedGraph(): Graph | null {
-    // We don't have sync access to a promised value; the store is
-    // primarily async. Return null if not resolved; callers relying on
-    // these properties know they're approximate in a remote store.
-    return null;
+    return this.resolvedGraph;
   }
 }
