@@ -32,10 +32,11 @@ jobs:
         run: >-
           node dist/cli.js publish docs
           --out _site
-          --base /spandrel/
+          --base /
           --static
-          --noindex
-          --site-url https://trevorfox.github.io
+          --site-url https://spandrel.org
+      - name: Write CNAME for custom domain
+        run: echo "spandrel.org" > _site/CNAME
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
