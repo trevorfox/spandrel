@@ -10,7 +10,7 @@ import { mountSiteBanner } from "./components/site-banner.js";
 import { mountViewPill } from "./components/view-pill.js";
 import { startSse } from "./lib/sse.js";
 import { updateMeta } from "./lib/meta.js";
-import { setStaticMode, staticPathFromLocation } from "./lib/mode.js";
+import { isStaticMode, setStaticMode, staticPathFromLocation } from "./lib/mode.js";
 import { startNodeLoader } from "./lib/node-loader.js";
 
 function syncRoute(): void {
@@ -139,10 +139,14 @@ function init(): void {
   // Initial data.
   void loadGraph();
 
-  // Live reload — best effort.
-  startSse(() => {
-    void loadGraph();
-  });
+  // Live reload — best effort. Only meaningful when served by
+  // `spandrel dev`; a published static bundle has no /events endpoint,
+  // so the SSE client would 404 on every load and retry on backoff.
+  if (!isStaticMode()) {
+    startSse(() => {
+      void loadGraph();
+    });
+  }
 }
 
 if (document.readyState === "loading") {
