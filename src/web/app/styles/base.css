@@ -264,7 +264,11 @@ textarea:focus {
     gap: var(--s-2);
   }
   .content {
-    padding: var(--s-4);
+    /* Reserve bottom clearance so the last line of body text isn't hidden
+     * behind the floating Read/Map pill (~48px) plus the drawer handle
+     * (~40px) plus iPhone home indicator. Without this, scrolling to the
+     * end of a long article puts the final paragraph under the opaque pill. */
+    padding: var(--s-4) var(--s-4) calc(6.5rem + env(safe-area-inset-bottom, 0px));
     border-right: 0;
     border-bottom: 0;
   }
