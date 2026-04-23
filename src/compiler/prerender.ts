@@ -445,6 +445,7 @@ export function renderPage(input: RenderPageInput): string {
         <aside id="graph-pane" class="graph-pane" aria-label="Graph"></aside>
       </main>
       <section id="drawer" class="drawer" aria-label="Related nodes and warnings"></section>
+      <nav id="view-pill" class="view-pill" aria-label="View"></nav>
     </div>
   </body>
 </html>

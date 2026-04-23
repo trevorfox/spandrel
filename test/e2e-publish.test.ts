@@ -360,6 +360,25 @@ describe("spandrel publish — --static prerender", () => {
     expect(html).toContain('class="site-banner-name">Prerender Fixture</span>');
   });
 
+  it("includes every layout element the SPA's main.ts requires", async () => {
+    // Regression guard: main.ts throws "App layout elements missing" when
+    // any of these are absent, which disables the entire SPA mount chain
+    // (empty graph-pane, empty top-bar, empty drawer, no view-pill toggle).
+    await publish(root, { out, static: true });
+    const pages = [
+      path.join(out, "index.html"),
+      path.join(out, "clients/index.html"),
+      path.join(out, "clients/acme-corp/index.html"),
+    ];
+    const required = ["site-banner", "top-bar", "content", "graph-pane", "drawer", "view-pill"];
+    for (const page of pages) {
+      const html = fs.readFileSync(page, "utf-8");
+      for (const id of required) {
+        expect(html, `${page} missing #${id}`).toMatch(new RegExp(`id=["']${id}["']`));
+      }
+    }
+  });
+
   it("respects --base when rewriting canonical URLs and internal links", async () => {
     await publish(root, { out, static: true, base: "/my-repo/" });
     const html = fs.readFileSync(
