@@ -226,7 +226,13 @@ textarea:focus {
   border-top: var(--rule) solid var(--rule-color);
   background: var(--bg-elevated);
   max-height: var(--drawer-h);
-  overflow-y: auto;
+  /* Flex column so the handle sits on its own row and the body fills
+   * the rest of the drawer height. Outer overflow is hidden — each
+   * column owns its scroll so column headers can stay sticky without
+   * the whole drawer scrolling the handle out of view. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   transition: max-height 180ms ease;
 }
 

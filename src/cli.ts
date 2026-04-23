@@ -262,8 +262,16 @@ function extensionToNodePath(urlPath: string, ext: ".md" | ".json"): string | nu
   // Root node sentinel: `/.md` / `/.json`. `index.md` / `index.json` also
   // route to the root so common conventions don't 404.
   if (urlPath === "/" + ext || urlPath === "/index" + ext) return "/";
-  const withoutExt = urlPath.slice(0, -ext.length);
+  let withoutExt = urlPath.slice(0, -ext.length);
   if (!withoutExt.startsWith("/")) return null;
+  // Accept both the sibling form (`/foo/bar.md`) emitted by
+  // `spandrel publish` and the directory form (`/foo/bar/index.md`) the
+  // SPA's node-loader fetches via `document.baseURI`. Without this,
+  // deep-link content fetches in dev mode fall through to the SPA
+  // fallback and the viewer renders the HTML shell as a node body.
+  if (withoutExt.endsWith("/index")) {
+    withoutExt = withoutExt.slice(0, -"/index".length);
+  }
   return withoutExt;
 }
 

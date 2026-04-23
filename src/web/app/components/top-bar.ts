@@ -18,9 +18,8 @@ export function mountTopBar(root: HTMLElement): void {
       <div class="results" role="listbox" hidden></div>
     </div>
     <div class="format-toggle" role="group" aria-label="View format">
-      <button type="button" data-format="rendered" class="active" aria-pressed="true" title="Rendered" aria-label="Rendered">R</button>
-      <a data-format="markdown" class="format-link" title="View raw markdown" aria-label="Markdown" href="">M</a>
-      <a data-format="json" class="format-link" title="View raw JSON" aria-label="JSON" href="">J</a>
+      <a data-format="markdown" class="format-link" title="View raw markdown" aria-label="Markdown" href="">.MD</a>
+      <a data-format="json" class="format-link" title="View raw JSON" aria-label="JSON" href="">{ }</a>
     </div>
     <button type="button" class="theme-toggle" aria-label="Toggle theme"></button>
   `;

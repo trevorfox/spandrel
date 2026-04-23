@@ -123,19 +123,16 @@
   margin-right: var(--s-2);
 }
 
-.top-bar .format-toggle button,
 .top-bar .format-toggle a.format-link {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-smcaps);
   background: transparent;
   border: 0;
   border-bottom: 0;
-  color: var(--fg-subtle);
+  color: var(--fg-muted);
   padding: var(--s-1) var(--s-3);
   cursor: pointer;
-  min-width: 2rem;
+  min-width: 2.5rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -148,20 +145,9 @@
   border-right: 0;
 }
 
-.top-bar .format-toggle button:hover,
 .top-bar .format-toggle a.format-link:hover {
-  color: var(--fg-muted);
-  background: var(--bg-sunken);
-}
-
-.top-bar .format-toggle button.active,
-.top-bar .format-toggle button[aria-pressed="true"] {
   color: var(--fg);
   background: var(--bg-sunken);
-}
-
-.top-bar .format-toggle button.active {
-  cursor: default;
 }
 
 /* =========================================================================
@@ -635,15 +621,21 @@
  * drawer
  * ========================================================================= */
 
+/* Handle pinned to the right edge — acts like a page-corner tab rather
+ * than a full-width strip. The drawer is a flex column, and the handle
+ * uses `align-self: flex-end` + `width: fit-content` so the button only
+ * spans its own content instead of the entire drawer width. */
 .drawer .drawer-handle {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: var(--s-3) var(--s-5);
-  min-height: 44px;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-5);
+  min-height: 2.5rem;
+  width: fit-content;
+  align-self: flex-end;
   cursor: pointer;
   user-select: none;
-  border-bottom: var(--rule) solid var(--rule-color);
+  flex: 0 0 auto;
 }
 
 .drawer .drawer-handle .title {
@@ -658,7 +650,6 @@
   color: var(--fg-muted);
   font-size: var(--fs-md);
   line-height: 1;
-  padding: var(--s-1) var(--s-2);
   transition: transform 180ms ease;
 }
 
@@ -666,11 +657,23 @@
   transform: rotate(180deg);
 }
 
+/* Three equal columns: outlinks · inlinks · warnings. Each column owns
+ * its own scroll so the column headers can stay sticky while long lists
+ * scroll inside. The body fills the remaining drawer space (drawer
+ * height minus the handle row); outer drawer overflow is hidden.
+ *
+ * Collapses to a single column under 900px — each section gets full
+ * width and stacks vertically (the drawer's max-height bumps up so all
+ * three sections are reachable without cramming). */
 .drawer .drawer-body {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: var(--s-5);
-  padding: var(--s-4) var(--s-5);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+  border-top: var(--rule) solid var(--rule-color);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 @media (max-width: 900px) {
@@ -679,24 +682,61 @@
   }
 }
 
-.drawer .related .group {
+.drawer .drawer-col {
+  min-width: 0;
+  overflow-y: auto;
+  padding: 0 var(--s-5) var(--s-4);
+}
+
+.drawer .drawer-col + .drawer-col {
+  border-left: var(--rule) solid var(--rule-color);
+}
+
+@media (max-width: 900px) {
+  .drawer .drawer-col + .drawer-col {
+    border-left: 0;
+    border-top: var(--rule) solid var(--rule-color);
+  }
+}
+
+/* Sticky header — stays pinned at the top of each column while the
+ * list underneath scrolls. Background matches the drawer so content
+ * sliding behind it is masked. */
+.drawer .col-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-elevated);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-smcaps);
+  color: var(--fg-muted);
+  margin: 0 0 var(--s-3);
+  padding: var(--s-3) 0 var(--s-2);
+  font-weight: 500;
+  border-bottom: var(--rule) solid var(--rule-color);
+}
+
+.drawer .group {
   margin-bottom: var(--s-4);
 }
 
-.drawer .related .group:last-child {
+.drawer .group:last-child {
   margin-bottom: 0;
 }
 
-.drawer .related .group-header {
+.drawer .group-header {
   font-family: var(--font-sans);
   font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: var(--ls-smcaps);
   color: var(--fg-subtle);
   margin: 0 0 var(--s-1);
+  font-weight: 500;
 }
 
-.drawer .related .group-desc {
+.drawer .group-desc {
   font-family: var(--font-sans);
   font-size: var(--fs-xs);
   color: var(--fg-subtle);
@@ -704,28 +744,28 @@
   font-style: italic;
 }
 
-.drawer .related ul {
+.drawer ul {
   list-style: none;
   padding: 0;
   margin: 0;
 }
 
-.drawer .related li {
+.drawer .group li {
   padding: var(--s-1) 0;
   font-family: var(--font-serif);
   font-size: var(--fs-sm);
 }
 
-.drawer .related li a {
+.drawer .group li a {
   border-bottom: 0;
   color: var(--fg);
 }
 
-.drawer .related li a:hover {
+.drawer .group li a:hover {
   color: var(--accent);
 }
 
-.drawer .related li .rel-desc {
+.drawer .group li .rel-desc {
   color: var(--fg-subtle);
   font-size: var(--fs-xs);
   display: block;
@@ -733,13 +773,13 @@
   margin-top: 1px;
 }
 
-.drawer .related .empty {
+.drawer .empty {
   color: var(--fg-subtle);
   font-size: var(--fs-sm);
   font-style: italic;
 }
 
-.drawer .warnings-strip {
+.drawer .warnings .warn-list {
   background: var(--warning-bg);
   color: var(--warning-fg);
   padding: var(--s-3);
@@ -747,68 +787,17 @@
   border: var(--rule) solid var(--accent-muted);
 }
 
-.drawer .warnings-strip .warn-header {
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-smcaps);
-  margin-bottom: var(--s-2);
-  opacity: 0.8;
-}
-
-.drawer .warnings-strip ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.drawer .warnings-strip li {
+.drawer .warnings .warn-list li {
   font-family: var(--font-sans);
   font-size: var(--fs-xs);
   padding: var(--s-1) 0;
   line-height: var(--lh-normal);
 }
 
-.drawer .warnings-strip .warn-type {
+.drawer .warnings .warn-type {
   font-family: var(--font-mono);
   margin-right: var(--s-2);
   opacity: 0.7;
-}
-
-/* Source footer — `path .md · .json` as a subtle line at the bottom of
- * the drawer body. Takes the role the top-bar format toggle plays on
- * desktop; on mobile, where the format toggle is hidden, this is the
- * only affordance for raw-format views. */
-.drawer .drawer-body .source-line {
-  grid-column: 1 / -1;
-  margin-top: var(--s-2);
-  padding-top: var(--s-3);
-  border-top: var(--rule) solid var(--rule-color);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--fg-subtle);
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  flex-wrap: wrap;
-}
-
-.drawer .drawer-body .source-line .src-path {
-  color: var(--fg-subtle);
-}
-
-.drawer .drawer-body .source-line .src-sep {
-  color: var(--fg-subtle);
-}
-
-.drawer .drawer-body .source-line a {
-  color: var(--link-color);
-  border-bottom: var(--rule) solid var(--rule-color);
-  padding: 2px 0;
-}
-
-.drawer .drawer-body .source-line a:hover {
-  border-bottom-color: var(--accent);
 }
 
 /* =========================================================================
@@ -882,8 +871,9 @@
   .top-bar .breadcrumb {
     display: none;
   }
-  .top-bar .format-toggle {
-    display: none;
+  .top-bar .format-toggle a.format-link {
+    padding: var(--s-1) var(--s-2);
+    min-width: 2rem;
   }
   .top-bar .search {
     flex: 1 1 auto;

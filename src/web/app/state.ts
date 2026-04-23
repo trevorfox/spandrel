@@ -109,6 +109,7 @@ export interface DerivedMaps {
   nodeByPath: Map<string, WireNode>;
   linkTypeByStem: Map<string, LinkTypeInfo>;
   outgoingLinks: Map<string, SpandrelEdge[]>;
+  incomingLinks: Map<string, SpandrelEdge[]>;
   hierarchyChildren: Map<string, string[]>;
   /** Top-level collection path for each node (e.g. /clients/acme → /clients). */
   collectionOf: Map<string, string>;
@@ -151,12 +152,16 @@ function buildDerived(g: Graph): DerivedMaps {
   }
 
   const outgoingLinks = new Map<string, SpandrelEdge[]>();
+  const incomingLinks = new Map<string, SpandrelEdge[]>();
   const hierarchyChildren = new Map<string, string[]>();
   for (const e of g.edges) {
     if (e.type === "link") {
-      const list = outgoingLinks.get(e.from) ?? [];
-      list.push(e);
-      outgoingLinks.set(e.from, list);
+      const outList = outgoingLinks.get(e.from) ?? [];
+      outList.push(e);
+      outgoingLinks.set(e.from, outList);
+      const inList = incomingLinks.get(e.to) ?? [];
+      inList.push(e);
+      incomingLinks.set(e.to, inList);
     } else if (e.type === "hierarchy") {
       const list = hierarchyChildren.get(e.from) ?? [];
       list.push(e.to);
@@ -182,6 +187,7 @@ function buildDerived(g: Graph): DerivedMaps {
     nodeByPath,
     linkTypeByStem,
     outgoingLinks,
+    incomingLinks,
     hierarchyChildren,
     collectionOf,
     warningsByPath,

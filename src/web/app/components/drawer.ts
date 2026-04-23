@@ -1,8 +1,7 @@
-/** Bottom drawer: related nodes by link type + warnings strip. Collapsible. */
+/** Bottom drawer: outlinks · inlinks · warnings. Three columns. Collapsible. */
 
 import { currentPath$, derived$ } from "../state.js";
 import { pathToUrl } from "../lib/mode.js";
-import { rawHref } from "../lib/raw-href.js";
 import type { LinkTypeInfo, SpandrelEdge } from "../../types.js";
 
 // Mobile collapses the drawer by default — on a 375px viewport an open
@@ -19,16 +18,25 @@ export function mountDrawer(root: HTMLElement): void {
       <span class="chev" aria-hidden="true">▾</span>
     </button>
     <div class="drawer-body">
-      <div class="related"></div>
-      <div class="warnings"></div>
-      <div class="source-line"></div>
+      <section class="drawer-col outlinks" aria-labelledby="drawer-outlinks-h">
+        <h3 class="col-header" id="drawer-outlinks-h">Outlinks</h3>
+        <div class="col-body"></div>
+      </section>
+      <section class="drawer-col inlinks" aria-labelledby="drawer-inlinks-h">
+        <h3 class="col-header" id="drawer-inlinks-h">Inlinks</h3>
+        <div class="col-body"></div>
+      </section>
+      <section class="drawer-col warnings" aria-labelledby="drawer-warnings-h">
+        <h3 class="col-header" id="drawer-warnings-h">Warnings</h3>
+        <div class="col-body"></div>
+      </section>
     </div>
   `;
 
   const handle = root.querySelector(".drawer-handle") as HTMLButtonElement;
-  const relatedEl = root.querySelector(".related") as HTMLElement;
-  const warningsEl = root.querySelector(".warnings") as HTMLElement;
-  const sourceEl = root.querySelector(".source-line") as HTMLElement;
+  const outEl = root.querySelector(".outlinks .col-body") as HTMLElement;
+  const inEl = root.querySelector(".inlinks .col-body") as HTMLElement;
+  const warnEl = root.querySelector(".warnings .col-body") as HTMLElement;
 
   handle.addEventListener("click", () => {
     const collapsed = root.getAttribute("data-collapsed") === "true";
@@ -41,23 +49,22 @@ export function mountDrawer(root: HTMLElement): void {
     const path = currentPath$.get();
     const maps = derived$.get();
     if (!maps) {
-      relatedEl.innerHTML = "";
-      warningsEl.innerHTML = "";
+      outEl.innerHTML = "";
+      inEl.innerHTML = "";
+      warnEl.innerHTML = "";
       return;
     }
 
-    // Related (outgoing typed and untyped links).
     const outgoing = maps.outgoingLinks.get(path) ?? [];
-    relatedEl.innerHTML = renderRelated(outgoing, maps);
+    outEl.innerHTML = renderEdges(outgoing, maps, "out");
 
-    // Warnings for this path.
+    const incoming = maps.incomingLinks.get(path) ?? [];
+    inEl.innerHTML = renderEdges(incoming, maps, "in");
+
     const warnings = maps.warningsByPath.get(path) ?? [];
-    warningsEl.innerHTML = warnings.length > 0 ? renderWarnings(warnings) : "";
-
-    // Source footer — subtle .md / .json links. Lives here rather than in
-    // the top bar so mobile's slim bar stays slim and so the links sit
-    // next to the node's other meta (relations, warnings).
-    sourceEl.innerHTML = renderSourceLine(path);
+    warnEl.innerHTML = warnings.length > 0
+      ? renderWarnings(warnings)
+      : `<div class="empty">No warnings.</div>`;
   };
 
   render();
@@ -65,17 +72,18 @@ export function mountDrawer(root: HTMLElement): void {
   derived$.subscribe(render);
 }
 
-function renderRelated(
-  outgoing: SpandrelEdge[],
+function renderEdges(
+  edges: SpandrelEdge[],
   maps: NonNullable<ReturnType<typeof derived$.get>>,
+  direction: "in" | "out",
 ): string {
-  if (outgoing.length === 0) {
-    return `<div class="empty">No outgoing links.</div>`;
+  if (edges.length === 0) {
+    return `<div class="empty">${direction === "out" ? "No outgoing links." : "No incoming links."}</div>`;
   }
 
   // Group by linkType stem; untyped edges become a "links" group.
   const groups = new Map<string, SpandrelEdge[]>();
-  for (const e of outgoing) {
+  for (const e of edges) {
     const key = e.linkType ?? "__untyped__";
     const list = groups.get(key) ?? [];
     list.push(e);
@@ -83,7 +91,7 @@ function renderRelated(
   }
 
   const blocks: string[] = [];
-  for (const [stem, edges] of groups) {
+  for (const [stem, es] of groups) {
     const typeInfo: LinkTypeInfo | undefined =
       stem === "__untyped__" ? undefined : maps.linkTypeByStem.get(stem);
     const header =
@@ -93,17 +101,19 @@ function renderRelated(
     const desc = typeInfo?.description ?? "";
     blocks.push(`
       <div class="group">
-        <h3 class="group-header">${escapeHtml(header)}</h3>
+        <h4 class="group-header">${escapeHtml(header)}</h4>
         ${desc ? `<div class="group-desc">${escapeHtml(desc)}</div>` : ""}
         <ul>
-          ${edges
+          ${es
             .map((e) => {
-              const target = maps.nodeByPath.get(e.to);
-              const name = target?.name ?? e.to;
+              // For outlinks, show the edge target; for inlinks, show the source.
+              const otherPath = direction === "out" ? e.to : e.from;
+              const target = maps.nodeByPath.get(otherPath);
+              const name = target?.name ?? otherPath;
               const d = e.description ?? target?.description ?? "";
               return `
                 <li>
-                  <a href="${pathToUrl(e.to)}">${escapeHtml(name)}</a>
+                  <a href="${pathToUrl(otherPath)}">${escapeHtml(name)}</a>
                   ${d ? `<span class="rel-desc">${escapeHtml(d)}</span>` : ""}
                 </li>`;
             })
@@ -114,24 +124,16 @@ function renderRelated(
   return blocks.join("");
 }
 
-function renderSourceLine(path: string): string {
-  const display = path === "" ? "/" : path;
-  return `<span class="src-path">${escapeHtml(display)}</span><a href="${rawHref(path, "md")}">.md</a><span class="src-sep" aria-hidden="true">·</span><a href="${rawHref(path, "json")}">.json</a>`;
-}
-
 function renderWarnings(warnings: { type: string; message: string }[]): string {
   return `
-    <div class="warnings-strip" role="status">
-      <div class="warn-header">Warnings</div>
-      <ul>
-        ${warnings
-          .map(
-            (w) =>
-              `<li><span class="warn-type">${escapeHtml(w.type)}</span>${escapeHtml(w.message)}</li>`,
-          )
-          .join("")}
-      </ul>
-    </div>
+    <ul class="warn-list">
+      ${warnings
+        .map(
+          (w) =>
+            `<li><span class="warn-type">${escapeHtml(w.type)}</span>${escapeHtml(w.message)}</li>`,
+        )
+        .join("")}
+    </ul>
   `;
 }
 
