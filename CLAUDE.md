@@ -14,7 +14,7 @@ A spec with a reference implementation. Spandrel turns markdown file trees into 
   - `src/storage/` — storage interface (design.md only, memory is inline for now)
   - `src/cli.ts` — entry point
 - `test/` — conformance tests (verify the spec, not the implementation)
-- `ONBOARDING.md` — agent-guided setup for new knowledge graphs (replaces the earlier `BOOTSTRAP.md`)
+- `ONBOARDING.md` — agent-guided setup for new knowledge graphs
 - `ROADMAP.md` — phased roadmap (serving, authoring, ingestion, intelligence, federation)
 
 Each `src/` subdirectory has a `design.md` companion file — the implementation-agnostic spec for that subsystem.
