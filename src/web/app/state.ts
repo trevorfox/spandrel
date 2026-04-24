@@ -134,6 +134,21 @@ export const derived$ = new Signal<DerivedMaps | null>(null);
 export const scopePath$ = new Signal<string | null>(null);
 
 /**
+ * Which view of the graph is visible in the graph pane — the D3
+ * force-directed layout or the indented tree. Transient; resets to
+ * `"graph"` on reload.
+ */
+export type GraphView = "graph" | "tree";
+export const graphView$ = new Signal<GraphView>("graph");
+
+/**
+ * Paths currently expanded in the tree view. Transient. Seeded on
+ * first render from the ancestors of `currentPath$`, so whichever
+ * node the user is reading is visible without manual expansion.
+ */
+export const treeExpanded$ = new Signal<Set<string>>(new Set<string>());
+
+/**
  * Body content by node path, populated lazily when a node is visited.
  * Separate from `graph$` so the structural payload stays small and
  * navigation doesn't force a content fetch for nodes the user never

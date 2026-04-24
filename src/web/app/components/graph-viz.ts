@@ -21,9 +21,10 @@ import { select, type Selection } from "d3-selection";
 import { drag, type D3DragEvent } from "d3-drag";
 import "d3-transition";
 
-import { currentPath$, derived$, graph$, scopePath$, collectionOfPath, type WireNode } from "../state.js";
+import { currentPath$, derived$, graph$, graphView$, scopePath$, collectionOfPath, type WireNode } from "../state.js";
 import { pathToUrl } from "../lib/mode.js";
 import type { Graph, SpandrelEdge } from "../../types.js";
+import { mountGraphTree } from "./graph-tree.js";
 
 interface VizNode extends SimulationNodeDatum {
   id: string;
@@ -50,14 +51,18 @@ const COLLECTION_PALETTE = [
 ];
 
 export function mountGraphViz(root: HTMLElement): void {
-  root.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Knowledge graph"></svg><div class="empty" hidden>No graph loaded.</div><div class="graph-chrome"><div class="scope-control"><button type="button" class="scope-pill" aria-haspopup="listbox" aria-expanded="false"></button><div class="scope-menu" role="listbox" hidden></div></div><div class="legend" hidden></div></div><div class="node-tooltip" aria-hidden="true"></div>`;
+  root.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Knowledge graph"></svg><div class="tree-view" hidden></div><div class="empty" hidden>No graph loaded.</div><div class="graph-chrome"><div class="view-toggle" role="group" aria-label="View mode"><button type="button" data-view="graph" class="active" aria-pressed="true">Graph</button><button type="button" data-view="tree" aria-pressed="false">Tree</button></div><div class="scope-control"><button type="button" class="scope-pill" aria-haspopup="listbox" aria-expanded="false"></button><div class="scope-menu" role="listbox" hidden></div></div><div class="legend" hidden></div></div><div class="node-tooltip" aria-hidden="true"></div>`;
   const svgEl = root.querySelector("svg") as SVGSVGElement;
+  const treeViewEl = root.querySelector(".tree-view") as HTMLElement;
   const emptyEl = root.querySelector(".empty") as HTMLElement;
   const legendEl = root.querySelector(".legend") as HTMLElement;
   const scopeControlEl = root.querySelector(".scope-control") as HTMLElement;
   const scopePillEl = root.querySelector(".scope-pill") as HTMLButtonElement;
   const scopeMenuEl = root.querySelector(".scope-menu") as HTMLElement;
+  const viewToggleEl = root.querySelector(".view-toggle") as HTMLElement;
   const tooltipEl = root.querySelector(".node-tooltip") as HTMLElement;
+
+  mountGraphTree(treeViewEl);
 
   const svg = select(svgEl);
   const gLinks = svg.append("g").attr("class", "links");
@@ -398,8 +403,40 @@ export function mountGraphViz(root: HTMLElement): void {
     if (!scopeControlEl.contains(e.target as Node)) closeScopeMenu();
   });
 
+  // ── view toggle (Graph | Tree) ────────────────────────────────────────
+  //
+  // Two buttons share the graph pane; `graphView$` controls which is
+  // visible. Hiding the SVG skips the d3 tick cost while in tree mode;
+  // the tree component self-updates via derived$/scopePath$ subs, so
+  // no coordination needed here beyond show/hide.
+  const applyView = () => {
+    const view = graphView$.get();
+    const isGraph = view === "graph";
+    svgEl.style.display = isGraph ? "" : "none";
+    treeViewEl.hidden = isGraph;
+    // Legend is meaningful in both views — keep it.
+    // Buttons reflect active state.
+    viewToggleEl.querySelectorAll<HTMLButtonElement>("button[data-view]").forEach((btn) => {
+      const match = btn.getAttribute("data-view") === view;
+      btn.classList.toggle("active", match);
+      btn.setAttribute("aria-pressed", String(match));
+    });
+  };
+
+  viewToggleEl.addEventListener("click", (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-view]");
+    if (!btn) return;
+    const view = btn.getAttribute("data-view");
+    if (view === "graph" || view === "tree") {
+      graphView$.set(view);
+    }
+  });
+
+  graphView$.subscribe(applyView);
+
   // Initial render + subscriptions.
   renderScopePill();
+  applyView();
   rebuild(graph$.get());
   graph$.subscribe(rebuild);
   scopePath$.subscribe(() => rebuild(graph$.get()));

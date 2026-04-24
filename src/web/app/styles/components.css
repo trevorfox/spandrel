@@ -527,10 +527,10 @@
   stroke: var(--accent-muted);
 }
 
-/* Top-right chrome: scope control stacks above the legend. Everything
- * in the corner flows from this container — the individual pieces are
- * relatively positioned so adding more widgets later (tree-view toggle,
- * etc.) doesn't require rewiring anchor points. */
+/* Top-right chrome: view toggle + scope control stack above the legend.
+ * Everything in the corner flows from this container — the individual
+ * pieces are relatively positioned so adding more widgets later doesn't
+ * require rewiring anchor points. */
 .graph-pane .graph-chrome {
   position: absolute;
   top: var(--s-3);
@@ -541,6 +541,46 @@
   gap: var(--s-2);
   z-index: 5;
   max-width: min(22rem, calc(100% - var(--s-6)));
+}
+
+/* Graph | Tree toggle. Structurally identical to the top-bar format
+ * toggle: grouped buttons, hairline border between. */
+.graph-pane .view-toggle {
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--bg-elevated);
+  border: var(--rule) solid var(--rule-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.graph-pane .view-toggle button {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-smcaps);
+  background: transparent;
+  border: 0;
+  color: var(--fg-subtle);
+  padding: var(--s-1) var(--s-3);
+  cursor: pointer;
+  border-right: var(--rule) solid var(--rule-color);
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.graph-pane .view-toggle button:last-child {
+  border-right: 0;
+}
+
+.graph-pane .view-toggle button:hover {
+  color: var(--fg-muted);
+  background: var(--bg-sunken);
+}
+
+.graph-pane .view-toggle button.active {
+  color: var(--fg);
+  background: var(--bg-sunken);
+  cursor: default;
 }
 
 .graph-pane .legend {
@@ -697,6 +737,135 @@
   color: var(--fg-subtle);
   text-transform: uppercase;
   letter-spacing: var(--ls-smcaps);
+}
+
+/* Tree view — fills the graph pane when `graphView$ === "tree"`. The
+ * SVG is hidden via inline `display:none` from graph-viz.ts; we take
+ * over the whole pane with a scrollable indented list. */
+.graph-pane .tree-view {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: var(--s-3) var(--s-3) var(--s-5);
+  /* The graph-chrome floats top-right. Push the tree down enough that
+   * the first row clears the toggle + scope pill + legend stack. */
+  padding-top: calc(var(--s-3) + 7rem);
+  background: var(--bg);
+}
+
+.graph-pane .tree-view[hidden] {
+  display: none;
+}
+
+.graph-pane .tree-view .tree-empty {
+  text-align: center;
+  color: var(--fg-subtle);
+  font-style: italic;
+  font-size: var(--fs-sm);
+}
+
+.graph-pane .tree-root,
+.graph-pane .tree-view ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.graph-pane .tree-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 2px 0;
+  font-family: var(--font-serif);
+  font-size: var(--fs-sm);
+  color: var(--fg);
+  border-radius: var(--radius-sm);
+  transition: background 120ms ease;
+}
+
+.graph-pane .tree-row:hover {
+  background: var(--bg-elevated);
+}
+
+.graph-pane .tree-row.current {
+  background: var(--selection);
+  color: var(--fg);
+}
+
+.graph-pane .tree-chev {
+  display: inline-flex;
+  width: 1em;
+  color: var(--fg-muted);
+  font-size: 0.8em;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 120ms ease;
+  flex: 0 0 auto;
+}
+
+.graph-pane .tree-chev.invisible {
+  visibility: hidden;
+  cursor: default;
+}
+
+.graph-pane li[aria-expanded="true"] > .tree-row .tree-chev {
+  transform: rotate(90deg);
+}
+
+.graph-pane .tree-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.graph-pane .tree-name {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-pane .tree-name:hover {
+  color: var(--accent);
+}
+
+/* Scope icon — hover-revealed on each row. Fades in rather than
+ * popping; gives a sense of the row being "actionable" without
+ * visual noise across the whole tree. */
+.graph-pane .tree-scope {
+  background: transparent;
+  border: 0;
+  padding: 2px 6px;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  color: var(--fg-subtle);
+  cursor: pointer;
+  opacity: 0;
+  border-radius: var(--radius-sm);
+  flex: 0 0 auto;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.graph-pane .tree-row:hover .tree-scope,
+.graph-pane .tree-scope:focus-visible {
+  opacity: 1;
+}
+
+.graph-pane .tree-scope:hover {
+  color: var(--accent);
+  background: var(--bg-sunken);
 }
 
 /* Collection highlight: hovering a legend row dims every non-matching node
