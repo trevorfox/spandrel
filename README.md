@@ -58,7 +58,15 @@ Spandrel is a spec with a reference implementation. You write markdown files wit
 
 An agent doesn't get everything dumped into its context window. It reads the root description, picks a direction, reads that level, picks again, and arrives at exactly what it needs. Hundreds of tokens on navigation instead of tens of thousands on loading everything. That's progressive disclosure, and it's what makes this different from search-based retrieval.
 
-The [philosophy](docs/philosophy.md) and [content model](docs/content-model/index.md) are documented as a Spandrel knowledge graph in `docs/` — explorable via `spandrel mcp docs/`, or **browse it live** at [trevorfox.github.io/spandrel](https://trevorfox.github.io/spandrel/).
+The [philosophy](docs/philosophy.md) and [content model](docs/content-model/index.md) are documented as a Spandrel knowledge graph in `docs/` — explorable via `spandrel mcp docs/`, or **browse it live** at [spandrel.org](https://spandrel.org).
+
+**Want Claude to read the docs while you're building your own graph?** Point your agent at the hosted MCP at [mcp.spandrel.org](https://mcp.spandrel.org) — no install required:
+
+```bash
+claude mcp add spandrel https://mcp.spandrel.org/mcp --transport http --scope user
+```
+
+The same docs graph, served as MCP. Useful during onboarding when you're authoring a new Spandrel directory and want the framework's own conventions at your agent's fingertips.
 
 ## Three ways to serve a Spandrel graph
 
@@ -93,7 +101,7 @@ Add a thin MCP shim on a serverless function alongside the bundle and agents can
 
 For graphs that need writes, identity-aware reads, or federation: run the Spandrel server against a persistent store (Postgres). Implement the `GraphStore` interface; hand the store to `createSchema` + `createMcpServer`; deploy anywhere.
 
-The framework's own docs KG at [trevorfox.github.io/spandrel](https://trevorfox.github.io/spandrel/) uses mode 2 — static publish from `docs/`.
+The framework's own docs KG at [spandrel.org](https://spandrel.org) uses mode 2 — static publish from `docs/` — with a thin serverless MCP adapter at [mcp.spandrel.org](https://mcp.spandrel.org) (reference implementation: [trevorfox/spandrel-mcp](https://github.com/trevorfox/spandrel-mcp)).
 
 ## Knowledge Repo Structure
 
