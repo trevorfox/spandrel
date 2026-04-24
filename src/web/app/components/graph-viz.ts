@@ -21,7 +21,7 @@ import { select, type Selection } from "d3-selection";
 import { drag, type D3DragEvent } from "d3-drag";
 import "d3-transition";
 
-import { currentPath$, derived$, graph$, collectionOfPath, type WireNode } from "../state.js";
+import { currentPath$, derived$, graph$, scopePath$, collectionOfPath, type WireNode } from "../state.js";
 import { pathToUrl } from "../lib/mode.js";
 import type { Graph, SpandrelEdge } from "../../types.js";
 
@@ -50,10 +50,13 @@ const COLLECTION_PALETTE = [
 ];
 
 export function mountGraphViz(root: HTMLElement): void {
-  root.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Knowledge graph"></svg><div class="empty" hidden>No graph loaded.</div><div class="legend" hidden></div><div class="node-tooltip" aria-hidden="true"></div>`;
+  root.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Knowledge graph"></svg><div class="empty" hidden>No graph loaded.</div><div class="graph-chrome"><div class="scope-control"><button type="button" class="scope-pill" aria-haspopup="listbox" aria-expanded="false"></button><div class="scope-menu" role="listbox" hidden></div></div><div class="legend" hidden></div></div><div class="node-tooltip" aria-hidden="true"></div>`;
   const svgEl = root.querySelector("svg") as SVGSVGElement;
   const emptyEl = root.querySelector(".empty") as HTMLElement;
   const legendEl = root.querySelector(".legend") as HTMLElement;
+  const scopeControlEl = root.querySelector(".scope-control") as HTMLElement;
+  const scopePillEl = root.querySelector(".scope-pill") as HTMLButtonElement;
+  const scopeMenuEl = root.querySelector(".scope-menu") as HTMLElement;
   const tooltipEl = root.querySelector(".node-tooltip") as HTMLElement;
 
   const svg = select(svgEl);
@@ -97,6 +100,7 @@ export function mountGraphViz(root: HTMLElement): void {
   };
 
   const rebuild = (graph: Graph | null) => {
+    renderScopePill();
     if (!graph || graph.nodes.length === 0) {
       emptyEl.hidden = false;
       legendEl.hidden = true;
@@ -110,11 +114,20 @@ export function mountGraphViz(root: HTMLElement): void {
     }
     emptyEl.hidden = true;
 
+    // Filter by subtree scope before anything else. `null` scope =
+    // show everything. When scoped to `/architecture`, keep only
+    // nodes at that path or under it, and only edges where both
+    // endpoints survive the filter.
+    const scope = scopePath$.get();
+    const inScope = (p: string): boolean =>
+      scope === null || p === scope || p.startsWith(scope + "/");
+    const scopedNodes = graph.nodes.filter((n) => inScope(n.path));
+
     // Build node + edge data. Prefer the nodes in graph.nodes as the source
     // of truth; ignore edges referencing unknown nodes (keeps broken-link
     // warnings visible in the drawer without crashing the viz).
-    const nodePaths = new Set<string>(graph.nodes.map((n) => n.path));
-    nodes = graph.nodes.map((n: WireNode) => ({
+    const nodePaths = new Set<string>(scopedNodes.map((n) => n.path));
+    nodes = scopedNodes.map((n: WireNode) => ({
       id: n.path,
       name: n.name || stemOf(n.path),
       collection: collectionOfPath(n.path),
@@ -298,9 +311,98 @@ export function mountGraphViz(root: HTMLElement): void {
     simulation.alpha(0.8).restart();
   }
 
+  // ── scope control ─────────────────────────────────────────────────────
+  //
+  // Pill shows current scope; clicking opens a dropdown of choices. The
+  // interaction pattern mirrors the top-bar search dropdown: `mousedown`
+  // on items (not click) so the blur-close race doesn't swallow the
+  // selection, plus a document-level click-outside listener to dismiss.
+  const renderScopePill = () => {
+    const scope = scopePath$.get();
+    if (scope === null) {
+      scopePillEl.innerHTML = `<span class="scope-label">Scope</span><span class="scope-value">All</span><span class="scope-caret" aria-hidden="true">▾</span>`;
+      scopePillEl.classList.remove("scoped");
+    } else {
+      scopePillEl.innerHTML = `<span class="scope-label">Scope</span><span class="scope-value">${escapeHtml(scope)}</span><span class="scope-clear" data-clear="true" aria-label="Clear scope" role="button">✕</span>`;
+      scopePillEl.classList.add("scoped");
+    }
+  };
+
+  const closeScopeMenu = () => {
+    scopeMenuEl.hidden = true;
+    scopePillEl.setAttribute("aria-expanded", "false");
+  };
+
+  const openScopeMenu = () => {
+    const graph = graph$.get();
+    const current = currentPath$.get();
+    const scope = scopePath$.get();
+
+    // Build the choice set: a current-path option (if it's non-root and
+    // has descendants worth scoping to), plus every top-level collection
+    // in the graph. Skip collections the user is already scoped to.
+    const items: Array<{ path: string | null; label: string; hint?: string }> = [];
+    if (scope !== null) {
+      items.push({ path: null, label: "All", hint: "clear scope" });
+    }
+    if (current && current !== "/" && current !== scope) {
+      items.push({ path: current, label: current, hint: "scope to current" });
+    }
+    const seen = new Set<string>([scope ?? "", current]);
+    if (graph) {
+      const topLevel = new Set<string>();
+      for (const n of graph.nodes) {
+        const parts = n.path.split("/").filter(Boolean);
+        if (parts.length >= 1) topLevel.add("/" + parts[0]);
+      }
+      for (const p of [...topLevel].sort()) {
+        if (seen.has(p)) continue;
+        items.push({ path: p, label: p });
+      }
+    }
+
+    scopeMenuEl.innerHTML = items
+      .map(
+        (it) =>
+          `<button type="button" class="scope-item" role="option" data-path="${escapeAttr(it.path ?? "__all__")}"><span class="item-label">${escapeHtml(it.label)}</span>${it.hint ? `<span class="item-hint">${escapeHtml(it.hint)}</span>` : ""}</button>`,
+      )
+      .join("");
+    scopeMenuEl.hidden = false;
+    scopePillEl.setAttribute("aria-expanded", "true");
+  };
+
+  scopePillEl.addEventListener("click", (e) => {
+    // The ✕ clear affordance is nested inside the pill; catch it before
+    // falling through to the open-menu handler.
+    const target = e.target as HTMLElement;
+    if (target.getAttribute("data-clear") === "true") {
+      e.stopPropagation();
+      scopePath$.set(null);
+      closeScopeMenu();
+      return;
+    }
+    if (scopeMenuEl.hidden) openScopeMenu();
+    else closeScopeMenu();
+  });
+
+  scopeMenuEl.addEventListener("mousedown", (e) => {
+    const target = (e.target as HTMLElement).closest(".scope-item") as HTMLElement | null;
+    if (!target) return;
+    e.preventDefault();
+    const path = target.getAttribute("data-path");
+    scopePath$.set(path === "__all__" ? null : path);
+    closeScopeMenu();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!scopeControlEl.contains(e.target as Node)) closeScopeMenu();
+  });
+
   // Initial render + subscriptions.
+  renderScopePill();
   rebuild(graph$.get());
   graph$.subscribe(rebuild);
+  scopePath$.subscribe(() => rebuild(graph$.get()));
   currentPath$.subscribe(applyCurrentHighlight);
 
   // Size.

@@ -124,6 +124,16 @@ export const error$ = new Signal<string | null>(null);
 export const derived$ = new Signal<DerivedMaps | null>(null);
 
 /**
+ * Subtree scope for the graph viz. `null` means "show everything"; a
+ * path like `/architecture` prunes the graph to nodes under that
+ * subtree. Independent of `currentPath$` — navigating doesn't change
+ * scope, and a user can keep the graph scoped to one subtree while
+ * reading content in another. Transient (not persisted to URL or
+ * localStorage), matching the legend-highlight pattern.
+ */
+export const scopePath$ = new Signal<string | null>(null);
+
+/**
  * Body content by node path, populated lazily when a node is visited.
  * Separate from `graph$` so the structural payload stays small and
  * navigation doesn't force a content fetch for nodes the user never

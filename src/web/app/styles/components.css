@@ -527,10 +527,23 @@
   stroke: var(--accent-muted);
 }
 
-.graph-pane .legend {
+/* Top-right chrome: scope control stacks above the legend. Everything
+ * in the corner flows from this container — the individual pieces are
+ * relatively positioned so adding more widgets later (tree-view toggle,
+ * etc.) doesn't require rewiring anchor points. */
+.graph-pane .graph-chrome {
   position: absolute;
   top: var(--s-3);
   right: var(--s-3);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s-2);
+  z-index: 5;
+  max-width: min(22rem, calc(100% - var(--s-6)));
+}
+
+.graph-pane .legend {
   font-family: var(--font-sans);
   font-size: var(--fs-xs);
   text-transform: uppercase;
@@ -543,11 +556,11 @@
   max-width: 16rem;
 }
 
-/* Legend would eat two-thirds of the graph at phone width — the
- * collections are already visible as node colors, and the palette is
- * memorable enough. Hide and trust the viz. */
+/* Hide the chrome entirely on phones — the graph pane is already the
+ * only stage there and corner controls eat thumb territory. The
+ * drawer's Outlinks/Inlinks columns cover navigation needs. */
 @media (max-width: 600px) {
-  .graph-pane .legend {
+  .graph-pane .graph-chrome {
     display: none;
   }
 }
@@ -571,6 +584,119 @@
 
 .graph-pane .legend .legend-row:hover {
   color: var(--fg);
+}
+
+/* Scope control — pill + dropdown. Structurally mirrors the top-bar
+ * format toggle for the pill and the search-results dropdown for the
+ * menu, so the viewer reads as one family of controls. */
+.graph-pane .scope-control {
+  position: relative;
+}
+
+.graph-pane .scope-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-smcaps);
+  color: var(--fg-muted);
+  background: var(--bg-elevated);
+  border: var(--rule) solid var(--rule-color);
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.graph-pane .scope-pill:hover {
+  color: var(--fg);
+  border-color: var(--rule-strong);
+}
+
+.graph-pane .scope-pill.scoped {
+  color: var(--fg);
+  border-color: var(--accent-muted);
+}
+
+.graph-pane .scope-pill .scope-label {
+  color: var(--fg-subtle);
+}
+
+.graph-pane .scope-pill .scope-value {
+  font-family: var(--font-mono);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.graph-pane .scope-pill .scope-caret,
+.graph-pane .scope-pill .scope-clear {
+  color: var(--fg-subtle);
+  font-size: 0.85em;
+  line-height: 1;
+}
+
+.graph-pane .scope-pill .scope-clear {
+  padding: 0 2px;
+  border-radius: var(--radius-sm);
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.graph-pane .scope-pill .scope-clear:hover {
+  color: var(--fg);
+  background: var(--bg-sunken);
+}
+
+.graph-pane .scope-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 12rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border: var(--rule) solid var(--rule-color);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: var(--s-1) 0;
+  z-index: 10;
+}
+
+.graph-pane .scope-menu .scope-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  width: 100%;
+  padding: var(--s-2) var(--s-3);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.graph-pane .scope-menu .scope-item:hover {
+  background: var(--bg-sunken);
+}
+
+.graph-pane .scope-menu .scope-item .item-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg);
+}
+
+.graph-pane .scope-menu .scope-item .item-hint {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  color: var(--fg-subtle);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-smcaps);
 }
 
 /* Collection highlight: hovering a legend row dims every non-matching node
