@@ -13,6 +13,7 @@ import { scaffoldInit, type InitOptions } from "./cli-init.js";
 import { publish, parsePublishArgs, resolveBundleDir } from "./cli-publish.js";
 import { emitGraph } from "./compiler/emit-graph.js";
 import { renderNodeAsMarkdown } from "./web/render-node.js";
+import { extensionToNodePath } from "./cli-routing.js";
 import { createYoga } from "graphql-yoga";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
@@ -246,34 +247,6 @@ function handleSse(
   res.on("close", cleanup);
 }
 
-/**
- * Derive a graph node path from a URL that ends in `.md` or `.json`.
- *
- * The root node is addressed as `/.md` or `/.json`, matching the publish-mode
- * sibling file convention. Everything else strips the extension:
- *   `/clients/acme-corp.md` → `/clients/acme-corp`
- *
- * Returns `null` for inputs that don't look like a node reference (e.g.
- * `/assets/app.js.map`, or an unexpected `*.json` path already handled
- * elsewhere).
- */
-function extensionToNodePath(urlPath: string, ext: ".md" | ".json"): string | null {
-  if (!urlPath.endsWith(ext)) return null;
-  // Root node sentinel: `/.md` / `/.json`. `index.md` / `index.json` also
-  // route to the root so common conventions don't 404.
-  if (urlPath === "/" + ext || urlPath === "/index" + ext) return "/";
-  let withoutExt = urlPath.slice(0, -ext.length);
-  if (!withoutExt.startsWith("/")) return null;
-  // Accept both the sibling form (`/foo/bar.md`) emitted by
-  // `spandrel publish` and the directory form (`/foo/bar/index.md`) the
-  // SPA's node-loader fetches via `document.baseURI`. Without this,
-  // deep-link content fetches in dev mode fall through to the SPA
-  // fallback and the viewer renders the HTML shell as a node body.
-  if (withoutExt.endsWith("/index")) {
-    withoutExt = withoutExt.slice(0, -"/index".length);
-  }
-  return withoutExt;
-}
 
 const STATIC_MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
