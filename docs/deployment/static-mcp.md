@@ -7,6 +7,18 @@ description: Deploy a Spandrel knowledge graph as static files plus a thin MCP s
 
 The simplest production-ready deployment: `spandrel publish` writes a bundle of flat files; a thin serverless function translates MCP tool calls into fetches against those files. Read-only, cheap, embeddable in any existing site.
 
+## See it live
+
+This pattern runs in production at [**mcp.spandrel.org**](https://mcp.spandrel.org), serving the Spandrel docs bundle at [spandrel.org](https://spandrel.org). The adapter is a ~150-line Next.js app — one route handler that wires the MCP SDK's Streamable HTTP transport to a [`RemoteGraphStore`](/architecture/storage) pointed at the bundle URL.
+
+Source: [**trevorfox/spandrel-mcp**](https://github.com/trevorfox/spandrel-mcp). To replicate for your own graph:
+
+1. Fork the repo.
+2. Set `SPANDREL_BUNDLE_URL` to your published bundle's origin.
+3. Deploy to Vercel. Point a subdomain at it.
+
+That's the whole change — the adapter is generic across any Spandrel-published bundle.
+
 ## What gets emitted
 
 `spandrel publish <path> --static --base <path> --site-url <origin>` produces:

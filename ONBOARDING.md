@@ -2,6 +2,18 @@
 
 > This document guides a coding agent through setting up a new Spandrel knowledge graph. Read it top to bottom. Each level introduces one concept, demonstrates it, and pauses for user input before continuing. Don't skip ahead.
 
+## Preview without installing
+
+Before cloning or installing, point your agent at the hosted docs MCP. The Spandrel docs graph *is* the tutorial — progressive disclosure over MCP, same surface you'll build.
+
+```bash
+claude mcp add spandrel https://mcp.spandrel.org/mcp --transport http --scope user
+```
+
+Then ask your agent: *"Use the spandrel MCP to orient me. Start at `/` and walk me through the philosophy and content model."* It navigates via `context`, `get_node`, `navigate` — the exact tools it'll use against your own graph once you install.
+
+When you're ready to build, continue below.
+
 ## Prerequisites
 
 Spandrel must be set up:
@@ -22,7 +34,7 @@ Verify you're running a current build: `spandrel --version` should match the rep
 - **First time** — follow Levels 0–6 linearly. Each level introduces one Spandrel concept.
 - **Repeat user** — skim [docs/onboarding/concepts.md](docs/onboarding/concepts.md) for the primitives, pick a path from [docs/onboarding/paths/](docs/onboarding/paths/), optionally pair it with a [template](docs/onboarding/templates/), and go.
 
-The onboarding content itself is a compiled subgraph under `docs/onboarding/` — Spandrel describes its own setup flow. Traverse it via `spandrel dev docs/` to see what the agent is working from.
+The onboarding content itself is a compiled subgraph under `docs/onboarding/` — Spandrel describes its own setup flow. The `docs/onboarding/*.md` links throughout this guide point at the source files. For zero-install preview or mid-session cross-reference, the same graph is live at [mcp.spandrel.org](https://mcp.spandrel.org) — `context("/onboarding/paths")`, `get_node("/onboarding/concepts")`, etc.
 
 ## Level 0: Orient
 

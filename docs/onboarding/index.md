@@ -10,7 +10,7 @@ links:
 
 # Onboarding
 
-Spandrel describes its own setup flow. The `ONBOARDING.md` guide at the repo root is the agent-facing script; this subgraph is the content that script works from.
+Building a Spandrel graph is itself a knowledge-authoring exercise — you're creating the structured substrate a Claude Code agent will navigate to make better decisions, produce more consistent work, and cite validated knowledge. This subgraph is the content the repo's `ONBOARDING.md` script walks through: paths matched to different starting materials, templates for common shapes, concepts for repeat users, and guardrails for the traps that real sessions hit.
 
 Traverse to see what the onboarding agent proposes:
 
