@@ -527,216 +527,219 @@
   stroke: var(--accent-muted);
 }
 
-/* Top-right chrome: view toggle + scope control stack above the legend.
- * Everything in the corner flows from this container — the individual
- * pieces are relatively positioned so adding more widgets later doesn't
- * require rewiring anchor points. */
+/* Graph-pane chrome: one floating "index card" in the top-right that
+ * holds the view switcher, scope status, and legend. Single border,
+ * internal hairlines separate the three sections. Matches the drawer's
+ * small-caps-label + serif-value vocabulary so the two surfaces read as
+ * one family. */
 .graph-pane .graph-chrome {
   position: absolute;
   top: var(--s-3);
   right: var(--s-3);
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: var(--s-2);
-  z-index: 5;
-  max-width: min(22rem, calc(100% - var(--s-6)));
-}
-
-/* Graph | Tree toggle. Structurally identical to the top-bar format
- * toggle: grouped buttons, hairline border between. */
-.graph-pane .view-toggle {
-  display: inline-flex;
-  align-items: stretch;
   background: var(--bg-elevated);
   border: var(--rule) solid var(--rule-color);
   border-radius: var(--radius-sm);
+  min-width: 14rem;
+  max-width: min(18rem, calc(100% - var(--s-6)));
+  z-index: 5;
   overflow: hidden;
 }
 
-.graph-pane .view-toggle button {
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-smcaps);
-  background: transparent;
-  border: 0;
-  color: var(--fg-subtle);
-  padding: var(--s-1) var(--s-3);
-  cursor: pointer;
-  border-right: var(--rule) solid var(--rule-color);
-  transition: color 120ms ease, background 120ms ease;
-}
-
-.graph-pane .view-toggle button:last-child {
-  border-right: 0;
-}
-
-.graph-pane .view-toggle button:hover {
-  color: var(--fg-muted);
-  background: var(--bg-sunken);
-}
-
-.graph-pane .view-toggle button.active {
-  color: var(--fg);
-  background: var(--bg-sunken);
-  cursor: default;
-}
-
-.graph-pane .legend {
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-smcaps);
-  color: var(--fg-subtle);
-  background: var(--bg-elevated);
-  border: var(--rule) solid var(--rule-color);
-  padding: var(--s-2) var(--s-3);
-  border-radius: var(--radius-sm);
-  max-width: 16rem;
-}
-
-/* Hide the chrome entirely on phones — the graph pane is already the
- * only stage there and corner controls eat thumb territory. The
- * drawer's Outlinks/Inlinks columns cover navigation needs. */
+/* Hide on phones — corner controls eat thumb territory; the drawer's
+ * Outlinks/Inlinks columns cover navigation needs there. */
 @media (max-width: 600px) {
   .graph-pane .graph-chrome {
     display: none;
   }
 }
 
-.graph-pane .legend .swatch {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: var(--s-2);
-  vertical-align: middle;
+/* Section rows (view, scope) and the trailing legend section — all
+ * share this inner padding. Hairline divider separates each from the
+ * next; the last section has no divider so the card bottom is clean. */
+.graph-pane .chrome-row,
+.graph-pane .chrome-section {
+  padding: var(--s-2) var(--s-3);
+  border-bottom: var(--rule) solid var(--rule-color);
 }
 
-.graph-pane .legend .legend-row {
+.graph-pane .graph-chrome > :last-child {
+  border-bottom: 0;
+}
+
+.graph-pane .chrome-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.graph-pane .chrome-label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-smcaps);
+  color: var(--fg-subtle);
+  flex: 0 0 auto;
+}
+
+/* View switcher — text-based, no boxed buttons. Active side is full
+ * `fg`, inactive is `fg-subtle`; middot separator in between. Reads
+ * like an editorial toggle rather than a UI widget. */
+.graph-pane .view-switcher {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-1);
+  margin-left: auto;
+}
+
+.graph-pane .view-switcher button {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-serif);
+  font-size: var(--fs-sm);
+  color: var(--fg-subtle);
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.graph-pane .view-switcher button:hover {
+  color: var(--fg-muted);
+}
+
+.graph-pane .view-switcher button.active {
+  color: var(--fg);
+  cursor: default;
+}
+
+.graph-pane .view-switcher .switch-sep {
+  color: var(--fg-subtle);
+  user-select: none;
+}
+
+/* Scope row — value + optional clear + optional "→ current" link.
+ * Wraps to a second line if the path is long; the label stays at the
+ * left, actions cluster after the value. */
+.graph-pane .scope-body {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.graph-pane .scope-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 12rem;
+}
+
+.graph-pane .scope-value.unscoped {
+  color: var(--fg-muted);
+  font-family: var(--font-serif);
+  font-size: var(--fs-sm);
+}
+
+.graph-pane .scope-clear,
+.graph-pane .scope-current {
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  color: var(--fg-subtle);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 120ms ease;
+}
+
+.graph-pane .scope-current {
+  font-family: var(--font-serif);
+  font-size: var(--fs-xs);
+  font-style: italic;
+}
+
+.graph-pane .scope-clear:hover,
+.graph-pane .scope-current:hover {
+  color: var(--fg);
+}
+
+/* Legend section — collection swatches + names, each row also a
+ * scope source via hover-revealed ⌘ icon. No separate border; the
+ * chrome wraps the whole card. */
+.graph-pane .legend-section[hidden] {
+  display: none;
+}
+
+.graph-pane .legend-section {
+  font-family: var(--font-serif);
+  font-size: var(--fs-sm);
+  color: var(--fg);
+}
+
+.graph-pane .legend-row {
   display: flex;
   align-items: center;
-  margin-bottom: 2px;
+  gap: var(--s-2);
+  padding: 2px 0;
   cursor: default;
   transition: color 120ms ease;
 }
 
-.graph-pane .legend .legend-row:hover {
-  color: var(--fg);
+.graph-pane .legend-row .swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
 }
 
-/* Scope control — pill + dropdown. Structurally mirrors the top-bar
- * format toggle for the pill and the search-results dropdown for the
- * menu, so the viewer reads as one family of controls. */
-.graph-pane .scope-control {
-  position: relative;
+.graph-pane .legend-row .legend-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.graph-pane .scope-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-2);
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-smcaps);
-  color: var(--fg-muted);
-  background: var(--bg-elevated);
-  border: var(--rule) solid var(--rule-color);
-  padding: var(--s-1) var(--s-3);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+.graph-pane .legend-row:hover .legend-name {
+  color: var(--accent);
 }
 
-.graph-pane .scope-pill:hover {
-  color: var(--fg);
-  border-color: var(--rule-strong);
-}
-
-.graph-pane .scope-pill.scoped {
-  color: var(--fg);
-  border-color: var(--accent-muted);
-}
-
-.graph-pane .scope-pill .scope-label {
-  color: var(--fg-subtle);
-}
-
-.graph-pane .scope-pill .scope-value {
-  font-family: var(--font-mono);
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.graph-pane .scope-pill .scope-caret,
-.graph-pane .scope-pill .scope-clear {
-  color: var(--fg-subtle);
-  font-size: 0.85em;
-  line-height: 1;
-}
-
-.graph-pane .scope-pill .scope-clear {
-  padding: 0 2px;
-  border-radius: var(--radius-sm);
-  transition: color 120ms ease, background 120ms ease;
-}
-
-.graph-pane .scope-pill .scope-clear:hover {
-  color: var(--fg);
-  background: var(--bg-sunken);
-}
-
-.graph-pane .scope-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  min-width: 12rem;
-  max-height: 14rem;
-  overflow-y: auto;
-  background: var(--bg-elevated);
-  border: var(--rule) solid var(--rule-color);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  padding: var(--s-1) 0;
-  z-index: 10;
-}
-
-.graph-pane .scope-menu .scope-item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s-3);
-  width: 100%;
-  padding: var(--s-2) var(--s-3);
+/* Hover-revealed scope icon — same contract as `.tree-scope`. Fades
+ * in on row hover rather than popping, so the resting legend reads as
+ * quiet reference material rather than a menu. */
+.graph-pane .legend-row .legend-scope {
   background: transparent;
   border: 0;
-  border-radius: 0;
-  color: var(--fg);
-  font-family: var(--font-sans);
-  font-size: var(--fs-sm);
-  text-align: left;
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-
-.graph-pane .scope-menu .scope-item:hover {
-  background: var(--bg-sunken);
-}
-
-.graph-pane .scope-menu .scope-item .item-label {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--fg);
-}
-
-.graph-pane .scope-menu .scope-item .item-hint {
+  padding: 2px 6px;
+  margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-xs);
   color: var(--fg-subtle);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-smcaps);
+  cursor: pointer;
+  opacity: 0;
+  border-radius: var(--radius-sm);
+  flex: 0 0 auto;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.graph-pane .legend-row:hover .legend-scope,
+.graph-pane .legend-scope:focus-visible {
+  opacity: 1;
+}
+
+.graph-pane .legend-row .legend-scope:hover {
+  color: var(--accent);
+  background: var(--bg-sunken);
 }
 
 /* Tree view — fills the graph pane when `graphView$ === "tree"`. The
@@ -746,10 +749,13 @@
   position: absolute;
   inset: 0;
   overflow-y: auto;
-  padding: var(--s-3) var(--s-3) var(--s-5);
-  /* The graph-chrome floats top-right. Push the tree down enough that
-   * the first row clears the toggle + scope pill + legend stack. */
-  padding-top: calc(var(--s-3) + 7rem);
+  padding: var(--s-3) calc(18rem + var(--s-4)) var(--s-5) var(--s-3);
+  /* Right-gutter = chrome max-width + gap, so tree rows never flow
+   * under the floating chrome card. Below `min-width: 14rem` would
+   * waste space; at 1440×900 the graph pane is ~720px wide so the
+   * remaining ~432px is plenty for tree names. If the pane is
+   * narrower than ~20rem total, rows wrap — acceptable tradeoff for
+   * keeping the chrome persistent. */
   background: var(--bg);
 }
 
