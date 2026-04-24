@@ -51,13 +51,15 @@ const COLLECTION_PALETTE = [
 ];
 
 export function mountGraphViz(root: HTMLElement): void {
-  root.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Knowledge graph"></svg><div class="tree-view" hidden></div><div class="empty" hidden>No graph loaded.</div><div class="graph-chrome"><div class="chrome-row view-row"><span class="chrome-label">View</span><span class="view-switcher" role="group" aria-label="View mode"><button type="button" data-view="graph" class="active" aria-pressed="true">Graph</button><span class="switch-sep" aria-hidden="true">·</span><button type="button" data-view="tree" aria-pressed="false">Tree</button></span></div><div class="chrome-row scope-row"><span class="chrome-label">Scope</span><span class="scope-body"></span></div><div class="chrome-section legend-section" hidden></div></div><div class="node-tooltip" aria-hidden="true"></div>`;
+  root.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Knowledge graph"></svg><div class="tree-view" hidden></div><div class="empty" hidden>No graph loaded.</div><div class="graph-chrome"><div class="chrome-row view-row"><span class="chrome-label">View</span><span class="view-switcher" role="group" aria-label="View mode"><button type="button" data-view="graph" class="active" aria-pressed="true">Graph</button><span class="switch-sep" aria-hidden="true">·</span><button type="button" data-view="tree" aria-pressed="false">Tree</button></span></div><div class="chrome-row scope-row"><span class="chrome-label">Scope</span><span class="scope-body"></span></div><div class="chrome-section scope-menu" role="listbox" hidden></div><div class="chrome-section legend-section" hidden></div></div><div class="node-tooltip" aria-hidden="true"></div>`;
   const svgEl = root.querySelector("svg") as SVGSVGElement;
   const treeViewEl = root.querySelector(".tree-view") as HTMLElement;
   const emptyEl = root.querySelector(".empty") as HTMLElement;
   const chromeEl = root.querySelector(".graph-chrome") as HTMLElement;
   const legendEl = root.querySelector(".legend-section") as HTMLElement;
+  const scopeRowEl = root.querySelector(".scope-row") as HTMLElement;
   const scopeBodyEl = root.querySelector(".scope-body") as HTMLElement;
+  const scopeMenuEl = root.querySelector(".scope-menu") as HTMLElement;
   const viewSwitcherEl = root.querySelector(".view-switcher") as HTMLElement;
   const tooltipEl = root.querySelector(".node-tooltip") as HTMLElement;
 
@@ -317,33 +319,72 @@ export function mountGraphViz(root: HTMLElement): void {
 
   // ── scope row ─────────────────────────────────────────────────────────
   //
-  // Inline status line: `Scope  All` or `Scope  /architecture ✕`, with
-  // an optional `→ current` link when the current route isn't already
-  // the scope. No dropdown — the scope is set from the legend rows'
-  // hover-revealed ⌘ icons (collections) or from this row's `→ current`
-  // link (arbitrary path). Keeps the chrome to one visual object.
+  // The value itself is the dropdown trigger — clicking `All ▾` or a
+  // scoped path opens the menu inline below (as another chrome
+  // section, not a floating popover, so the card stays one visual
+  // object). The ✕ clear affordance sits right next to the text when
+  // scoped.
   const renderScopeRow = () => {
     const scope = scopePath$.get();
-    const current = currentPath$.get();
     const parts: string[] = [];
     parts.push(
-      `<span class="scope-value${scope === null ? " unscoped" : ""}">${escapeHtml(scope ?? "All")}</span>`,
+      `<button type="button" class="scope-value${scope === null ? " unscoped" : ""}" data-action="toggle-menu" aria-haspopup="listbox"><span class="scope-text">${escapeHtml(scope ?? "All")}</span><span class="scope-caret" aria-hidden="true">▾</span></button>`,
     );
     if (scope !== null) {
       parts.push(
         `<button type="button" class="scope-clear" data-action="clear" aria-label="Clear scope">✕</button>`,
       );
     }
-    if (current && current !== "/" && current !== scope) {
-      parts.push(
-        `<button type="button" class="scope-current" data-action="scope-current">→ current</button>`,
-      );
-    }
     scopeBodyEl.innerHTML = parts.join("");
   };
 
-  // Delegated chrome click handler for view toggle + scope actions +
-  // legend scope icons. One listener keeps state changes in one place.
+  const closeScopeMenu = () => {
+    scopeMenuEl.hidden = true;
+    const btn = scopeBodyEl.querySelector(".scope-value");
+    if (btn) btn.setAttribute("aria-expanded", "false");
+  };
+
+  const openScopeMenu = () => {
+    const graph = graph$.get();
+    const current = currentPath$.get();
+    const scope = scopePath$.get();
+
+    // Build the choice set. Order: clear first (if scoped), then
+    // current path (if meaningful and not already scope), then the
+    // top-level collections. Skip the scope that's already active so
+    // the menu never offers a no-op.
+    const items: Array<{ path: string | null; label: string; hint?: string }> = [];
+    if (scope !== null) {
+      items.push({ path: null, label: "All", hint: "clear" });
+    }
+    if (current && current !== "/" && current !== scope) {
+      items.push({ path: current, label: current, hint: "current" });
+    }
+    const seen = new Set<string>([scope ?? "", current]);
+    if (graph) {
+      const topLevel = new Set<string>();
+      for (const n of graph.nodes) {
+        const parts = n.path.split("/").filter(Boolean);
+        if (parts.length >= 1) topLevel.add("/" + parts[0]);
+      }
+      for (const p of [...topLevel].sort()) {
+        if (seen.has(p)) continue;
+        items.push({ path: p, label: p });
+      }
+    }
+
+    scopeMenuEl.innerHTML = items
+      .map(
+        (it) =>
+          `<button type="button" class="scope-item" role="option" data-action="pick-scope" data-path="${escapeAttr(it.path ?? "__all__")}"><span class="item-label">${escapeHtml(it.label)}</span>${it.hint ? `<span class="item-hint">${escapeHtml(it.hint)}</span>` : ""}</button>`,
+      )
+      .join("");
+    scopeMenuEl.hidden = false;
+    const btn = scopeBodyEl.querySelector(".scope-value");
+    if (btn) btn.setAttribute("aria-expanded", "true");
+  };
+
+  // Delegated chrome click handler for view toggle + scope actions.
   chromeEl.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
     const viewBtn = target.closest<HTMLButtonElement>(".view-switcher button[data-view]");
@@ -353,22 +394,32 @@ export function mountGraphViz(root: HTMLElement): void {
       return;
     }
     const action = target.closest<HTMLElement>("[data-action]");
-    if (action) {
-      const kind = action.getAttribute("data-action");
-      if (kind === "clear") {
-        scopePath$.set(null);
-        return;
-      }
-      if (kind === "scope-current") {
-        scopePath$.set(currentPath$.get());
-        return;
-      }
-      if (kind === "scope-collection") {
-        const path = action.getAttribute("data-path");
-        if (path) scopePath$.set(path);
-        return;
-      }
+    if (!action) return;
+    const kind = action.getAttribute("data-action");
+    if (kind === "clear") {
+      scopePath$.set(null);
+      closeScopeMenu();
+      return;
     }
+    if (kind === "toggle-menu") {
+      if (scopeMenuEl.hidden) openScopeMenu();
+      else closeScopeMenu();
+      return;
+    }
+    if (kind === "pick-scope") {
+      const path = action.getAttribute("data-path");
+      scopePath$.set(path === "__all__" ? null : path);
+      closeScopeMenu();
+      return;
+    }
+  });
+
+  // Click outside the scope row or menu → close the menu. Guards the
+  // chrome's other interactive regions (view switcher, legend) from
+  // being treated as "outside" dismissals.
+  document.addEventListener("click", (e) => {
+    const t = e.target as Node;
+    if (!scopeRowEl.contains(t) && !scopeMenuEl.contains(t)) closeScopeMenu();
   });
 
   // ── view toggle (Graph | Tree) ────────────────────────────────────────
@@ -441,11 +492,12 @@ function renderLegend(
   for (const [collection, color] of colors) {
     if (collection === "/") continue;
     const label = nodeByPath.get(collection)?.name ?? collection.slice(1);
-    // Row body: swatch + name (drives the hover-highlight behavior).
-    // Trailing ⌘ button (data-action="scope-collection"): sets scope
-    // to this collection path, picked up by the chrome click delegate.
+    // Passive reference: swatch + name. Hover still triggers collection
+    // highlight (wired below). Scope is set from the scope-row dropdown
+    // above, which already lists these same collections — no need to
+    // duplicate the action here.
     rows.push(
-      `<div class="legend-row" data-collection="${escapeAttr(collection)}"><span class="swatch" style="background:${color}"></span><span class="legend-name">${escapeHtml(label)}</span><button type="button" class="legend-scope" data-action="scope-collection" data-path="${escapeAttr(collection)}" aria-label="Scope graph to ${escapeAttr(label)}" title="Scope graph to this collection">⌘</button></div>`,
+      `<div class="legend-row" data-collection="${escapeAttr(collection)}"><span class="swatch" style="background:${color}"></span><span class="legend-name">${escapeHtml(label)}</span></div>`,
     );
   }
   if (rows.length === 0) {

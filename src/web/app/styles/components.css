@@ -631,14 +631,36 @@
   min-width: 0;
 }
 
+/* Scope value is itself the dropdown trigger — no separate "button"
+ * affordance because the value IS the button. Hover shifts color to
+ * hint at interactivity; `▾` caret makes the dropdown obvious. */
 .graph-pane .scope-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-1);
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+  margin: 0;
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--fg);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  max-width: 12rem;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.graph-pane .scope-value .scope-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 12rem;
+}
+
+.graph-pane .scope-value .scope-caret {
+  color: var(--fg-subtle);
+  font-size: 0.85em;
+  flex: 0 0 auto;
 }
 
 .graph-pane .scope-value.unscoped {
@@ -647,29 +669,73 @@
   font-size: var(--fs-sm);
 }
 
-.graph-pane .scope-clear,
-.graph-pane .scope-current {
+.graph-pane .scope-value:hover {
+  color: var(--fg);
+  background: var(--bg-sunken);
+}
+
+.graph-pane .scope-clear {
   background: transparent;
   border: 0;
-  padding: 0 2px;
+  padding: 0 4px;
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-xs);
   color: var(--fg-subtle);
   cursor: pointer;
   border-radius: var(--radius-sm);
-  transition: color 120ms ease;
+  transition: color 120ms ease, background 120ms ease;
 }
 
-.graph-pane .scope-current {
-  font-family: var(--font-serif);
-  font-size: var(--fs-xs);
-  font-style: italic;
-}
-
-.graph-pane .scope-clear:hover,
-.graph-pane .scope-current:hover {
+.graph-pane .scope-clear:hover {
   color: var(--fg);
+  background: var(--bg-sunken);
+}
+
+/* Inline dropdown — slots between scope row and legend as another
+ * chrome section rather than floating absolutely. When closed, the
+ * section is hidden and the legend sits directly below scope. */
+.graph-pane .scope-menu[hidden] {
+  display: none;
+}
+
+.graph-pane .scope-menu {
+  padding: var(--s-1) 0;
+  background: var(--bg-sunken);
+}
+
+.graph-pane .scope-menu .scope-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  width: 100%;
+  padding: var(--s-2) var(--s-3);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.graph-pane .scope-menu .scope-item:hover {
+  background: var(--bg-elevated);
+}
+
+.graph-pane .scope-menu .scope-item .item-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg);
+}
+
+.graph-pane .scope-menu .scope-item .item-hint {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  color: var(--fg-subtle);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-smcaps);
 }
 
 /* Legend section — collection swatches + names, each row also a
@@ -712,34 +778,6 @@
 
 .graph-pane .legend-row:hover .legend-name {
   color: var(--accent);
-}
-
-/* Hover-revealed scope icon — same contract as `.tree-scope`. Fades
- * in on row hover rather than popping, so the resting legend reads as
- * quiet reference material rather than a menu. */
-.graph-pane .legend-row .legend-scope {
-  background: transparent;
-  border: 0;
-  padding: 2px 6px;
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  color: var(--fg-subtle);
-  cursor: pointer;
-  opacity: 0;
-  border-radius: var(--radius-sm);
-  flex: 0 0 auto;
-  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
-}
-
-.graph-pane .legend-row:hover .legend-scope,
-.graph-pane .legend-scope:focus-visible {
-  opacity: 1;
-}
-
-.graph-pane .legend-row .legend-scope:hover {
-  color: var(--accent);
-  background: var(--bg-sunken);
 }
 
 /* Tree view — fills the graph pane when `graphView$ === "tree"`. The
