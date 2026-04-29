@@ -38,7 +38,7 @@ The onboarding content itself is a compiled subgraph under `docs/onboarding/` â€
 
 ## Level 0: Orient
 
-Spandrel turns markdown file trees into governed knowledge graphs. You write markdown with frontmatter in directories. Spandrel compiles it into a graph with typed relationships, progressive disclosure, and queryable structure via GraphQL and MCP.
+Spandrel turns markdown file trees into governed knowledge graphs. You write markdown with frontmatter in directories. Spandrel compiles it into a graph with typed relationships, progressive disclosure, and queryable structure via REST and MCP.
 
 Ask one question:
 

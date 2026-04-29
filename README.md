@@ -2,7 +2,7 @@
 
 **Structured knowledge for your Claude Code agent.** CLAUDE.md, skills, rules, playbooks, domain context — you're already building a knowledge repo. Without structure, those files sprawl into monoliths that load whole into every conversation. Spandrel turns the pile into a governed graph: typed relationships, validated content, progressive disclosure, access control. Your agent navigates by following edges via MCP — hundreds of tokens per step instead of dumping every file into every turn. Better decisions, more consistent production, citable knowledge.
 
-Old technologies, new structure. Markdown, git, YAML, GraphQL — none of these are new. Assembled in the right configuration, something emerges from the spaces between them: a navigable, queryable graph that both humans and agents can traverse.
+Old technologies, new structure. Markdown, git, YAML, HTTP — none of these are new. Assembled in the right configuration, something emerges from the spaces between them: a navigable, queryable graph that both humans and agents can traverse.
 
 Named after the [architectural byproduct](https://en.wikipedia.org/wiki/Spandrel_(biology)) Gould & Lewontin argued becomes more interesting than the structure it emerged from. File systems weren't designed for knowledge graphs. Git wasn't designed for editorial workflow. Markdown wasn't designed for progressive disclosure. But put them together and the structure you build to hold knowledge becomes its own thing worth having.
 
@@ -56,7 +56,7 @@ Main engagement this quarter. See also [the linking pattern](/linkTypes/owns).
 
 See [docs/patterns/linking.md](docs/patterns/linking.md) for frontmatter vs. inline links.
 
-**4. Compile and serve.** Starts GraphQL at `localhost:4000/graphql`, the visual viewer at `localhost:4000`, and a file watcher that reloads both on save.
+**4. Compile and serve.** Starts the REST + MCP surface and the visual viewer at `localhost:4000`, plus a file watcher that reloads both on save.
 
 ```bash
 spandrel dev .
@@ -100,7 +100,7 @@ Two ways to create a Thing: **`foo.md`** (leaf at `/parent/foo`) or **`foo/index
 
 Three modes, one compiled graph:
 
-- **Local dev** — `spandrel dev` runs GraphQL + MCP + a visual viewer on localhost. The authoring loop.
+- **Local dev** — `spandrel dev` runs REST + MCP + a visual viewer on localhost. The authoring loop.
 - **Static + MCP adapter** — `spandrel publish --static` emits a self-contained bundle; a thin serverless function adapts MCP over it. Read-only, hostable anywhere. This is the recommended production pattern. `mcp.spandrel.org` is a running example; source at [trevorfox/spandrel-mcp](https://github.com/trevorfox/spandrel-mcp).
 - **Live backend** — a Postgres-backed `GraphStore` for graphs that need writes, identity-aware reads, or federation.
 
@@ -109,7 +109,7 @@ Full walkthrough: [docs/deployment/](docs/deployment/).
 ## Learn more
 
 - [**ONBOARDING.md**](ONBOARDING.md) — agent-guided setup for a new graph
-- [**docs/architecture/**](docs/architecture/index.md) — compiler, schema, access, MCP, storage
+- [**docs/architecture/**](docs/architecture/index.md) — compiler, storage, access policy, REST, MCP
 - [**docs/content-model/**](docs/content-model/index.md) — Things, Collections, link types, progressive disclosure
 - [**docs/patterns/**](docs/patterns/index.md) — linking conventions, governance, progressive disclosure as a craft
 - [**docs/philosophy.md**](docs/philosophy.md) — why a knowledge graph, not a vector store
