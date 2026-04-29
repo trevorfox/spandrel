@@ -288,9 +288,13 @@ describe("Compiler — undeclared_link_type warnings", () => {
     );
   }
 
-  it("warns when a frontmatter link uses a linkType not declared in /linkTypes/", async () => {
+  it("warns under enforce: strict when a frontmatter link uses an undeclared type", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
+    writeIndex(path.join(root, "linkTypes"), {
+      name: "Link Types",
+      description: "Vocab",
+      enforce: "strict",
+    });
     writeLinkType("owns", "owns", "Operational control.");
     writeLinkType("depends-on", "depends-on", "Runtime dependency.");
     writeIndex(path.join(root, "a"), {
@@ -327,9 +331,32 @@ describe("Compiler — undeclared_link_type warnings", () => {
     expect(undeclared).toHaveLength(0);
   });
 
-  it("does not warn on inline [label](/path) mentions when /linkTypes/mentions.md is declared", async () => {
+  it("emits zero warnings when /linkTypes/ exists but `enforce` is absent (default off)", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
+    // No `enforce` field — declaration alone does not trigger warnings.
     writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
+    writeLinkType("owns", "owns", "Operational control.");
+    writeIndex(path.join(root, "a"), {
+      name: "A",
+      description: "A",
+      links: [{ to: "/b", type: "foo" }],
+    });
+    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
+
+    const store = await compile(root);
+    const undeclared = (await store.getWarnings()).filter(
+      (w) => w.type === "undeclared_link_type"
+    );
+    expect(undeclared).toHaveLength(0);
+  });
+
+  it("does not warn on inline [label](/path) mentions when /linkTypes/mentions.md is declared (under strict)", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    writeIndex(path.join(root, "linkTypes"), {
+      name: "Link Types",
+      description: "Vocab",
+      enforce: "strict",
+    });
     writeLinkType("mentions", "mentions", "Incidental prose reference.");
     writeIndex(
       path.join(root, "a"),
@@ -345,9 +372,13 @@ describe("Compiler — undeclared_link_type warnings", () => {
     expect(undeclared).toHaveLength(0);
   });
 
-  it("warns on implicit 'mentions' edges when other linkTypes are declared but mentions is not", async () => {
+  it("warns on implicit 'mentions' edges under strict when mentions is not declared", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
+    writeIndex(path.join(root, "linkTypes"), {
+      name: "Link Types",
+      description: "Vocab",
+      enforce: "strict",
+    });
     writeLinkType("owns", "owns", "Operational control.");
     writeIndex(
       path.join(root, "a"),
@@ -365,9 +396,13 @@ describe("Compiler — undeclared_link_type warnings", () => {
     expect(undeclared[0].message).toContain('"mentions"');
   });
 
-  it("dedupes multiple edges from the same source using the same undeclared type", async () => {
+  it("dedupes multiple edges from the same source using the same undeclared type (strict)", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
+    writeIndex(path.join(root, "linkTypes"), {
+      name: "Link Types",
+      description: "Vocab",
+      enforce: "strict",
+    });
     writeLinkType("owns", "owns", "Operational control.");
     writeIndex(path.join(root, "a"), {
       name: "A",
@@ -385,6 +420,76 @@ describe("Compiler — undeclared_link_type warnings", () => {
       (w) => w.type === "undeclared_link_type" && w.path === "/a"
     );
     expect(undeclared).toHaveLength(1);
+  });
+
+  it("under enforce: [list], warns only when a listed type is used without a declaration", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    writeIndex(path.join(root, "linkTypes"), {
+      name: "Link Types",
+      description: "Vocab",
+      // Only `affects` is governed; `extends`, `informs` etc. can fly free.
+      enforce: ["affects", "realized-by"],
+    });
+    writeIndex(path.join(root, "a"), {
+      name: "A",
+      description: "A",
+      links: [
+        { to: "/b", type: "extends" },     // not in enforce list → silent
+        { to: "/b", type: "affects" },     // in list, undeclared → warn
+        { to: "/b", type: "informs" },     // not in list → silent
+      ],
+    });
+    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
+
+    const store = await compile(root);
+    const undeclared = (await store.getWarnings()).filter(
+      (w) => w.type === "undeclared_link_type"
+    );
+    expect(undeclared).toHaveLength(1);
+    expect(undeclared[0].message).toContain('"affects"');
+  });
+
+  it("under enforce: [list], a listed type with a /linkTypes/{stem}.md does not warn", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    writeIndex(path.join(root, "linkTypes"), {
+      name: "Link Types",
+      description: "Vocab",
+      enforce: ["affects"],
+    });
+    writeLinkType("affects", "affects", "Source changes the behavior of target.");
+    writeIndex(path.join(root, "a"), {
+      name: "A",
+      description: "A",
+      links: [{ to: "/b", type: "affects" }],
+    });
+    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
+
+    const store = await compile(root);
+    const undeclared = (await store.getWarnings()).filter(
+      (w) => w.type === "undeclared_link_type"
+    );
+    expect(undeclared).toHaveLength(0);
+  });
+
+  it("treats enforce: [] (empty list) as off", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    writeIndex(path.join(root, "linkTypes"), {
+      name: "Link Types",
+      description: "Vocab",
+      enforce: [],
+    });
+    writeIndex(path.join(root, "a"), {
+      name: "A",
+      description: "A",
+      links: [{ to: "/b", type: "foo" }],
+    });
+    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
+
+    const store = await compile(root);
+    const undeclared = (await store.getWarnings()).filter(
+      (w) => w.type === "undeclared_link_type"
+    );
+    expect(undeclared).toHaveLength(0);
   });
 });
 

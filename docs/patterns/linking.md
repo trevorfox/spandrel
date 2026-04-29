@@ -73,7 +73,25 @@ When a linkType is declared, every edge using that type picks up a `linkTypeDesc
 
 Undeclared linkTypes keep working; `linkTypeDescription` is simply `null` on those edges. **Plain-English types whose meaning is self-evident — `owns`, `depends-on`, `relates-to`, `mentions`, `supersedes` — don't need declaration.** A reader (human or agent) can read those without a glossary. Declare the ones whose meaning is specific to your graph and not obvious from the type name; everything else carries its weight through per-edge `description:`.
 
-Once you declare at least one linkType, the compiler emits `undeclared_link_type` warnings for edges that reference a type without a matching `/linkTypes/{stem}.md`. This is currently all-or-nothing; per-type opt-in is on the roadmap. In the meantime, only declare the types whose generic description actually adds load-bearing meaning — don't add a `/linkTypes/{stem}.md` just to silence the warning, since that trains the wrong instinct (treating linkType description as the place where edge semantics live).
+### Opting into governance with `enforce`
+
+`undeclared_link_type` warnings are off by default. Declaring a linkType file does not, by itself, make the compiler enforce anything — declarations and warnings are separate concerns. Opt into enforcement on `/linkTypes/index.md`:
+
+```yaml
+---
+name: Link Types
+description: Declared vocabulary
+enforce: strict           # warn on every undeclared linkType used in the graph
+# or:
+# enforce: [affects, realized-by]   # warn only when these specific types are used without a /linkTypes/{stem}.md
+---
+```
+
+- **Absent or empty** — no warnings. The default. Plain-English types fly without complaint; `linkTypeDescription` decoration on edges still works wherever you've declared the type.
+- **`strict`** — every undeclared linkType used in the graph triggers a warning. The closed-vocabulary mode: useful when the graph is mature and any new type should be intentional.
+- **List** — only the listed types trigger warnings when used without a corresponding `/linkTypes/{stem}.md`. The graph-local mode: governs your custom-domain vocabulary (`affects`, `realized-by`, `informs`) without forcing every plain-English ad-hoc type into a file.
+
+The list mode is the usual choice once a graph has a small set of load-bearing types whose meaning matters. Declare those types, list them in `enforce:`, leave everything else free.
 
 ## Backlinks
 

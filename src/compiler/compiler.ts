@@ -421,6 +421,7 @@ async function rebuildChildren(store: GraphStore): Promise<void> {
 }
 
 const LINK_TYPE_PATH_PREFIX = "/linkTypes/";
+const LINK_TYPES_INDEX_PATH = "/linkTypes";
 
 function collectDeclaredLinkTypes(nodes: Map<string, SpandrelNode>): Set<string> {
   const result = new Set<string>();
@@ -431,6 +432,38 @@ function collectDeclaredLinkTypes(nodes: Map<string, SpandrelNode>): Set<string>
     result.add(rest);
   }
   return result;
+}
+
+/**
+ * Per-type opt-in for the `undeclared_link_type` warning. Read from the
+ * `/linkTypes/index.md` frontmatter `enforce` field:
+ *
+ *   enforce: strict             — warn on every undeclared linkType used
+ *   enforce: [affects, owns]    — warn only when the listed types are used
+ *                                 without a corresponding /linkTypes/{stem}.md
+ *   (absent)                    — no warnings
+ *
+ * Default off; authors opt into governance for the types that warrant it.
+ * The old "any declaration triggers all undeclared warnings" behavior is
+ * available as `enforce: strict`.
+ */
+type LinkTypeEnforcement =
+  | { mode: "off" }
+  | { mode: "strict" }
+  | { mode: "list"; types: Set<string> };
+
+function getLinkTypeEnforcement(
+  nodes: Map<string, SpandrelNode>
+): LinkTypeEnforcement {
+  const indexNode = nodes.get(LINK_TYPES_INDEX_PATH);
+  if (!indexNode) return { mode: "off" };
+  const enforce = indexNode.frontmatter.enforce;
+  if (enforce === "strict") return { mode: "strict" };
+  if (Array.isArray(enforce) && enforce.length > 0) {
+    const types = new Set(enforce.map((t) => String(t)));
+    return { mode: "list", types };
+  }
+  return { mode: "off" };
 }
 
 function validate(
@@ -469,15 +502,19 @@ function validate(
     }
   }
 
-  // Undeclared linkType warnings — only active once the graph has opted into
-  // a typed vocabulary by declaring at least one /linkTypes/{stem}.md.
+  // Undeclared linkType warnings — opt-in per `/linkTypes/index.md` frontmatter.
+  // Default (no `enforce` field): silent. `enforce: strict`: warn on every
+  // undeclared type used. `enforce: [list]`: warn only when the listed types
+  // are used without a matching `/linkTypes/{stem}.md`.
   const declaredLinkTypes = collectDeclaredLinkTypes(nodes);
-  if (declaredLinkTypes.size > 0) {
+  const enforcement = getLinkTypeEnforcement(nodes);
+  if (enforcement.mode !== "off") {
     const seen = new Set<string>();
     for (const edge of edges) {
       if (edge.type !== "link") continue;
       if (!edge.linkType) continue;
       if (declaredLinkTypes.has(edge.linkType)) continue;
+      if (enforcement.mode === "list" && !enforcement.types.has(edge.linkType)) continue;
       const key = `${edge.from}\u0000${edge.linkType}`;
       if (seen.has(key)) continue;
       seen.add(key);
