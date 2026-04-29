@@ -66,7 +66,7 @@ description: The source entity has operational or legal control of the target.
 
 The compiler indexes `/linkTypes/*` by filename stem (`owns.md` → `owns`). The stem is the canonical key — it's what frontmatter `links[].type` values reference, and it stays stable across display-name renames. Hierarchical subfolders under `/linkTypes/` are out of scope for now; keep the namespace flat.
 
-When a linkType is declared, every edge using that type picks up a `linkTypeDescription` on the [GraphQL](/architecture/schema) side (`context`, `references`, `get_node`) — agents see the relationship's meaning without following another hop. Querying `{ linkTypes { name description path } }` returns the full declared vocabulary.
+When a linkType is declared, every edge using that type picks up a `linkTypeDescription` on the wire — agents and clients see the relationship's meaning inline without following another hop. The full declared vocabulary is queryable through any wire surface ([MCP](/architecture/mcp), [REST](/architecture/rest)) — the surface exposes a list-link-types operation that returns name, description, and path for each declared type.
 
 Undeclared linkTypes keep working; `linkTypeDescription` is simply `null` on those edges. Declare the ones that carry load-bearing semantics in your graph.
 

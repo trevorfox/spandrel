@@ -42,11 +42,11 @@ docs/linkTypes/
 └── mentions.md
 ```
 
-Each file is indexed by filename stem; its description appears on every edge using that linkType via GraphQL's `linkTypeDescription` field and in the MCP instructions block. Declaration is optional — undeclared linkTypes still work, they just don't carry a description.
+Each file is indexed by filename stem; its description appears on every edge using that linkType via the wire surface's `linkTypeDescription` field and in the MCP instructions block. Declaration is optional — undeclared linkTypes still work, they just don't carry a description.
 
 ## Backlinks
 
-The [compiler](/architecture/compiler) automatically generates backlinks. If A links to B, B knows A links to it. Backlinks are queryable through [GraphQL](/architecture/schema) but not stored in the markdown.
+The [compiler](/architecture/compiler) automatically generates backlinks. If A links to B, B knows A links to it. Backlinks are queryable through any [wire surface](/architecture/access-policy) but not stored in the markdown.
 
 ## Links vs hierarchy
 

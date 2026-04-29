@@ -41,7 +41,7 @@ Five graduated levels of access to any node: name → description → content �
 
 ## Access control
 
-`_access/config.yaml` defines roles and applies the five-level ladder per collection or node. The GraphQL layer enforces it — every tool (MCP, HTTP, CLI) routes through the same checks.
+`_access/config.yaml` defines roles and applies the five-level ladder per collection or node. The Access Policy enforces it — every wire surface (MCP, REST, CLI) routes through the same checks.
 
 ## Skills
 

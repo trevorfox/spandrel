@@ -56,31 +56,13 @@ Anywhere that serves static files:
 The bundle alone gives humans a viewer and agents scrape-friendly URLs. To add a real MCP endpoint that agents can speak to, deploy a thin HTTP handler alongside the bundle. The wiring:
 
 1. Construct a `RemoteGraphStore` pointed at the bundle URL — reads `graph.json` and per-node files over HTTP.
-2. Build a Spandrel GraphQL schema from the store — `createSchema(store)` from `spandrel/schema`.
-3. Build an MCP server from the schema — `createMcpServer(schema)` from `spandrel/server/mcp`.
+2. Construct an [Access Policy](/architecture/access-policy) — for a static bundle, the policy is read-only by construction; the reference implementation ships a default policy that allows `traverse`-level reads and denies all writes.
+3. Build an [MCP server](/architecture/mcp) wired to the store and policy.
 4. Wrap the MCP server in the MCP SDK's `StreamableHTTPServerTransport` and mount under `/mcp`.
 
-```ts
-// api/mcp.ts on Vercel (or equivalent for any runtime)
-import { createSchema } from "spandrel/schema";
-import { createMcpServer } from "spandrel/server/mcp";
-import { RemoteGraphStore } from "spandrel/storage/remote-graph-store";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp";
+The canonical example is the published [trevorfox/spandrel-mcp](https://github.com/trevorfox/spandrel-mcp) adapter — a ~150-line Next.js app that runs in production at [mcp.spandrel.org](https://mcp.spandrel.org). It's the easiest starting point: fork it, set `SPANDREL_BUNDLE_URL`, deploy.
 
-const store = new RemoteGraphStore({
-  bundleUrl: process.env.SPANDREL_BUNDLE_URL!,
-});
-const schema = createSchema(store);
-const server = await createMcpServer(schema, { graph: store });
-
-export default async function handler(req, res) {
-  const transport = new StreamableHTTPServerTransport(/* ... */);
-  await server.connect(transport);
-  await transport.handleRequest(req, res);
-}
-```
-
-The `RemoteGraphStore` reads from the bundle URL on every tool call — `graph.json` once (cached), per-node `index.json` on demand. Write tools reject at the store layer, so agents cannot modify a static bundle no matter what they try.
+The `RemoteGraphStore` reads from the bundle URL on every tool call — `graph.json` once (cached), per-node `index.json` on demand. Writes are rejected at the policy layer, so agents cannot modify a static bundle no matter what they try.
 
 The same pattern works on Vercel Edge Functions, Cloudflare Workers, Netlify Functions, or plain Node — only the outer handler signature changes.
 

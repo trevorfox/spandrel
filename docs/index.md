@@ -16,7 +16,7 @@ links:
 
 # Spandrel
 
-Spandrel is a [compiler](/architecture/compiler), [GraphQL server](/architecture/schema), [MCP server](/architecture/mcp), and [access layer](/architecture/access) that turns markdown file trees into governed knowledge graphs.
+Spandrel is a [compiler](/architecture/compiler), [MCP server](/architecture/mcp), [REST server](/architecture/rest), and [access policy](/architecture/access-policy) that turns markdown file trees into governed knowledge graphs.
 
 The name comes from evolutionary biology — a spandrel is a structural feature that emerges necessarily from the way an arch is built, then becomes useful in its own right. In Spandrel knowledge graphs, structure emerges from the content rather than being imposed on it.
 
