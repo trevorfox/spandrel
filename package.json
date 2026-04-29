@@ -7,7 +7,7 @@
   "author": "Trevor Fox",
   "repository": {
     "type": "git",
-    "url": "https://github.com/trevorfox/spandrel.git"
+    "url": "git+https://github.com/trevorfox/spandrel.git"
   },
   "homepage": "https://github.com/trevorfox/spandrel",
   "engines": {
@@ -74,7 +74,7 @@
     "@types/node": "^22.15.3",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
-    "vite": "^5.4.10",
+    "vite": "^8.0.10",
     "vitest": "^3.1.2"
   },
   "peerDependencies": {
