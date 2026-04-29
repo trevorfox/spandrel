@@ -71,3 +71,25 @@ Three hops from root to the seed idea of an ongoing project.
 - `/projects/design.md` — each project is a Thing with scope and status. Frontmatter: `name`, `description`, `status` (active/paused/done/abandoned), `start-date`. Body: what the project is, current state, links to `part-of` notes.
 - `/references/design.md` — each reference is an external source. Frontmatter: `name`, `description` (what this source is about, in your own words), `url` or `citation`, `date-read`. Body: key takeaways in your own words — not a copy of the source.
 - `/decisions/design.md` — personal decision log. Frontmatter: `name`, `description`, `date`, `status`. Body: what decision, why, what trade-offs. Supersede rather than edit.
+
+## Example frontmatter
+
+A real note node — even in a personal repo, the per-edge `description:` is where the relationship between *this thought* and *this source* lives. The shared linkType (e.g. `cites`, `inspired-by`) is just a category; the per-edge `description:` is the actual connection your future self needs. See [linking](/patterns/linking) for the full framing.
+
+```yaml
+---
+name: Tension between abstraction and addressability
+description: Abstract names defeat the addressability that makes references useful
+date: 2025-08-12
+links:
+  - to: /references/naming-things-pike
+    type: cites
+    description: Pike's "use specific names" rule restated as a graph-addressability claim
+  - to: /notes/why-paths-not-uuids
+    type: inspired-by
+    description: That earlier note's argument for paths-as-addresses is what this thought is the dual of
+  - to: /projects/essay-series
+    type: part-of
+    description: This is the seed observation the third essay opens on
+---
+```

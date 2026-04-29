@@ -90,3 +90,27 @@ Three hops from an engineering ticket to the board-level pillar.
 - `/features/design.md` — customer-facing capability (superset of release contents). Frontmatter: `name`, `description`, `status`, `for-audience` link(s). Link to implementing releases via `implements` backlinks.
 - `/marketing-claims/design.md` — public assertions. Frontmatter: `name`, `description`, `surface` (pricing-page / blog / sales-deck / etc.), `date`, `status` (draft/published/retracted). Link `backed-by` to features/releases, `announces` to specific releases. Anti-pattern: claims without `backed-by` edges — those are the claims that go stale silently.
 - `/audiences/design.md` — who we're building for. Frontmatter: `name`, `description`, optional `segment`. Body: what this audience needs, how they find us. Anti-pattern: audiences too broad ("users") or too narrow ("Acme's IT team").
+
+## Example frontmatter
+
+A real marketing-claim node — note the per-edge `description:` on every load-bearing edge. The whole point of the `backed-by` edge is to make the claim traceable to reality; without per-edge `description:`, you can't tell *what specifically* about that release backs the claim. See [linking](/patterns/linking) for the full framing.
+
+```yaml
+---
+name: Enterprise-grade security on the pricing page
+description: The "enterprise-grade security" pull-quote on the public pricing page header
+surface: pricing-page
+date: 2025-09-08
+status: published
+links:
+  - to: /features/security
+    type: backed-by
+    description: SSO, audit log, and SCIM provisioning are the three concrete capabilities the claim rests on
+  - to: /releases/2025-q3-soc2
+    type: announces
+    description: First marketing surface that referenced the SOC2 Type II report after audit completion
+  - to: /audiences/enterprise-buyer
+    type: for-audience
+    description: The pricing page header speaks to enterprise procurement, not the self-serve starter audience
+---
+```

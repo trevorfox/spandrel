@@ -77,3 +77,26 @@ Four hops from root to "why" + "what it affected" + "what's changed since."
 - `/architecture/design.md` — each doc is a Thing. Frontmatter: `name`, `description`, `status` (draft/accepted/archived), `realized-by` links to implementing modules. Use directory-form nodes (`/architecture/overview/index.md`) when a doc has sub-sections worth promoting.
 - `/adrs/design.md` — each ADR is a leaf or composite node. Frontmatter: `name` (the ADR's title), `description` (one-line summary), `date`, `status` (proposed/accepted/superseded/deprecated), `affects` links, optional `supersedes` link. Preserve the original ID in the filename (`0007-sso-federation.md`). Anti-pattern: editing an accepted ADR — supersede with a new one.
 - `/domains/design.md` — each domain concept is a Thing. Frontmatter: `name`, `description`, optional `owns` link to team. Body: what this domain means in the context of this codebase, how it's conceptually bounded. Link to `implements` / `realized-by` edges from modules.
+
+## Example frontmatter
+
+A real ADR node — note the per-edge `description:` on every load-bearing edge. The shared linkType (e.g. `affects`, `supersedes`) only says what's true across all uses; the per-edge `description:` is where the *specific* relationship to *this target* gets expressed. See [linking](/patterns/linking) for the full framing.
+
+```yaml
+---
+name: 0008 — Async webhook verification
+description: Defer webhook signature verification off the request path
+date: 2026-04-25
+status: accepted
+links:
+  - to: /packages/billing
+    type: affects
+    description: Billing now consumes queued events instead of verifying inline on the request path
+  - to: /architecture/event-bus
+    type: realized-by
+    description: The async path is built on the event-bus component this ADR depends on
+  - to: /adrs/0003-sync-webhooks
+    type: supersedes
+    description: Replaces the synchronous handler — that approach blocked the request path under retry storms
+---
+```

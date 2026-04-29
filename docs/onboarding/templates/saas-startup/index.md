@@ -88,3 +88,26 @@ Each collection should ship a starter `design.md`. Rough outline:
 - `/team/design.md` — each team member is a Thing. Frontmatter: `name`, `description`, `role`, `start-date`. Anti-pattern: personal HR data — this is the public graph, not HRIS.
 - `/decisions/design.md` — one decision per node. Frontmatter: `name`, `description`, `date`, `status` (proposed/active/superseded). Body: context, decision, consequences. Anti-pattern: editing past decisions — supersede them.
 - `/releases/design.md` — one release per node. Frontmatter: `name`, `description`, `date`, `version`. Link to implementing decisions and affected product nodes. Anti-pattern: changelog-style lists; extract each change into a linked node instead.
+
+## Example frontmatter
+
+A real release node — note the per-edge `description:` on every load-bearing edge. Shared linkTypes (e.g. `implements`, `supersedes`) only say what's true across all uses; the per-edge `description:` is where the *specific* relationship to *this feature*, *this prior release* gets expressed. See [linking](/patterns/linking) for the full framing.
+
+```yaml
+---
+name: 2025-Q2 pricing v2
+description: Tiered pricing release — usage-based starter tier alongside per-seat
+date: 2025-06-15
+version: 2.4.0
+links:
+  - to: /product/billing
+    type: implements
+    description: Adds the starter-tier billing path on top of the existing per-seat flow
+  - to: /releases/2024-q4-pricing-v1
+    type: supersedes
+    description: V1's flat per-seat ceiling capped expansion revenue from heavy-usage customers
+  - to: /decisions/pricing-v3
+    type: announced-in
+    description: First public surface of the v3 pricing direction approved in the December offsite
+---
+```

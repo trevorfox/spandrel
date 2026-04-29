@@ -27,11 +27,12 @@ links:
     description: Primary account lead since Q2 2025
   - to: /projects/alpha
     type: active_project
+    description: Main engagement this quarter — driving the platform replatform
 ```
 
 - `to` — required. Path to the target node.
-- `type` — optional. Freeform string describing the relationship. Not validated by the [compiler](/architecture/compiler) — just metadata on the edge.
-- `description` — optional. Short description of why this link exists.
+- `type` — optional. Freeform string naming the relationship class. Not validated by the [compiler](/architecture/compiler) — just metadata on the edge.
+- `description` — **the primary semantic carrier.** A short note about why *this specific edge* exists, written in terms of *this source* and *this target*. It's what an agent or reader actually relies on to understand the relationship; treat it as load-bearing, not optional in spirit.
 
 ## Link types
 
@@ -45,34 +46,34 @@ The compiler doesn't enforce or validate link types. They're metadata for consum
 
 ### Declaring a typed vocabulary with `/linkTypes/`
 
-When a graph relies on a handful of recurring relationship classes, declare them as Things under a top-level `/linkTypes/` [collection](/patterns/collections). Each file names and describes one relationship class:
+`/linkTypes/` is opt-in scaffolding for **graph-local vocabulary** — relationship classes whose meaning isn't self-evident from the type name and which recur often enough across the graph that a shared definition is worth maintaining. It is not a substitute for per-edge `description:`. The shared linkType description has to apply to *every* edge of that type, which means it's necessarily generic; per-edge `description:` is where the specific relationship between *this source* and *this target* gets expressed. Treat `/linkTypes/` as scaffolding, treat `description:` as the load-bearing layer.
+
+When a graph defines a custom relationship class — `realized-by`, `affects`, `informs`, `derived-from`, anything domain-specific — declare it as a Thing under a top-level `/linkTypes/` [collection](/patterns/collections). Each file names and describes one relationship class:
 
 ```
 docs/linkTypes/
 ├── index.md          # collection front page
-├── owns.md           # one file per linkType
-├── depends-on.md
-└── mentions.md
+├── realized-by.md    # one file per declared linkType
+├── affects.md
+└── informs.md
 ```
 
 Each linkType file carries a short frontmatter entry:
 
 ```yaml
 ---
-name: owns
-description: The source entity has operational or legal control of the target.
+name: realized-by
+description: The target is the concrete implementation of the abstract spec at the source.
 ---
 ```
 
-The compiler indexes `/linkTypes/*` by filename stem (`owns.md` → `owns`). The stem is the canonical key — it's what frontmatter `links[].type` values reference, and it stays stable across display-name renames. Hierarchical subfolders under `/linkTypes/` are out of scope for now; keep the namespace flat.
+The compiler indexes `/linkTypes/*` by filename stem (`realized-by.md` → `realized-by`). The stem is the canonical key — it's what frontmatter `links[].type` values reference, and it stays stable across display-name renames. Hierarchical subfolders under `/linkTypes/` are out of scope for now; keep the namespace flat.
 
-When a linkType is declared, every edge using that type picks up a `linkTypeDescription` on the wire — agents and clients see the relationship's meaning inline without following another hop. The full declared vocabulary is queryable through any wire surface ([MCP](/architecture/mcp), [REST](/architecture/rest)) — the surface exposes a list-link-types operation that returns name, description, and path for each declared type.
+When a linkType is declared, every edge using that type picks up a `linkTypeDescription` on the wire — agents and clients see the type's general meaning inline alongside the per-edge `description`. The full declared vocabulary is queryable through any wire surface ([MCP](/architecture/mcp), [REST](/architecture/rest)) — the surface exposes a list-link-types operation that returns name, description, and path for each declared type.
 
-Undeclared linkTypes keep working; `linkTypeDescription` is simply `null` on those edges. Declare the ones that carry load-bearing semantics in your graph.
+Undeclared linkTypes keep working; `linkTypeDescription` is simply `null` on those edges. **Plain-English types whose meaning is self-evident — `owns`, `depends-on`, `relates-to`, `mentions`, `supersedes` — don't need declaration.** A reader (human or agent) can read those without a glossary. Declare the ones whose meaning is specific to your graph and not obvious from the type name; everything else carries its weight through per-edge `description:`.
 
-The compiler already emits `linkType: "mentions"` for inline-markdown links (see below). Adding `/linkTypes/mentions.md` automatically gives those edges a description — no other changes required.
-
-Once you declare at least one linkType, the compiler emits `undeclared_link_type` warnings for edges that reference a type without a matching `/linkTypes/{stem}.md`. Declaring zero linkTypes keeps soft typing — warnings only apply once you've opted into the vocabulary.
+Once you declare at least one linkType, the compiler emits `undeclared_link_type` warnings for edges that reference a type without a matching `/linkTypes/{stem}.md`. This is currently all-or-nothing; per-type opt-in is on the roadmap. In the meantime, only declare the types whose generic description actually adds load-bearing meaning — don't add a `/linkTypes/{stem}.md` just to silence the warning, since that trains the wrong instinct (treating linkType description as the place where edge semantics live).
 
 ## Backlinks
 
@@ -81,7 +82,8 @@ The compiler generates backlinks automatically. If `/clients/acme` links to `/pe
 ## Guidelines
 
 - **Link, don't nest.** If a relationship is encoded as directory hierarchy, you probably want a link instead.
-- **Describe non-obvious links.** `type: account_lead` is self-evident. `type: context` could mean anything — add a description.
+- **Per-edge `description:` is the primary semantic carrier.** It's where the specific relationship between *this source* and *this target* lives. The `/linkTypes/` description, when it exists, only says what's true across all uses of the type — strictly less specific. Author edges as if `description:` is required.
+- **Prefer timeless structural claims over implementation specifics.** Edge descriptions like *"verifies `STRIPE_WEBHOOK_SECRET` via `constructEventAsync`"* drift on refactor. *"Verifies signed inbound webhooks before any processing"* survives. Implementation specifics belong in the node body, where they're versioned alongside the code they describe; edge descriptions should describe *roles* and *intent*.
 
 ## Inline markdown links
 

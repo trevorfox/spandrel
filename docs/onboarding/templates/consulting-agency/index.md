@@ -78,3 +78,27 @@ Four hops from root to methodology + its application + the team who applied it.
 - `/deliverables/design.md` — one deliverable per node. Frontmatter: `name`, `description`, `date`, `for-client`, `produced-in` (engagement), optional `derived-from`. Anti-pattern: treating every PowerPoint as a deliverable — only the ones worth referencing later.
 - `/frameworks/design.md` — each framework is a Thing. Frontmatter: `name`, `description`, `status` (draft/active/retired). Body: the methodology itself. Link to `applied-framework` backlinks implicitly via the edge. Anti-pattern: half-finished frameworks — mark as draft.
 - `/decisions/design.md` — standard decision log. Frontmatter: `name`, `description`, `date`, `status`. Body: context, decision, consequences. Supersede rather than edit.
+
+## Example frontmatter
+
+A real engagement node — note the per-edge `description:` on every load-bearing edge. Shared linkTypes (e.g. `for-client`, `applied-framework`) only say what's true across all uses; the per-edge `description:` is where the *specific* relationship to *this client*, *this framework*, *this consultant* gets expressed. See [linking](/patterns/linking) for the full framing.
+
+```yaml
+---
+name: Globex — positioning refresh 2024
+description: Repositioning the Globex enterprise SKU after their mid-market pivot
+status: complete
+start-date: 2024-09-01
+end-date: 2024-12-15
+links:
+  - to: /clients/globex
+    type: for-client
+    description: Triggered by Globex's Q3 sales miss and a new VP of marketing taking over
+  - to: /people/maria
+    type: led-by
+    description: Maria ran the workshop facilitation and owned the final deck
+  - to: /frameworks/positioning-method
+    type: applied-framework
+    description: Used as the workshop spine — adapted the segment-fit step for B2B
+---
+```
