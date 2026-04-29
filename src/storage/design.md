@@ -1,6 +1,6 @@
 # Storage — Design
 
-The storage layer sits between the compiler (which produces the graph) and the GraphQL schema (which queries it). The contract is simple: the compiler writes nodes and edges, the schema reads them.
+The storage layer sits between the compiler (which produces the graph) and the wire surfaces (which read from it through `graph-ops.ts`). The contract is simple: the compiler writes nodes and edges, the wire surfaces read them.
 
 ## GraphStore interface
 
@@ -15,7 +15,7 @@ Any conforming storage backend must support:
 - **Write warnings** — validation warnings produced during compilation
 - **Clear and rebuild** — for full recompilation
 
-The interface is deliberately minimal. Complex queries (search, graph traversal, subtree resolution) are handled by the GraphQL resolvers, not the storage layer. The storage layer is a persistence mechanism, not a query engine.
+The interface is deliberately minimal. Complex queries (search, graph traversal, subtree resolution) live in `src/graph-ops.ts` as pure async helpers, not in the storage layer. The storage layer is a persistence mechanism, not a query engine.
 
 ## Reference implementations
 
@@ -56,6 +56,6 @@ Each alternative must satisfy the same interface. The conformance test suite (`s
 
 ## Decision: storage is not a query engine
 
-The storage layer does not implement search, graph traversal, or access filtering. Those are concerns of the GraphQL schema layer. This keeps the storage interface small and makes it easy to add new backends without reimplementing query logic.
+The storage layer does not implement search, graph traversal, or access filtering. Those are concerns of `graph-ops.ts` and the access policy. This keeps the storage interface small and makes it easy to add new backends without reimplementing query logic.
 
-The tradeoff is that some queries (e.g., full-text search) could be more efficient if pushed to the storage layer (Postgres FTS, SQLite FTS5). This optimization can be added later by extending the interface with optional query methods that the schema layer uses when available.
+The tradeoff is that some queries (e.g., full-text search) could be more efficient if pushed to the storage layer (Postgres FTS, SQLite FTS5). This optimization can be added later by extending the interface with optional query methods that the wire surfaces use when available.

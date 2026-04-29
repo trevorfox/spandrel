@@ -3,8 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compile } from "./compiler/compiler.js";
 import { emitGraph } from "./compiler/emit-graph.js";
-import { loadAccessConfig, canAccess, filterNodeFields, accessLevelAtLeast } from "./schema/access.js";
-import type { Actor } from "./schema/types.js";
+import { loadAccessConfig } from "./access/config.js";
+import { AccessPolicy, accessLevelAtLeast } from "./access/policy.js";
+import type { Actor } from "./access/types.js";
 import type { SpandrelNode, SpandrelEdge, ValidationWarning } from "./compiler/types.js";
 import { InMemoryGraphStore } from "./storage/in-memory-graph-store.js";
 import type { GraphStore } from "./storage/graph-store.js";
@@ -102,17 +103,18 @@ export async function stripPrivateNodes(
   const config = loadAccessConfig(rootDir);
   if (!config) return source;
 
-  const actor: Actor = { identity: null };
+  const policy = new AccessPolicy(config);
+  const actor: Actor = { tier: "anonymous" };
 
   const filtered = new InMemoryGraphStore();
   const visiblePaths = new Set<string>();
 
   for (const node of await source.getAllNodes()) {
-    const level = canAccess(config, actor, node.path, node.frontmatter);
+    const level = policy.resolveLevel(actor, node.path, node.frontmatter);
     if (level === "none") continue;
     if (!accessLevelAtLeast(level, "exists")) continue;
 
-    const projected = filterNodeFields(node, level);
+    const projected = policy.shapeNode(node, level);
     if (!projected) continue;
 
     // filterNodeFields returns a Partial<SpandrelNode>. Shape the result back

@@ -23,7 +23,11 @@ export default defineConfig({
       // graph.json and /events work when running `vite dev` standalone.
       "/graph.json": "http://localhost:4000",
       "/events": { target: "http://localhost:4000", ws: false },
-      "/graphql": "http://localhost:4000",
+      "/node": "http://localhost:4000",
+      "/content": "http://localhost:4000",
+      "/graph": "http://localhost:4000",
+      "/search": "http://localhost:4000",
+      "/linkTypes": "http://localhost:4000",
     },
   },
 });

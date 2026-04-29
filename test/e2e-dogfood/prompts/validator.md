@@ -12,7 +12,7 @@ Then start the dev server so you can query:
 cd SPANDREL_DIR && npx tsx src/cli.ts dev TEST_KG_DIR &
 ```
 
-Wait for it to be ready, then query via GraphQL at localhost:4000/graphql using curl.
+Wait for it to be ready, then query via the REST surface at localhost:4000 using curl. The relevant routes are `GET /node/{...path}`, `GET /content/{...path}`, `GET /search?q=`, `GET /graph`, and `GET /linkTypes`.
 
 Read `context-hub-architecture-notes.md` to understand what these three roles are and how they evaluate a graph.
 
@@ -26,7 +26,7 @@ Load the root, all top-level collections, and their design.md files. Then evalua
 
 - **Does the collection structure match the domain?** Spandrel has clear concepts — compilation, MCP, progressive disclosure, access control, knowledge repos. Are they represented? Are the collection boundaries in the right places, or does the structure split things that belong together or lump things that should be separate?
 - **Are the naming conventions consistent?** Do slugs follow a pattern? Are descriptions written at the same level of abstraction?
-- **Do the links reflect real relationships?** The compiler depends on the data model. MCP exposes GraphQL. Access control filters queries. Are these relationships captured as cross-collection links, or is the graph a tree of silos?
+- **Do the links reflect real relationships?** The compiler depends on the data model. The wire surfaces (REST and MCP) read through `graph-ops`. The access policy gates every wire response. Are these relationships captured as cross-collection links, or is the graph a tree of silos?
 - **Is anything missing?** What Spandrel concept would you expect to find that isn't here?
 - **Is anything wrong?** Collections that don't earn their existence, Things that are too thin to be useful, structure imposed for structure's sake.
 
@@ -47,7 +47,7 @@ Run the compiler's validate tool and report any warnings.
 
 You see what the graph tells you. Your question: **"Can I use this?"**
 
-You've never seen this graph. Use only GraphQL queries to answer:
+You've never seen this graph. Use only REST queries to answer:
 
 - **Can you explain what Spandrel is** using only what you learn from navigating the graph? (Don't use your prior knowledge — pretend you only know what the graph tells you.)
 - **Search for "compile"** — do the results make sense? Are they ranked reasonably?

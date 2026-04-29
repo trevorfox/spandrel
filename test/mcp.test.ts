@@ -4,9 +4,25 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { compile } from "../src/compiler/compiler.js";
-import { createSchema } from "../src/schema/schema.js";
+import { AccessPolicy } from "../src/access/policy.js";
 import { buildInstructions, createMcpServer } from "../src/server/mcp.js";
 import { createTempDir, writeIndex } from "./test-helpers.js";
+
+/**
+ * Permissive policy used across the MCP suite — every caller is treated as
+ * admin so the read/write tools can be exercised end-to-end. Per-policy
+ * gating is covered in test/access.test.ts.
+ */
+const adminPolicy = new AccessPolicy({
+  roles: { admin: { default: true } },
+  policies: {
+    admin: {
+      paths: ["/**"],
+      access_level: "traverse",
+      operations: ["read", "write", "admin"],
+    },
+  },
+});
 
 describe("MCP Server", () => {
   let root: string;
@@ -29,8 +45,7 @@ describe("MCP Server", () => {
     }, "Alpha is ongoing.");
 
     const store = await compile(root);
-    const schema = createSchema(store, { rootDir: root });
-    const mcpServer = await createMcpServer(schema, { graph: store });
+    const mcpServer = await createMcpServer({ store, policy: adminPolicy, rootDir: root });
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -66,13 +81,8 @@ describe("MCP Server", () => {
   });
 
   it("server provides instructions with graph metadata", async () => {
-    // The server info should include instructions derived from the graph
-    const info = client.getServerCapabilities();
-    // We can't directly access instructions from client API, but we can verify
-    // the server was created with instructions by creating a fresh connection
     const store2 = await compile(root);
-    const schema2 = createSchema(store2, { rootDir: root });
-    const mcpServer2 = await createMcpServer(schema2, { graph: store2 });
+    const mcpServer2 = await createMcpServer({ store: store2, policy: adminPolicy, rootDir: root });
 
     const [ct, st] = InMemoryTransport.createLinkedPair();
     const client2 = new Client({ name: "test-client-2", version: "1.0.0" });
@@ -81,12 +91,9 @@ describe("MCP Server", () => {
       mcpServer2.connect(st),
     ]);
 
-    // The server version and name should be accessible
     const info2 = client2.getServerVersion();
     expect(info2?.name).toBe("spandrel");
 
-    // Verify instructions are set by checking the server's initialize response
-    // The MCP SDK exposes instructions via getInstructions() on the client
     const instructions = client2.getInstructions();
     expect(instructions).toBeDefined();
     expect(instructions).toContain("Root");
@@ -374,7 +381,6 @@ describe("MCP — buildInstructions and /linkTypes/", () => {
   });
 
   it("context tool surfaces linkTypeDescription for declared linkTypes", async () => {
-    // Full end-to-end: compile → schema → MCP client → context tool call.
     writeIndex(root, { name: "Root", description: "Root" }, "Welcome.");
     writeIndex(path.join(root, "clients"), { name: "Clients", description: "Clients" });
     writeIndex(path.join(root, "clients", "acme"), {
@@ -390,8 +396,7 @@ describe("MCP — buildInstructions and /linkTypes/", () => {
     );
 
     const store = await compile(root);
-    const schema = createSchema(store, { rootDir: root });
-    const mcpServer = await createMcpServer(schema, { graph: store });
+    const mcpServer = await createMcpServer({ store, policy: adminPolicy, rootDir: root });
 
     const [ct, st] = InMemoryTransport.createLinkedPair();
     const c = new Client({ name: "test-linktype-client", version: "1.0.0" });

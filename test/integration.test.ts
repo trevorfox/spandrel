@@ -1,14 +1,28 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { graphql } from "graphql";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { compile } from "../src/compiler/compiler.js";
-import { createSchema } from "../src/schema/schema.js";
+import { AccessPolicy } from "../src/access/policy.js";
 import { createMcpServer } from "../src/server/mcp.js";
+import { shapeNodeAsJson } from "../src/rest/shape.js";
+import {
+  resolveSearch,
+  resolveGraph,
+} from "../src/graph-ops.js";
 import { createTempDir, writeIndex } from "./test-helpers.js";
-import type { GraphQLSchema } from "graphql";
+
+const adminPolicy = new AccessPolicy({
+  roles: { admin: { default: true } },
+  policies: {
+    admin: {
+      paths: ["/**"],
+      access_level: "traverse",
+      operations: ["read", "write", "admin"],
+    },
+  },
+});
 
 function createFixture(): string {
   const root = createTempDir();
@@ -85,32 +99,32 @@ function createFixture(): string {
   write("architecture", {
     name: "Architecture",
     description: "System design and technical decisions",
-  }, "How the system is built: Compiler, GraphQL, and MCP Server.");
+  }, "How the system is built: Compiler, REST, and MCP Server.");
 
   write("architecture/compiler", {
     name: "Compiler",
     description: "Transforms markdown files into an in-memory graph",
     links: [
       { to: "/primitives/things", type: "processes" },
-      { to: "/architecture/graphql", type: "feeds" },
+      { to: "/architecture/rest", type: "feeds" },
     ],
   }, "The compiler walks the file tree, parses frontmatter, builds nodes and edges.");
 
-  write("architecture/graphql", {
-    name: "GraphQL",
-    description: "The query interface and enforcement point",
+  write("architecture/rest", {
+    name: "REST",
+    description: "The HTTP wire surface, gated by the access policy",
     links: [
-      { to: "/architecture/mcp", type: "serves" },
+      { to: "/architecture/mcp", type: "peer-of" },
     ],
-  }, "GraphQL is the single query layer. All interfaces route through it.");
+  }, "REST exposes nodes as path-addressed resources. Every response routes through the access policy.");
 
   write("architecture/mcp", {
     name: "MCP Server",
     description: "Agent-optimized tool interface",
     links: [
-      { to: "/architecture/graphql", type: "wraps" },
+      { to: "/architecture/rest", type: "peer-of" },
     ],
-  }, "MCP provides 11 tools for navigation, search, and write operations.");
+  }, "MCP provides 12 tools for navigation, search, and write operations.");
 
   // --- Patterns collection ---
   write("patterns", {
@@ -202,12 +216,11 @@ function createFixture(): string {
 
 describe("E2E: Self-contained knowledge graph", () => {
   let root: string;
-  let schema: GraphQLSchema;
+  let store: Awaited<ReturnType<typeof compile>>;
 
   beforeAll(async () => {
     root = createFixture();
-    const store = await compile(root);
-    schema = createSchema(store, { rootDir: root });
+    store = await compile(root);
 
     // Verify the fixture compiled as expected
     expect(store.nodeCount).toBeGreaterThan(20);
@@ -218,24 +231,17 @@ describe("E2E: Self-contained knowledge graph", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  describe("GraphQL — progressive disclosure navigation", () => {
-    it("can start at root and see top-level structure", async () => {
-      const result = await graphql({
-        schema,
-        source: `{
-          node(path: "/") {
-            name description nodeType
-            children { path name description }
-          }
-        }`,
-      });
-      expect(result.errors).toBeUndefined();
-      const r = result.data!.node;
-      expect(r.name).toBe("Test Graph");
-      expect(r.nodeType).toBe("composite");
-      expect(r.children.length).toBe(6);
+  describe("REST shape — progressive disclosure navigation", () => {
+    const anonymous = { tier: "anonymous" as const };
 
-      const childNames = r.children.map((c: { name: string }) => c.name);
+    it("can start at root and see top-level structure", async () => {
+      const r = await shapeNodeAsJson(store, adminPolicy, anonymous, "/");
+      expect(r).not.toBeNull();
+      expect(r!.name).toBe("Test Graph");
+      expect(r!.nodeType).toBe("composite");
+      expect(r!.children!.length).toBe(6);
+
+      const childNames = r!.children!.map((c) => c.name);
       expect(childNames).toContain("Primitives");
       expect(childNames).toContain("Architecture");
       expect(childNames).toContain("Conventions");
@@ -245,129 +251,50 @@ describe("E2E: Self-contained knowledge graph", () => {
     });
 
     it("can drill into a Collection and see its children", async () => {
-      const result = await graphql({
-        schema,
-        source: `{
-          node(path: "/primitives") {
-            name description
-            children { path name description }
-          }
-        }`,
-      });
-      expect(result.errors).toBeUndefined();
-      const node = result.data!.node;
-      expect(node.name).toBe("Primitives");
-      const childNames = node.children.map((c: { name: string }) => c.name);
+      const node = await shapeNodeAsJson(store, adminPolicy, anonymous, "/primitives");
+      expect(node!.name).toBe("Primitives");
+      const childNames = node!.children!.map((c) => c.name);
       expect(childNames).toContain("Things");
       expect(childNames).toContain("Collections");
       expect(childNames).toContain("Tags");
       expect(childNames).toContain("Governance");
     });
 
-    it("can read full content of a leaf node", async () => {
-      const result = await graphql({
-        schema,
-        source: `{ content(path: "/primitives/things") }`,
+    it("can read full content of a leaf node with includeContent", async () => {
+      const node = await shapeNodeAsJson(store, adminPolicy, anonymous, "/primitives/things", {
+        includeContent: true,
       });
-      expect(result.errors).toBeUndefined();
-      expect(result.data!.content).toContain("atomic unit of knowledge");
+      expect(node!.content).toContain("atomic unit");
     });
 
-    it("can get node with content inline", async () => {
-      const result = await graphql({
-        schema,
-        source: `{
-          node(path: "/primitives/things", includeContent: true) {
-            name content
-          }
-        }`,
-      });
-      expect(result.errors).toBeUndefined();
-      expect(result.data!.node.content).toContain("atomic unit");
+    it("HAL _links are present on every response", async () => {
+      const node = await shapeNodeAsJson(store, adminPolicy, anonymous, "/primitives/things");
+      expect(node!._links.self.href).toBe("/node/primitives/things");
+      expect(node!._links.parent!.href).toBe("/node/primitives");
+      expect(node!._links.content!.href).toBe("/content/primitives/things");
     });
   });
 
-  describe("GraphQL — backlinks and cross-references", () => {
+  describe("REST shape — backlinks and cross-references", () => {
+    const anonymous = { tier: "anonymous" as const };
+
     it("Things node has outgoing links to frontmatter and paths", async () => {
-      const result = await graphql({
-        schema,
-        source: `{
-          node(path: "/primitives/things") {
-            links { to type }
-          }
-        }`,
-      });
-      expect(result.errors).toBeUndefined();
-      const targets = result.data!.node.links.map((l: { to: string }) => l.to);
+      const node = await shapeNodeAsJson(store, adminPolicy, anonymous, "/primitives/things");
+      const targets = node!.outgoing!.map((l) => l.path);
       expect(targets).toContain("/conventions/frontmatter");
       expect(targets).toContain("/conventions/paths");
     });
 
     it("frontmatter has incoming backlinks from Things", async () => {
-      const result = await graphql({
-        schema,
-        source: `{
-          node(path: "/conventions/frontmatter") {
-            referencedBy { to type }
-          }
-        }`,
-      });
-      expect(result.errors).toBeUndefined();
-      const backlinks = result.data!.node.referencedBy;
-      expect(backlinks.some((b: { to: string }) => b.to === "/primitives/things")).toBe(true);
-    });
-
-    it("context query returns full picture with named references", async () => {
-      const result = await graphql({
-        schema,
-        source: `{
-          context(path: "/architecture/mcp") {
-            name content
-            outgoing { path name linkType }
-            incoming { path name linkType }
-          }
-        }`,
-      });
-      expect(result.errors).toBeUndefined();
-      const ctx = result.data!.context;
-      expect(ctx.name).toBe("MCP Server");
-      // Outgoing: MCP wraps GraphQL
-      const graphqlRef = ctx.outgoing.find((r: { path: string }) => r.path === "/architecture/graphql");
-      expect(graphqlRef).toBeDefined();
-      expect(graphqlRef.name).toBe("GraphQL");
-      // Incoming: architecture/graphql serves MCP
-      expect(ctx.incoming.length).toBeGreaterThan(0);
-    });
-
-    it("references query with direction=both works", async () => {
-      const result = await graphql({
-        schema,
-        source: `{
-          references(path: "/architecture/graphql", direction: both) {
-            nodes { path name direction }
-            pageInfo { hasNextPage endCursor }
-          }
-        }`,
-      });
-      expect(result.errors).toBeUndefined();
-      const refs = result.data!.references.nodes;
-      expect(refs.some((r: { direction: string }) => r.direction === "outgoing")).toBe(true);
-      expect(refs.some((r: { direction: string }) => r.direction === "incoming")).toBe(true);
+      const node = await shapeNodeAsJson(store, adminPolicy, anonymous, "/conventions/frontmatter");
+      const backlinks = node!.incoming!.map((l) => l.path);
+      expect(backlinks).toContain("/primitives/things");
     });
   });
 
-  describe("GraphQL — search", () => {
+  describe("graph-ops — search", () => {
     it("finds nodes by keyword with ranking", async () => {
-      const result = await graphql({
-        schema,
-        source: `{
-          search(query: "Things") {
-            path name score
-          }
-        }`,
-      });
-      expect(result.errors).toBeUndefined();
-      const results = result.data!.search;
+      const results = await resolveSearch(store, "Things");
       expect(results.length).toBeGreaterThan(0);
       // Exact name match should be first
       expect(results[0].path).toBe("/primitives/things");
@@ -375,44 +302,18 @@ describe("E2E: Self-contained knowledge graph", () => {
     });
 
     it("search scoped to subtree", async () => {
-      const result = await graphql({
-        schema,
-        source: `{
-          search(query: "GraphQL", path: "/architecture") {
-            path name
-          }
-        }`,
-      });
-      expect(result.errors).toBeUndefined();
-      for (const r of result.data!.search) {
+      const results = await resolveSearch(store, "REST", "/architecture");
+      for (const r of results) {
         expect(r.path.startsWith("/architecture")).toBe(true);
       }
     });
   });
 
-  describe("GraphQL — graph and validation", () => {
+  describe("graph-ops — graph traversal", () => {
     it("returns full graph with nodes and edges", async () => {
-      const result = await graphql({
-        schema,
-        source: `{
-          graph {
-            nodes { path name nodeType }
-            edges { from to type }
-          }
-        }`,
-      });
-      expect(result.errors).toBeUndefined();
-      expect(result.data!.graph.nodes.length).toBeGreaterThan(20);
-      expect(result.data!.graph.edges.length).toBeGreaterThan(20);
-    });
-
-    it("reports zero warnings for this fixture", async () => {
-      const result = await graphql({
-        schema,
-        source: `{ validate { path type message } }`,
-      });
-      expect(result.errors).toBeUndefined();
-      expect(result.data!.validate).toHaveLength(0);
+      const result = await resolveGraph(store, "/", 10);
+      expect(result.nodes.length).toBeGreaterThan(20);
+      expect(result.edges.length).toBeGreaterThan(20);
     });
   });
 
@@ -421,8 +322,11 @@ describe("E2E: Self-contained knowledge graph", () => {
 
     beforeAll(async () => {
       const graph = await compile(root);
-      const mcpSchema = createSchema(graph, { rootDir: root });
-      const mcpServer = await createMcpServer(mcpSchema);
+      const mcpServer = await createMcpServer({
+        store: graph,
+        policy: adminPolicy,
+        rootDir: root,
+      });
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
       client = new Client({ name: "e2e-test", version: "1.0.0" });
       await Promise.all([
@@ -465,10 +369,10 @@ describe("E2E: Self-contained knowledge graph", () => {
     });
 
     it("can search and find results ranked by relevance", async () => {
-      const result = await client.callTool({ name: "search", arguments: { query: "GraphQL" } });
+      const result = await client.callTool({ name: "search", arguments: { query: "REST" } });
       const results = JSON.parse((result.content as Array<{ text: string }>)[0].text);
       expect(results.length).toBeGreaterThan(0);
-      expect(results[0].path).toBe("/architecture/graphql");
+      expect(results[0].path).toBe("/architecture/rest");
     });
 
     it("validate returns clean via MCP", async () => {

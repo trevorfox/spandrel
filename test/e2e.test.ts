@@ -5,15 +5,29 @@ import os from "node:os";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { compile } from "../src/compiler/compiler.js";
-import { createSchema } from "../src/schema/schema.js";
+import { AccessPolicy } from "../src/access/policy.js";
 import { createMcpServer } from "../src/server/mcp.js";
 import { createThing } from "../src/server/writer.js";
+
+// Default-admin policy: every actor is treated as admin so the read/write
+// surface can be exercised end-to-end. Per-policy gating is covered in
+// test/access.test.ts.
+const adminPolicy = new AccessPolicy({
+  roles: { admin: { default: true } },
+  policies: {
+    admin: {
+      paths: ["/**"],
+      access_level: "traverse",
+      operations: ["read", "write", "admin"],
+    },
+  },
+});
 
 /**
  * Property-based e2e tests.
  *
  * Takes an abstract knowledge definition, bootstraps a full Spandrel system
- * (writer → compiler → GraphQL → MCP), then verifies invariants that must
+ * (writer → compiler → REST + MCP), then verifies invariants that must
  * hold for ANY valid knowledge graph:
  *
  *   STRUCTURAL: Does the system work?
@@ -119,9 +133,11 @@ function runE2E(def: KnowledgeDefinition) {
     beforeAll(async () => {
       root = buildSystem(def);
       compiledGraph = await compile(root);
-      const schema = createSchema(compiledGraph, { rootDir: root });
-
-      const mcpServer = await createMcpServer(schema);
+      const mcpServer = await createMcpServer({
+        store: compiledGraph,
+        policy: adminPolicy,
+        rootDir: root,
+      });
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
       client = new Client({ name: "e2e-test", version: "1.0.0" });
       await Promise.all([

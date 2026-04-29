@@ -1,14 +1,42 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { graphql } from "graphql";
 import { z } from "zod";
-import type { GraphQLSchema } from "graphql";
 import type { GraphStore } from "../storage/graph-store.js";
+import type { AccessPolicy } from "../access/policy.js";
+import { accessLevelAtLeast } from "../access/policy.js";
+import type { Actor, AccessLevel, ShapedNode } from "../access/types.js";
+import {
+  resolveNode,
+  resolveContext,
+  resolveReferences,
+  resolveSearch,
+  resolveNavigate,
+  resolveGraph,
+  lookupLinkTypeDescription,
+  MAX_GRAPH_DEPTH,
+  type SearchResult,
+} from "../graph-ops.js";
+import {
+  createThing,
+  updateThing,
+  deleteThing,
+  resolveSourcePath,
+} from "./writer.js";
+import { recompileNode } from "../compiler/compiler.js";
+import type { HistoryEntry } from "../compiler/types.js";
 
-export type McpServerOptions = {
-  /** The compiled graph store — used to generate server instructions */
-  graph?: GraphStore;
-};
+export interface McpServerOptions {
+  store: GraphStore;
+  policy: AccessPolicy;
+  /** Inbound actor; defaults to anonymous when not supplied. */
+  actor?: Actor;
+  /** Filesystem root — required for the three write tools. */
+  rootDir?: string;
+  /** Optional git history accessor for the `get_history` tool. */
+  getHistory?: (rootDir: string, nodePath: string) => Promise<HistoryEntry[]>;
+}
+
+const ANONYMOUS_ACTOR: Actor = { tier: "anonymous" };
 
 /**
  * How many link types to enumerate in the instructions block before
@@ -84,40 +112,19 @@ When to use: Consult this graph proactively for questions about ${collections.le
 }
 
 /**
- * Registers the read-only MCP tool set (navigation, content, references, search,
- * navigate, get_graph) on an existing server. Safe to use on hosted, multi-tenant
- * deployments where write operations are handled out-of-band (e.g. via a compile
- * pipeline).
- */
-/**
- * Run Spandrel's keyword search against a schema. Hosts that register their
- * own `search` tool (e.g. to layer vector search on top for paid tiers) can
- * call this to fall through to the default keyword behaviour when the caller
- * is on a lower tier.
+ * Run the default keyword-search behaviour against an AccessPolicy-shaped
+ * graph. Hosts that register their own `search` tool (e.g. to layer vector
+ * search on top for paid tiers) can call this to fall through to keyword
+ * behaviour when the caller is on a lower tier.
  */
 export async function runKeywordSearch(
-  schema: GraphQLSchema,
-  args: { query: string; path?: string },
-): Promise<Array<{ path: string; name: string; description: string; snippet: string | null; score: number }>> {
-  const result = await graphql({
-    schema,
-    source: `
-      query Search($query: String!, $path: String) {
-        search(query: $query, path: $path) {
-          path name description snippet score
-        }
-      }
-    `,
-    variableValues: { query: args.query, path: args.path },
-  });
-  const data = result.data as { search?: unknown[] } | null | undefined;
-  return (data?.search ?? []) as Array<{
-    path: string;
-    name: string;
-    description: string;
-    snippet: string | null;
-    score: number;
-  }>;
+  store: GraphStore,
+  policy: AccessPolicy,
+  actor: Actor,
+  args: { query: string; path?: string }
+): Promise<SearchResult[]> {
+  const results = await resolveSearch(store, args.query, args.path);
+  return filterReadable(store, policy, actor, results, "description");
 }
 
 export interface RegisterReadOnlyToolsOptions {
@@ -131,53 +138,70 @@ export interface RegisterReadOnlyToolsOptions {
   skipSearch?: boolean;
 }
 
-export function registerReadOnlyTools(
-  server: McpServer,
-  schema: GraphQLSchema,
-  options: RegisterReadOnlyToolsOptions = {},
-): void {
-  async function gql(source: string, variables: Record<string, unknown> = {}) {
-    return graphql({ schema, source, variableValues: variables });
-  }
-  registerReadOnlyToolsImpl(server, gql, options);
-}
-
-/**
- * Registers the read-only + builder-facing write tools (create_thing, update_thing,
- * delete_thing) on an existing server. Only appropriate for local / single-tenant
- * deployments where the caller has filesystem write access.
- */
-export function registerWriteTools(server: McpServer, schema: GraphQLSchema): void {
-  async function gql(source: string, variables: Record<string, unknown> = {}) {
-    return graphql({ schema, source, variableValues: variables });
-  }
-  registerWriteToolsImpl(server, gql);
-}
-
-export async function createMcpServer(schema: GraphQLSchema, options?: McpServerOptions): Promise<McpServer> {
+export async function createMcpServer(options: McpServerOptions): Promise<McpServer> {
   const server = new McpServer(
     { name: "spandrel", version: "0.1.0" },
-    { instructions: await buildInstructions(options?.graph) },
+    { instructions: await buildInstructions(options.store) },
   );
 
-  // Helper: run a parameterized GraphQL query safely
-  async function gql(source: string, variables: Record<string, unknown> = {}) {
-    return graphql({ schema, source, variableValues: variables });
+  registerReadOnlyTools(server, options);
+  if (options.rootDir) {
+    registerWriteTools(server, options);
   }
-
-  registerReadOnlyToolsImpl(server, gql);
-  registerWriteToolsImpl(server, gql);
   return server;
 }
 
-type GqlFn = (source: string, variables?: Record<string, unknown>) => Promise<{ data?: Record<string, unknown> | null; errors?: unknown }>;
+export async function startMcpServer(options: McpServerOptions): Promise<void> {
+  const server = await createMcpServer(options);
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
 
-function registerReadOnlyToolsImpl(
+// --- Helpers shared by tools ---------------------------------------------
+
+interface BoundContext {
+  store: GraphStore;
+  policy: AccessPolicy;
+  actor: Actor;
+}
+
+function bind(opts: McpServerOptions): BoundContext {
+  return {
+    store: opts.store,
+    policy: opts.policy,
+    actor: opts.actor ?? ANONYMOUS_ACTOR,
+  };
+}
+
+async function filterReadable<T extends { path: string }>(
+  store: GraphStore,
+  policy: AccessPolicy,
+  actor: Actor,
+  items: T[],
+  minLevel: AccessLevel = "exists"
+): Promise<T[]> {
+  const nodeMap = await store.getNodes(items.map((i) => i.path));
+  return items.filter((item) => {
+    const n = nodeMap.get(item.path);
+    const level = policy.resolveLevel(actor, item.path, n?.frontmatter ?? {});
+    return accessLevelAtLeast(level, minLevel);
+  });
+}
+
+function asTextResult(value: unknown): { content: Array<{ type: "text"; text: string }> } {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
+  };
+}
+
+// --- Read-only tools -----------------------------------------------------
+
+export function registerReadOnlyTools(
   server: McpServer,
-  gql: GqlFn,
-  options: RegisterReadOnlyToolsOptions = {},
+  options: McpServerOptions,
+  registerOpts: RegisterReadOnlyToolsOptions = {}
 ): void {
-  // --- Core navigation tools (agent-facing) ---
+  const ctx = bind(options);
 
   server.tool(
     "get_node",
@@ -188,21 +212,36 @@ function registerReadOnlyToolsImpl(
       includeContent: z.boolean().optional().describe("Include the full markdown content inline"),
     },
     async ({ path: nodePath, depth, includeContent }) => {
-      const result = await gql(`
-        query GetNode($path: String!, $depth: Int, $includeContent: Boolean) {
-          node(path: $path, depth: $depth, includeContent: $includeContent) {
-            path name description nodeType depth parent
-            children { path name description nodeType depth children }
-            links { to type description linkTypeDescription }
-            referencedBy { to type description linkTypeDescription }
-            content
-            created updated author
-          }
-        }
-      `, { path: nodePath, depth, includeContent: includeContent ?? false });
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result.data?.node ?? null, null, 2) }],
-      };
+      const node = await ctx.store.getNode(nodePath);
+      if (!node) return asTextResult(null);
+
+      const level = ctx.policy.resolveLevel(ctx.actor, nodePath, node.frontmatter);
+      if (level === "none") return asTextResult(null);
+
+      const wantContent = !!includeContent && accessLevelAtLeast(level, "content");
+      const result = await resolveNode(ctx.store, nodePath, depth, wantContent);
+      if (!result) return asTextResult(null);
+
+      // Filter children + links + backlinks by visibility.
+      result.children = await filterReadable(ctx.store, ctx.policy, ctx.actor, result.children);
+      result.links = result.links.filter((l) =>
+        accessLevelAtLeast(ctx.policy.resolveLevel(ctx.actor, l.to), "exists")
+      );
+      result.referencedBy = result.referencedBy.filter((l) =>
+        accessLevelAtLeast(ctx.policy.resolveLevel(ctx.actor, l.to), "exists")
+      );
+
+      // Strip fields the actor's level doesn't permit.
+      if (!accessLevelAtLeast(level, "description")) {
+        result.description = "";
+        result.children = [];
+        result.links = [];
+        result.referencedBy = [];
+      }
+      if (!accessLevelAtLeast(level, "content")) {
+        result.content = null;
+      }
+      return asTextResult(result);
     }
   );
 
@@ -213,15 +252,15 @@ function registerReadOnlyToolsImpl(
       path: z.string().describe("Path to the node"),
     },
     async ({ path: nodePath }) => {
-      const result = await gql(`
-        query GetContent($path: String!) {
-          content(path: $path)
-        }
-      `, { path: nodePath });
-      const text = typeof result.data?.content === "string" ? result.data.content : "Node not found";
-      return {
-        content: [{ type: "text" as const, text }],
-      };
+      const node = await ctx.store.getNode(nodePath);
+      if (!node) {
+        return { content: [{ type: "text" as const, text: "Node not found" }] };
+      }
+      const level = ctx.policy.resolveLevel(ctx.actor, nodePath, node.frontmatter);
+      if (!accessLevelAtLeast(level, "content")) {
+        return { content: [{ type: "text" as const, text: "Node not found" }] };
+      }
+      return { content: [{ type: "text" as const, text: node.content }] };
     }
   );
 
@@ -232,21 +271,29 @@ function registerReadOnlyToolsImpl(
       path: z.string().describe("Path to the node"),
     },
     async ({ path: nodePath }) => {
-      const result = await gql(`
-        query GetContext($path: String!) {
-          context(path: $path) {
-            path name description nodeType depth parent
-            content
-            children { path name description nodeType depth }
-            outgoing { path name description linkType linkDescription linkTypeDescription direction }
-            incoming { path name description linkType linkDescription linkTypeDescription direction }
-            created updated author
-          }
-        }
-      `, { path: nodePath });
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result.data?.context ?? null, null, 2) }],
-      };
+      const node = await ctx.store.getNode(nodePath);
+      if (!node) return asTextResult(null);
+
+      const level = ctx.policy.resolveLevel(ctx.actor, nodePath, node.frontmatter);
+      if (level === "none") return asTextResult(null);
+
+      const result = await resolveContext(ctx.store, nodePath);
+      if (!result) return asTextResult(null);
+
+      result.children = await filterReadable(ctx.store, ctx.policy, ctx.actor, result.children);
+      result.outgoing = await filterReadable(ctx.store, ctx.policy, ctx.actor, result.outgoing);
+      result.incoming = await filterReadable(ctx.store, ctx.policy, ctx.actor, result.incoming);
+
+      if (!accessLevelAtLeast(level, "content")) {
+        (result as unknown as { content: string | null }).content = null;
+      }
+      if (!accessLevelAtLeast(level, "description")) {
+        result.description = "";
+        result.children = [];
+        result.outgoing = [];
+        result.incoming = [];
+      }
+      return asTextResult(result);
     }
   );
 
@@ -258,21 +305,16 @@ function registerReadOnlyToolsImpl(
       direction: z.enum(["outgoing", "incoming", "both"]).optional().describe("Which direction of links to return"),
     },
     async ({ path: nodePath, direction }) => {
-      const result = await gql(`
-        query GetReferences($path: String!, $direction: Direction) {
-          references(path: $path, direction: $direction) {
-            nodes { path name description linkType linkDescription linkTypeDescription direction }
-            pageInfo { hasNextPage endCursor }
-          }
-        }
-      `, { path: nodePath, direction: direction ?? "outgoing" });
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify((result.data?.references as { nodes?: unknown[] } | undefined)?.nodes ?? [], null, 2) }],
-      };
+      const level = ctx.policy.resolveLevel(ctx.actor, nodePath);
+      if (!accessLevelAtLeast(level, "description")) return asTextResult([]);
+
+      const refs = await resolveReferences(ctx.store, nodePath, direction ?? "outgoing");
+      const accessible = await filterReadable(ctx.store, ctx.policy, ctx.actor, refs);
+      return asTextResult(accessible);
     }
   );
 
-  if (!options.skipSearch) {
+  if (!registerOpts.skipSearch) {
     server.tool(
       "search",
       "Keyword search across node text and edge metadata. Use when you don't know where to look; follow up with context() on results to get the full picture.",
@@ -281,16 +323,8 @@ function registerReadOnlyToolsImpl(
         path: z.string().optional().describe("Scope search to this subtree path"),
       },
       async ({ query: q, path: scopePath }) => {
-        const result = await gql(`
-          query Search($query: String!, $path: String) {
-            search(query: $query, path: $path) {
-              path name description snippet score
-            }
-          }
-        `, { query: q, path: scopePath });
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(result.data?.search ?? [], null, 2) }],
-        };
+        const results = await runKeywordSearch(ctx.store, ctx.policy, ctx.actor, { query: q, path: scopePath });
+        return asTextResult(results);
       }
     );
   }
@@ -304,17 +338,14 @@ function registerReadOnlyToolsImpl(
       edgeType: z.string().optional().describe("Filter to edges of this type only (e.g. 'owns_client', 'leads_execution')"),
     },
     async ({ path: nodePath, keyword, edgeType }) => {
-      const result = await gql(`
-        query Navigate($path: String!, $keyword: String, $edgeType: String) {
-          navigate(path: $path, keyword: $keyword, edgeType: $edgeType) {
-            path name description
-            neighbors { path name description nodeType relation linkType linkDescription }
-          }
-        }
-      `, { path: nodePath, keyword, edgeType });
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result.data?.navigate ?? null, null, 2) }],
-      };
+      const level = ctx.policy.resolveLevel(ctx.actor, nodePath);
+      if (!accessLevelAtLeast(level, "description")) return asTextResult(null);
+
+      const result = await resolveNavigate(ctx.store, nodePath, keyword, edgeType);
+      if (!result) return asTextResult(null);
+
+      result.neighbors = await filterReadable(ctx.store, ctx.policy, ctx.actor, result.neighbors);
+      return asTextResult(result);
     }
   );
 
@@ -326,21 +357,22 @@ function registerReadOnlyToolsImpl(
       depth: z.number().optional().describe("How many levels deep"),
     },
     async ({ path: nodePath, depth }) => {
-      const result = await gql(`
-        query GetGraph($path: String, $depth: Int) {
-          graph(path: $path, depth: $depth) {
-            nodes { path name description nodeType depth }
-            edges { from to type linkType description }
-          }
-        }
-      `, { path: nodePath, depth });
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result.data?.graph ?? null, null, 2) }],
-      };
+      const requestedDepth = depth ?? MAX_GRAPH_DEPTH;
+      if (requestedDepth > MAX_GRAPH_DEPTH) {
+        throw new Error(
+          `Depth ${requestedDepth} exceeds maximum allowed depth of ${MAX_GRAPH_DEPTH}`
+        );
+      }
+
+      const result = await resolveGraph(ctx.store, nodePath ?? "/", requestedDepth);
+      const visibleNodes = await filterReadable(ctx.store, ctx.policy, ctx.actor, result.nodes);
+      const visiblePaths = new Set(visibleNodes.map((n) => n.path));
+      const visibleEdges = result.edges.filter(
+        (e) => visiblePaths.has(e.from) && visiblePaths.has(e.to)
+      );
+      return asTextResult({ nodes: visibleNodes, edges: visibleEdges });
     }
   );
-
-  // --- Builder tools (context engineer-facing) ---
 
   server.tool(
     "validate",
@@ -349,16 +381,20 @@ function registerReadOnlyToolsImpl(
       path: z.string().optional().describe("Scope validation to a subtree"),
     },
     async ({ path: nodePath }) => {
-      const result = await gql(`
-        query Validate($path: String) {
-          validate(path: $path) {
-            path type message
-          }
-        }
-      `, { path: nodePath });
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result.data?.validate ?? [], null, 2) }],
-      };
+      const warnings = await ctx.store.getWarnings();
+
+      if (nodePath) {
+        const level = ctx.policy.resolveLevel(ctx.actor, nodePath);
+        if (!accessLevelAtLeast(level, "content")) return asTextResult([]);
+        return asTextResult(
+          warnings.filter((w) => w.path === nodePath || w.path.startsWith(nodePath + "/"))
+        );
+      }
+
+      const accessible = warnings.filter((w) =>
+        accessLevelAtLeast(ctx.policy.resolveLevel(ctx.actor, w.path), "content")
+      );
+      return asTextResult(accessible);
     }
   );
 
@@ -369,23 +405,47 @@ function registerReadOnlyToolsImpl(
       path: z.string().describe("Path to the node"),
     },
     async ({ path: nodePath }) => {
-      const result = await gql(`
-        query GetHistory($path: String!) {
-          history(path: $path) {
-            hash date author message
-          }
-        }
-      `, { path: nodePath });
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result.data?.history ?? [], null, 2) }],
-      };
+      const level = ctx.policy.resolveLevel(ctx.actor, nodePath);
+      if (!accessLevelAtLeast(level, "content")) return asTextResult([]);
+
+      if (options.getHistory && options.rootDir) {
+        const entries = await options.getHistory(options.rootDir, nodePath);
+        return asTextResult(entries);
+      }
+      return asTextResult([]);
     }
   );
-
 }
 
-function registerWriteToolsImpl(server: McpServer, gql: GqlFn): void {
-  // --- Write tools (context engineer / builder-facing) ---
+// --- Write tools ---------------------------------------------------------
+
+export function registerWriteTools(
+  server: McpServer,
+  options: McpServerOptions
+): void {
+  if (!options.rootDir) {
+    throw new Error("registerWriteTools requires options.rootDir");
+  }
+  const rootDir: string = options.rootDir;
+  const ctx = bind(options);
+
+  async function executeMutation(thingPath: string, action: () => void) {
+    if (!ctx.policy.canWrite(ctx.actor, thingPath)) {
+      return { success: false, path: thingPath, message: "Write access denied", warnings: [] };
+    }
+    try {
+      action();
+      const { sourcePath } = resolveSourcePath(rootDir, thingPath);
+      await recompileNode(ctx.store, rootDir, sourcePath);
+      const warnings = (await ctx.store.getWarnings()).filter(
+        (w) => w.path === thingPath || w.path.startsWith(thingPath + "/")
+      );
+      return { success: true, path: thingPath, message: null, warnings };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, path: thingPath, message, warnings: [] };
+    }
+  }
 
   server.tool(
     "create_thing",
@@ -404,16 +464,10 @@ function registerWriteToolsImpl(server: McpServer, gql: GqlFn): void {
       tags: z.array(z.string()).optional().describe("Tags for categorization"),
     },
     async ({ path: thingPath, name, description, content, links, author, tags }) => {
-      const result = await gql(`
-        mutation CreateThing($path: String!, $name: String!, $description: String!, $content: String, $links: [LinkInput!], $author: String, $tags: [String!]) {
-          createThing(path: $path, name: $name, description: $description, content: $content, links: $links, author: $author, tags: $tags) {
-            success path message warnings { path type message }
-          }
-        }
-      `, { path: thingPath, name, description, content, links, author, tags });
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result.data?.createThing ?? result.errors, null, 2) }],
-      };
+      const result = await executeMutation(thingPath, () => {
+        createThing(rootDir, thingPath, { name, description, content, links, author, tags });
+      });
+      return asTextResult(result);
     }
   );
 
@@ -434,16 +488,10 @@ function registerWriteToolsImpl(server: McpServer, gql: GqlFn): void {
       tags: z.array(z.string()).optional().describe("Replace tags"),
     },
     async ({ path: thingPath, name, description, content, links, author, tags }) => {
-      const result = await gql(`
-        mutation UpdateThing($path: String!, $name: String, $description: String, $content: String, $links: [LinkInput!], $author: String, $tags: [String!]) {
-          updateThing(path: $path, name: $name, description: $description, content: $content, links: $links, author: $author, tags: $tags) {
-            success path message warnings { path type message }
-          }
-        }
-      `, { path: thingPath, name, description, content, links, author, tags });
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result.data?.updateThing ?? result.errors, null, 2) }],
-      };
+      const result = await executeMutation(thingPath, () => {
+        updateThing(rootDir, thingPath, { name, description, content, links, author, tags });
+      });
+      return asTextResult(result);
     }
   );
 
@@ -454,22 +502,13 @@ function registerWriteToolsImpl(server: McpServer, gql: GqlFn): void {
       path: z.string().describe("Path to the Thing to delete"),
     },
     async ({ path: thingPath }) => {
-      const result = await gql(`
-        mutation DeleteThing($path: String!) {
-          deleteThing(path: $path) {
-            success path message warnings { path type message }
-          }
-        }
-      `, { path: thingPath });
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result.data?.deleteThing ?? result.errors, null, 2) }],
-      };
+      const result = await executeMutation(thingPath, () => {
+        deleteThing(rootDir, thingPath);
+      });
+      return asTextResult(result);
     }
   );
 }
 
-export async function startMcpServer(schema: GraphQLSchema, options?: McpServerOptions): Promise<void> {
-  const server = await createMcpServer(schema, options);
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-}
+// Re-export ShapedNode for downstream consumers that build on this surface.
+export type { ShapedNode };

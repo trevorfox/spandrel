@@ -21,22 +21,28 @@ export { InMemoryGraphStore } from "./storage/in-memory-graph-store.js";
 // themselves against the interface contract.
 export { runConformanceTests } from "./storage/conformance.js";
 
-// Access control
-export {
-  loadAccessConfig,
-  resolveRole,
-  canAccess,
-  canWrite,
-  accessLevelAtLeast,
-  filterNodeFields,
-} from "./schema/access.js";
-export type { AccessLevel, Actor, Policy, AccessConfig } from "./schema/types.js";
+// Access policy
+export { AccessPolicy, accessLevelAtLeast } from "./access/policy.js";
+export { loadAccessConfig } from "./access/config.js";
+export { runAccessPolicyConformance } from "./access/conformance.js";
+export type {
+  Actor,
+  AccessLevel,
+  AccessConfig,
+  Policy,
+  RoleConfig,
+  DenyRule,
+  ShapedNode,
+  ShapedEdge,
+} from "./access/types.js";
 
-// GraphQL schema
-export { createSchema } from "./schema/schema.js";
-export type { SchemaContext } from "./schema/schema.js";
+// REST wire surface
+export { createRestRouter } from "./rest/router.js";
+export { actorFromRequest } from "./rest/actor.js";
+export { shapeNodeAsJson } from "./rest/shape.js";
+export type { NodeJson, NodeReference, NodeJsonLinks } from "./rest/shape.js";
 
-// MCP server
+// MCP wire surface
 export {
   createMcpServer,
   startMcpServer,

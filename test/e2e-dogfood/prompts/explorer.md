@@ -2,29 +2,26 @@
 
 You are an agent connecting to a knowledge graph via MCP for the first time. You don't know what's in it. You don't know what Spandrel is. You're starting cold.
 
-A dev server is running at localhost:4000/graphql. Query it with curl:
+A dev server is running at localhost:4000. Query it via the REST surface with curl:
 ```bash
-curl -s http://localhost:4000/graphql -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"query":"{ node(path: \"/\") { name description children { name description path } } }"}'
+curl -s 'http://localhost:4000/node?depth=1' | jq
 ```
 
-Available GraphQL queries:
-- `node(path)` — returns name, description, children (name, description, path), references (name, path, type), referencedBy (name, path)
-- `content(path)` — returns the markdown body
-- `context(path)` — returns everything: name, description, content, outgoing links, incoming backlinks
-- `references(path, direction)` — direction is "outgoing", "incoming", or "both"
-- `search(query, path?)` — full-text search, returns path, name, description, score
-- `graph` — full graph structure with nodes and edges
+Available REST endpoints:
+- `GET /node/{...path}` — returns the shaped node (name, description, children, outgoing, incoming, _links). Add `?depth=N` to embed children, `?includeContent=true` to inline the markdown body.
+- `GET /content/{...path}` — returns the markdown body as `text/markdown`.
+- `GET /search?q=&path=` — keyword search, returns ranked results.
+- `GET /graph?root=&depth=` — returns the subgraph as nodes + edges.
+- `GET /linkTypes` — returns the declared link-type vocabulary.
 
 ## Phase 1: Orientation (canned)
 
-Run these exact queries in order. After each one, write down what you learned.
+Run these exact requests in order. After each one, write down what you learned.
 
-1. Get the root: `{ node(path: "/") { name description children { name description path } } }`
-2. Search for "compile": `{ search(query: "compile") { path name description score } }`
-3. Search for "MCP": `{ search(query: "MCP") { path name description score } }`
-4. Get the full graph overview: `{ graph { nodes { path name } edges { from to type } } }`
+1. Get the root: `curl -s 'http://localhost:4000/node?depth=1'`
+2. Search for "compile": `curl -s 'http://localhost:4000/search?q=compile'`
+3. Search for "MCP": `curl -s 'http://localhost:4000/search?q=MCP'`
+4. Get the full graph overview: `curl -s 'http://localhost:4000/graph'`
 
 ## Phase 2: Task — Explain Spandrel (freeform)
 
@@ -49,9 +46,9 @@ You get 5 queries.
 
 ## Phase 4: Stress (canned)
 
-1. Query a path that doesn't exist: `{ node(path: "/nonexistent") { name } }`
-2. Empty search: `{ search(query: "xyzzy-does-not-exist") { path } }`
-3. Deep path: `{ context(path: "/") { name content outgoing { name path } incoming { name path } } }`
+1. Query a path that doesn't exist: `curl -s -i 'http://localhost:4000/node/nonexistent'`
+2. Empty search: `curl -s 'http://localhost:4000/search?q=xyzzy-does-not-exist'`
+3. Root with content + outgoing + incoming embedded: `curl -s 'http://localhost:4000/node?depth=1&includeContent=true'`
 
 ## Output
 

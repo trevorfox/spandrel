@@ -25,7 +25,7 @@ import type { Graph } from "../web/types.js";
  * The only schema.org predicates we ever emit. Framing: JSON-LD is a public
  * projection, not a mirror of the full typed vocabulary. Search engines get
  * something they understand; agents and humans still see the real graph via
- * GraphQL and MCP.
+ * REST and MCP.
  */
 export const SCHEMA_ORG_WHITELIST = [
   "isPartOf",

@@ -4,17 +4,17 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { compile, addGitMetadata, getHistory } from "./compiler/compiler.js";
-import { createSchema } from "./schema/schema.js";
-import type { SchemaContext } from "./schema/schema.js";
 import { createMcpServer } from "./server/mcp.js";
 import { watchTree } from "./compiler/watcher.js";
-import { loadAccessConfig } from "./schema/access.js";
+import { loadAccessConfig } from "./access/config.js";
+import { AccessPolicy } from "./access/policy.js";
+import type { Actor } from "./access/types.js";
+import { createRestRouter } from "./rest/router.js";
 import { scaffoldInit, type InitOptions } from "./cli-init.js";
 import { publish, parsePublishArgs, resolveBundleDir } from "./cli-publish.js";
 import { emitGraph } from "./compiler/emit-graph.js";
 import { renderNodeAsMarkdown } from "./web/render-node.js";
 import { extensionToNodePath } from "./cli-routing.js";
-import { createYoga } from "graphql-yoga";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 const args = process.argv.slice(2);
@@ -39,7 +39,7 @@ Commands:
   init      Create a new knowledge repo
   init-mcp  Output MCP config JSON for your editor
   compile   Compile and validate the graph
-  dev       Start in development mode (GraphQL + file watcher + viewer)
+  dev       Start in development mode (REST + MCP + file watcher + viewer)
   mcp       Start the MCP server (stdio)
   publish   Emit a static bundle (graph.json + SPA) to --out
 `);
@@ -69,20 +69,13 @@ async function dev(rootDir: string) {
 
   const accessConfig = loadAccessConfig(rootDir);
   if (accessConfig) {
-    console.log(`[spandrel] Access config loaded (${Object.keys(accessConfig.roles).length} roles, ${Object.keys(accessConfig.policies).length} policies)`);
+    console.log(
+      `[spandrel] Access config loaded (${Object.keys(accessConfig.roles).length} roles, ${Object.keys(accessConfig.policies).length} policies)`
+    );
   }
+  const policy = new AccessPolicy(accessConfig);
 
-  const schemaCtx: SchemaContext = { rootDir, getHistory, accessConfig };
-  const schema = createSchema(store, schemaCtx);
-
-  const yoga = createYoga({
-    schema,
-    context: ({ request }) => {
-      const identity = request.headers.get("x-spandrel-identity");
-      schemaCtx.actor = identity ? { identity } : undefined;
-      return {};
-    },
-  });
+  const restRouter = createRestRouter({ store, policy, rootDir, getHistory });
 
   // SSE channel — one Set for all open long-lived viewer connections. We
   // track these so the graceful-shutdown path can destroy them before
@@ -98,15 +91,14 @@ async function dev(rootDir: string) {
   };
 
   const bundleDir = resolveBundleDir();
-  const yogaPrefix = (yoga as unknown as { graphqlEndpoint?: string }).graphqlEndpoint ?? "/graphql";
 
   const server = createServer(async (req, res) => {
     const rawUrl = req.url || "/";
     const urlPath = rawUrl.split("?")[0] ?? "/";
 
-    // Route order: explicit data endpoints → SSE → GraphQL → static SPA.
-    // Keeping GraphQL above the static fallback preserves yoga's behavior
-    // for its own routes (/graphql, /graphql/stream, etc.).
+    // Route order: explicit data endpoints → SSE → REST → per-node static
+    // routes → SPA fallback. REST takes precedence over the per-node `.md`
+    // / `.json` routes so policy gating applies before the static fallback.
     if (urlPath === "/graph.json") {
       try {
         const graph = await emitGraph(store);
@@ -127,9 +119,7 @@ async function dev(rootDir: string) {
       return;
     }
 
-    if (urlPath === yogaPrefix || urlPath.startsWith(yogaPrefix + "/") || urlPath.startsWith(yogaPrefix + "?")) {
-      return yoga(req, res);
-    }
+    if (await restRouter(req, res)) return;
 
     // Per-node format routes: `/path.md` and `/path.json` serve a single
     // node as its raw markdown source or its full JSON object. The root
@@ -174,8 +164,8 @@ async function dev(rootDir: string) {
 
   const port = parseInt(process.env.PORT || "4000", 10);
   server.listen(port, () => {
-    console.log(`[spandrel] GraphQL server at http://localhost:${port}${yogaPrefix}`);
-    console.log(`[spandrel] Viewer at        http://localhost:${port}/`);
+    console.log(`[spandrel] REST + MCP at http://localhost:${port}/`);
+    console.log(`[spandrel] Viewer at     http://localhost:${port}/`);
   });
 
   // Watcher → SSE. chokidar emits rapidly on editor saves (atomic write +
@@ -275,7 +265,7 @@ const PLACEHOLDER_HTML = `<!doctype html>
   <main style="font-family: system-ui, sans-serif; max-width: 42rem; margin: 4rem auto; padding: 0 1.5rem;">
     <h1>SPA bundle not built</h1>
     <p>The Spandrel web viewer has not been built for this install. Run <code>npm run build</code> in the spandrel source tree to produce <code>dist/web/</code>.</p>
-    <p>Meanwhile, the live graph is available at <a href="/graph.json"><code>/graph.json</code></a> and GraphQL at <a href="/graphql"><code>/graphql</code></a>.</p>
+    <p>Meanwhile, the live graph is available at <a href="/graph.json"><code>/graph.json</code></a>, the REST surface at <a href="/node/"><code>/node/</code></a>, and MCP via <code>spandrel mcp</code>.</p>
   </main>
 </body>
 </html>
@@ -335,12 +325,14 @@ async function mcp(rootDir: string) {
   if (accessConfig) {
     console.error(`[spandrel] Access config loaded (${Object.keys(accessConfig.roles).length} roles)`);
   }
+  const policy = new AccessPolicy(accessConfig);
 
   const identity = process.env.SPANDREL_IDENTITY;
-  const actor = identity ? { identity } : undefined;
+  const actor: Actor = identity
+    ? { tier: "authenticated", id: identity }
+    : { tier: "anonymous" };
 
-  const schema = createSchema(store, { rootDir, getHistory, accessConfig, actor });
-  const mcpServer = await createMcpServer(schema, { graph: store });
+  const mcpServer = await createMcpServer({ store, policy, actor, rootDir, getHistory });
   const transport = new StdioServerTransport();
   await mcpServer.connect(transport);
   console.error("[spandrel] MCP server running on stdio");

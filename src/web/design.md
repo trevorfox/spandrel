@@ -5,7 +5,7 @@ The web layer is a single-page application that renders a Spandrel graph for hum
 1. **Local familiarization and authoring** — shipped with `spandrel dev`, so anyone running the dev server sees their graph immediately at `localhost:4000`.
 2. **Public publishing** — shipped by `spandrel publish` as a static bundle suitable for GitHub Pages, Netlify, or any static host.
 
-The viewer is not a framework dependency. It is a consumer of the same graph the GraphQL and MCP layers consume — nothing in the compiler or schema knows the viewer exists. If someone wants a different viewer, they read the same `graph.json` shape.
+The viewer is not a framework dependency. It is a consumer of the same graph the REST and MCP layers consume — nothing in the compiler or storage layer knows the viewer exists. If someone wants a different viewer, they read the same `graph.json` shape.
 
 ## Who this is for
 
@@ -20,7 +20,7 @@ The viewer is not a docs-site generator, though it happens to generate doc sites
 ## Design principles
 
 - **One artifact, two deploys.** The same SPA bundle is served live in dev and as static files in publish. No forked code paths.
-- **Data-source minimalism.** The viewer reads exactly one input: `graph.json`. It does not query GraphQL in the browser. Live-ness is achieved by having the dev server overwrite `graph.json` on rebuild and notify the SPA to refetch.
+- **Data-source minimalism.** The viewer reads exactly one input: `graph.json`. It does not call REST or MCP from the browser. Live-ness is achieved by having the dev server overwrite `graph.json` on rebuild and notify the SPA to refetch.
 - **Aesthetic restraint.** The visual style is limestone: serif body, wide margins, thin rules, small-caps metadata labels, muted palette. Dark mode is candlelit stone — warm charcoal and cream. Graphs are thin-lined and typographic, not network-diagram busy.
 - **URLs are real.** Every node has a canonical URL and three formats accessible by extension. Bookmarkable, shareable, scrape-friendly.
 - **Additive, not speculative.** v1 ships the minimum elegant surface. Prerendering, SEO, and content negotiation are opt-in via flags in later versions.
@@ -48,7 +48,7 @@ Nothing in the compiler or schema layer depends on the viewer. The viewer is dow
 Three commands, three moments in a repo's life:
 
 - **`spandrel init`** — one-time bootstrap in an empty directory. Scaffolds `_access/config.yaml`, `/linkTypes/` vocabulary, `.github/workflows/publish.yml`, and a `CNAME` placeholder. Run once; never again.
-- **`spandrel dev <path>`** — the authoring loop. Compiles the graph in memory, watches the filesystem, serves GraphQL, MCP, SSE, and the viewer at `localhost:4000`. This is where writing happens.
+- **`spandrel dev <path>`** — the authoring loop. Compiles the graph in memory, watches the filesystem, serves REST, MCP, SSE, and the viewer at `localhost:4000`. This is where writing happens.
 - **`spandrel publish <path> --out _site [--base /repo/] [--strip-private] [--static] [--site-url https://example.com]`** — the deploy step. Compiles once, writes `graph.json`, copies the SPA bundle into `--out`. That folder is the deployable.
 
 Mental model: **init = birth, dev = daily work, publish = ship.**
@@ -164,7 +164,7 @@ The JSON-LD uses a disciplined six-predicate whitelist, not the full internal li
 - `sameAs` — external canonical equivalents
 - `relatedLink` — generic "see also"
 
-Every declared link type in `/linkTypes/<type>/index.md` may optionally include a `schemaOrg:` frontmatter field mapping it to one of the six. Unmapped types default to `mentions`. Values outside the whitelist are rejected at build time with a warning and fall back to `mentions`. Framing: **JSON-LD is a projection, not a mirror.** The viewer, GraphQL, and MCP continue to see the full typed vocabulary (`depends-on`, `supersedes`, `owned-by`). Only the public structured-data block is restricted. Search engines get something they understand; agents and humans get the real graph.
+Every declared link type in `/linkTypes/<type>/index.md` may optionally include a `schemaOrg:` frontmatter field mapping it to one of the six. Unmapped types default to `mentions`. Values outside the whitelist are rejected at build time with a warning and fall back to `mentions`. Framing: **JSON-LD is a projection, not a mirror.** The viewer, REST, and MCP continue to see the full typed vocabulary (`depends-on`, `supersedes`, `owned-by`). Only the public structured-data block is restricted. Search engines get something they understand; agents and humans get the real graph.
 
 The `@type` for each node is inferred from its shape: `DefinedTerm` for nodes under `/linkTypes/`, `Collection` for composites, `CreativeWork` for leaves. An individual node can override via a `schemaType:` frontmatter field when a more specific type fits (e.g. `Organization`, `Person`).
 
@@ -211,5 +211,5 @@ Canonical URL policy: `--site-url` (optional, default empty) controls whether th
 ## What the viewer is not
 
 - **Not a CMS.** Authoring happens in the filesystem, in any text editor. The viewer reads.
-- **Not a replacement for MCP.** The published static bundle is a read-only projection. Live, governed, authenticated access runs through MCP and GraphQL, served by `spandrel dev` locally or by any operator running the server in production.
+- **Not a replacement for MCP.** The published static bundle is a read-only projection. Live, governed, authenticated access runs through MCP and REST, served by `spandrel dev` locally or by any operator running the server in production.
 - **Not opinionated about content.** It renders whatever shape of graph the compiler produces. No schema assumptions beyond the Spandrel content model.

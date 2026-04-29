@@ -141,7 +141,7 @@ export function updateThing(
   const raw = fs.readFileSync(sourcePath, "utf-8");
   const { data, content } = matter(raw);
 
-  // Merge frontmatter updates (null means "not provided" from GraphQL)
+  // Merge frontmatter updates (undefined means "not provided" by the caller)
   if (updates.name != null) data.name = updates.name;
   if (updates.description != null) data.description = updates.description;
   if (updates.links != null) data.links = updates.links;

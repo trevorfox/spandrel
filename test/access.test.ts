@@ -2,33 +2,24 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import {
-  loadAccessConfig,
-  resolveRole,
-  canAccess,
-  canWrite,
-  filterNodeFields,
-  accessLevelAtLeast,
-} from "../src/schema/access.js";
-import type { SpandrelNode } from "../src/compiler/types.js";
-import type { AccessConfig, Actor } from "../src/schema/types.js";
+import { AccessPolicy, accessLevelAtLeast } from "../src/access/policy.js";
+import { loadAccessConfig } from "../src/access/config.js";
+import { runAccessPolicyConformance } from "../src/access/conformance.js";
+import type { AccessConfig, Actor } from "../src/access/types.js";
+import type { SpandrelNode, SpandrelEdge } from "../src/compiler/types.js";
 
-// --- In-memory config for most tests ---
+// --- Conformance suite — verifies the four invariants ---
+
+runAccessPolicyConformance();
+
+// --- Reference fixtures --------------------------------------------------
 
 const testConfig: AccessConfig = {
   roles: {
-    admin: {
-      members: ["jane@company.com", "ops-bot"],
-    },
-    builder: {
-      members: ["dev@company.com"],
-    },
-    "partner-a": {
-      members: ["alice@partner.com"],
-    },
-    public: {
-      default: true,
-    },
+    admin: { members: ["jane@company.com", "ops-bot"] },
+    builder: { members: ["dev@company.com"] },
+    "partner-a": { members: ["alice@partner.com"] },
+    public: { default: true },
   },
   policies: {
     admin: {
@@ -73,114 +64,114 @@ function makeNode(overrides: Partial<SpandrelNode> = {}): SpandrelNode {
   };
 }
 
-// --- Role Resolution ---
+// --- AccessPolicy.resolveLevel ------------------------------------------
 
-describe("resolveRole", () => {
-  it("resolves known member to their role", () => {
-    expect(resolveRole(testConfig, "jane@company.com")).toBe("admin");
-    expect(resolveRole(testConfig, "dev@company.com")).toBe("builder");
-    expect(resolveRole(testConfig, "alice@partner.com")).toBe("partner-a");
-  });
+describe("AccessPolicy.resolveLevel", () => {
+  const policy = new AccessPolicy(testConfig);
 
-  it("falls back to default role for unknown identity", () => {
-    expect(resolveRole(testConfig, "stranger@example.com")).toBe("public");
-  });
-
-  it("returns 'public' when no default role exists", () => {
-    const noDefault: AccessConfig = {
-      roles: { admin: { members: ["jane@co.com"] } },
-      policies: {},
-    };
-    expect(resolveRole(noDefault, "unknown@co.com")).toBe("public");
-  });
-});
-
-// --- canAccess ---
-
-describe("canAccess", () => {
   it("returns traverse when config is null (open access)", () => {
-    const actor: Actor = { identity: "anyone" };
-    expect(canAccess(null, actor, "/anything")).toBe("traverse");
+    const open = new AccessPolicy(null);
+    const actor: Actor = { tier: "anonymous" };
+    expect(open.resolveLevel(actor, "/anything")).toBe("traverse");
   });
 
   it("admin sees everything at traverse level", () => {
-    const actor: Actor = { identity: "jane@company.com" };
-    expect(canAccess(testConfig, actor, "/")).toBe("traverse");
-    expect(canAccess(testConfig, actor, "/clients/acme")).toBe("traverse");
-    expect(canAccess(testConfig, actor, "/internal/secret")).toBe("traverse");
+    const actor: Actor = { tier: "authenticated", id: "jane@company.com" };
+    expect(policy.resolveLevel(actor, "/")).toBe("traverse");
+    expect(policy.resolveLevel(actor, "/clients/acme")).toBe("traverse");
+    expect(policy.resolveLevel(actor, "/internal/secret")).toBe("traverse");
   });
 
   it("partner sees scoped paths at content level", () => {
-    const actor: Actor = { identity: "alice@partner.com" };
-    expect(canAccess(testConfig, actor, "/clients/acme")).toBe("content");
-    expect(canAccess(testConfig, actor, "/clients/acme/project-x")).toBe("content");
-    expect(canAccess(testConfig, actor, "/guide")).toBe("content");
-    expect(canAccess(testConfig, actor, "/guide/getting-started")).toBe("content");
+    const actor: Actor = { tier: "authenticated", id: "alice@partner.com" };
+    expect(policy.resolveLevel(actor, "/clients/acme")).toBe("content");
+    expect(policy.resolveLevel(actor, "/clients/acme/project-x")).toBe("content");
+    expect(policy.resolveLevel(actor, "/guide")).toBe("content");
+    expect(policy.resolveLevel(actor, "/guide/getting-started")).toBe("content");
   });
 
   it("partner cannot see outside scoped paths", () => {
-    const actor: Actor = { identity: "alice@partner.com" };
-    expect(canAccess(testConfig, actor, "/")).toBe("none");
-    expect(canAccess(testConfig, actor, "/clients/other-client")).toBe("none");
-    expect(canAccess(testConfig, actor, "/internal")).toBe("none");
+    const actor: Actor = { tier: "authenticated", id: "alice@partner.com" };
+    expect(policy.resolveLevel(actor, "/")).toBe("none");
+    expect(policy.resolveLevel(actor, "/clients/other-client")).toBe("none");
+    expect(policy.resolveLevel(actor, "/internal")).toBe("none");
   });
 
-  it("deny rules filter by tag", () => {
-    const actor: Actor = { identity: "alice@partner.com" };
+  it("deny rules filter by tag metadata", () => {
+    const actor: Actor = { tier: "authenticated", id: "alice@partner.com" };
     expect(
-      canAccess(testConfig, actor, "/clients/acme/secret", { tags: ["confidential"] })
+      policy.resolveLevel(actor, "/clients/acme/secret", { tags: ["confidential"] })
     ).toBe("none");
     expect(
-      canAccess(testConfig, actor, "/clients/acme/normal", { tags: ["public"] })
+      policy.resolveLevel(actor, "/clients/acme/normal", { tags: ["public"] })
     ).toBe("content");
   });
 
   it("public role sees only public paths at description level", () => {
-    const actor: Actor = { identity: "anonymous" };
-    expect(canAccess(testConfig, actor, "/guide")).toBe("description");
-    expect(canAccess(testConfig, actor, "/guide/intro")).toBe("description");
-    expect(canAccess(testConfig, actor, "/public")).toBe("description");
-    expect(canAccess(testConfig, actor, "/clients/acme")).toBe("none");
+    const actor: Actor = { tier: "anonymous" };
+    expect(policy.resolveLevel(actor, "/guide")).toBe("description");
+    expect(policy.resolveLevel(actor, "/guide/intro")).toBe("description");
+    expect(policy.resolveLevel(actor, "/public")).toBe("description");
+    expect(policy.resolveLevel(actor, "/clients/acme")).toBe("none");
   });
 
-  it("respects explicit role override on actor", () => {
-    const actor: Actor = { identity: "jane@company.com", role: "public" };
-    expect(canAccess(testConfig, actor, "/internal")).toBe("none");
+  it("respects explicit roles array on actor", () => {
+    const actor: Actor = {
+      tier: "authenticated",
+      id: "jane@company.com",
+      roles: ["public"],
+    };
+    expect(policy.resolveLevel(actor, "/internal")).toBe("none");
   });
 
   it("returns none when role has no policy", () => {
-    const actor: Actor = { identity: "unknown", role: "nonexistent" };
-    expect(canAccess(testConfig, actor, "/guide")).toBe("none");
+    const actor: Actor = {
+      tier: "authenticated",
+      id: "unknown",
+      roles: ["nonexistent"],
+    };
+    expect(policy.resolveLevel(actor, "/guide")).toBe("none");
   });
 });
 
-// --- canWrite ---
+// --- AccessPolicy.canWrite ----------------------------------------------
 
-describe("canWrite", () => {
-  it("returns true when config is null (open access)", () => {
-    expect(canWrite(null, { identity: "anyone" }, "/")).toBe(true);
+describe("AccessPolicy.canWrite", () => {
+  const policy = new AccessPolicy(testConfig);
+
+  it("returns false when config is null (closed by default)", () => {
+    const open = new AccessPolicy(null);
+    expect(open.canWrite({ tier: "anonymous" }, "/")).toBe(false);
+    expect(open.canWrite({ tier: "authenticated", id: "anyone" }, "/")).toBe(false);
   });
 
   it("admin can write anywhere", () => {
-    expect(canWrite(testConfig, { identity: "jane@company.com" }, "/clients/new")).toBe(true);
+    expect(
+      policy.canWrite({ tier: "authenticated", id: "jane@company.com" }, "/clients/new")
+    ).toBe(true);
   });
 
   it("builder can write anywhere", () => {
-    expect(canWrite(testConfig, { identity: "dev@company.com" }, "/projects/new")).toBe(true);
+    expect(
+      policy.canWrite({ tier: "authenticated", id: "dev@company.com" }, "/projects/new")
+    ).toBe(true);
   });
 
   it("partner cannot write (read-only)", () => {
-    expect(canWrite(testConfig, { identity: "alice@partner.com" }, "/clients/acme/note")).toBe(false);
+    expect(
+      policy.canWrite({ tier: "authenticated", id: "alice@partner.com" }, "/clients/acme/note")
+    ).toBe(false);
   });
 
   it("public cannot write", () => {
-    expect(canWrite(testConfig, { identity: "anonymous" }, "/guide/new")).toBe(false);
+    expect(policy.canWrite({ tier: "anonymous" }, "/guide/new")).toBe(false);
   });
 });
 
-// --- filterNodeFields ---
+// --- AccessPolicy.shapeNode ---------------------------------------------
 
-describe("filterNodeFields", () => {
+describe("AccessPolicy.shapeNode", () => {
+  const policy = new AccessPolicy(testConfig);
   const node = makeNode({
     path: "/test/thing",
     name: "Test Thing",
@@ -189,16 +180,16 @@ describe("filterNodeFields", () => {
   });
 
   it("returns null for none", () => {
-    expect(filterNodeFields(node, "none")).toBeNull();
+    expect(policy.shapeNode(node, "none")).toBeNull();
   });
 
   it("returns only path and name for exists", () => {
-    const result = filterNodeFields(node, "exists");
+    const result = policy.shapeNode(node, "exists");
     expect(result).toEqual({ path: "/test/thing", name: "Test Thing" });
   });
 
   it("returns structural fields for description level", () => {
-    const result = filterNodeFields(node, "description")!;
+    const result = policy.shapeNode(node, "description")!;
     expect(result.path).toBe("/test/thing");
     expect(result.name).toBe("Test Thing");
     expect(result.description).toBe("A thing for testing");
@@ -207,18 +198,53 @@ describe("filterNodeFields", () => {
   });
 
   it("returns everything for content level", () => {
-    const result = filterNodeFields(node, "content")!;
+    const result = policy.shapeNode(node, "content")!;
     expect(result.content).toBe("Full content body");
     expect(result.name).toBe("Test Thing");
   });
 
   it("returns everything for traverse level", () => {
-    const result = filterNodeFields(node, "traverse")!;
+    const result = policy.shapeNode(node, "traverse")!;
     expect(result.content).toBe("Full content body");
   });
 });
 
-// --- accessLevelAtLeast ---
+// --- AccessPolicy.shapeEdge ---------------------------------------------
+
+describe("AccessPolicy.shapeEdge", () => {
+  const policy = new AccessPolicy(testConfig);
+  const edge: SpandrelEdge = {
+    from: "/a",
+    to: "/b",
+    type: "link",
+    linkType: "owns",
+    description: "edge desc",
+  };
+
+  it("returns null when from level is none", () => {
+    expect(policy.shapeEdge(edge, "none", "content")).toBeNull();
+  });
+
+  it("returns null when to level is none", () => {
+    expect(policy.shapeEdge(edge, "content", "none")).toBeNull();
+  });
+
+  it("returns the edge with linkTypeDescription when both endpoints are visible", () => {
+    const result = policy.shapeEdge(edge, "content", "content", "owns: source controls target");
+    expect(result).not.toBeNull();
+    expect(result!.linkTypeDescription).toBe("owns: source controls target");
+    expect(result!.from).toBe("/a");
+    expect(result!.to).toBe("/b");
+  });
+
+  it("preserves linkType and description", () => {
+    const result = policy.shapeEdge(edge, "exists", "exists");
+    expect(result!.linkType).toBe("owns");
+    expect(result!.description).toBe("edge desc");
+  });
+});
+
+// --- accessLevelAtLeast --------------------------------------------------
 
 describe("accessLevelAtLeast", () => {
   it("traverse is at least content", () => {
@@ -232,7 +258,7 @@ describe("accessLevelAtLeast", () => {
   });
 });
 
-// --- loadAccessConfig from filesystem ---
+// --- loadAccessConfig from filesystem ------------------------------------
 
 describe("loadAccessConfig", () => {
   let root: string;
@@ -290,5 +316,38 @@ policies:
     fs.writeFileSync(path.join(accessDir, "config.yaml"), "just a string\n");
 
     expect(loadAccessConfig(root)).toBeNull();
+  });
+});
+
+// --- Three-tier identity behavior ---------------------------------------
+
+describe("three-tier Actor", () => {
+  const policy = new AccessPolicy(testConfig);
+
+  it("anonymous tier never matches role members", () => {
+    // jane@company.com is a member of admin, but anonymous actors must not
+    // be granted admin access just because the email shape happens to match.
+    const anon: Actor = { tier: "anonymous" };
+    expect(policy.resolveLevel(anon, "/internal")).toBe("none");
+  });
+
+  it("identified tier with no membership uses default role", () => {
+    const actor: Actor = { tier: "identified", id: "stranger@example.com" };
+    expect(policy.resolveLevel(actor, "/guide")).toBe("description");
+    expect(policy.resolveLevel(actor, "/internal")).toBe("none");
+  });
+
+  it("identified tier matches role members when id matches", () => {
+    // The framework does not distinguish 'verified' vs 'unverified' email at
+    // the policy level — implementations are responsible for what counts as
+    // sufficient verification before promoting from identified to authenticated.
+    const actor: Actor = { tier: "identified", id: "alice@partner.com" };
+    expect(policy.resolveLevel(actor, "/clients/acme")).toBe("content");
+  });
+
+  it("authenticated tier resolves through membership", () => {
+    const actor: Actor = { tier: "authenticated", id: "jane@company.com" };
+    expect(policy.resolveLevel(actor, "/internal")).toBe("traverse");
+    expect(policy.canWrite(actor, "/internal")).toBe(true);
   });
 });

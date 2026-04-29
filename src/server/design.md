@@ -1,49 +1,50 @@
 # Server — Design
 
-The server layer exposes the knowledge graph to external consumers via MCP and HTTP.
+The server layer hosts the MCP wire surface and the filesystem writer. Both the MCP server and the [REST surface](../rest/design.md) call the same [AccessPolicy](../access/design.md) — neither enforces access on its own.
 
 ## MCP server
 
-The MCP server translates Model Context Protocol tool calls into GraphQL queries. Each MCP tool:
+The MCP server in `mcp.ts` exposes the knowledge graph to AI agents via the Model Context Protocol. Each tool call:
 
-1. Accepts structured parameters (path, query, depth, etc.)
-2. Constructs and executes a GraphQL query
-3. Formats the result for agent consumption (structured text, not raw JSON)
-4. Returns the formatted result
+1. Constructs an Actor from the connection (passed in at server construction; for stdio, set from an env var by the CLI).
+2. Calls `AccessPolicy.resolveLevel` for reads or `canWrite` for writes.
+3. Reads from the `GraphStore` directly via the helpers in `src/graph-ops.ts`.
+4. Calls `AccessPolicy.shapeNode` / `shapeEdge` to trim the result.
+5. Returns JSON-encoded text content.
 
-MCP does not access storage directly. MCP does not enforce access control. It is a thin translation layer that makes the GraphQL API ergonomic for agents.
+The same factory works for stdio (local development) and streamable HTTP (hosted MCP). Pass `{ store, policy, rootDir, getHistory }` to `createMcpServer`.
 
 ### Tool surface
 
-Navigation:
+Read-only (registered for every server):
+
 - **get_node** — read a node with optional depth and content
-- **get_context** — read a node with all its references and children
-- **list_children** — list children of a node to a given depth
+- **get_content** — return the markdown body
+- **context** — full node context: content, children, outgoing, incoming
+- **get_references** — typed link edges for a node, optionally filtered by direction
+- **search** — keyword search across node text and edge metadata
+- **navigate** — filtered one-hop traversal
+- **get_graph** — dump nodes and edges in a subtree
+- **validate** — return validation warnings
+- **get_history** — return git history for a node
 
-Exploration:
-- **search** — text search across the graph
-- **get_references** — get links to/from a node
-- **get_graph** — get a subgraph for visualization
+Write (registered only when `rootDir` is supplied):
 
-Authoring:
 - **create_thing** — create a new node
 - **update_thing** — update an existing node
-- **delete_thing** — delete a node
+- **delete_thing** — delete a node and its subtree
 
-Validation:
-- **validate** — get validation warnings
-
-Each tool's output is formatted for progressive disclosure: names and descriptions first, full content on request.
+That is twelve tools — nine read, three write. Hosts that want to layer their own search (e.g. vector search on a paid tier) can pass `{ skipSearch: true }` when registering and supply their own `search` tool, falling back to `runKeywordSearch` for free-tier callers.
 
 ### Tool description principles
 
 Tool descriptions are the primary mechanism for guiding agent behavior. An effective description:
 
-1. **Prevents misuse** — explicitly states what NOT to do ("Do not dump all content at once — use get_node with depth=1 first, then drill into specific paths")
-2. **Redirects to related tools** — tells the agent when a different tool is more appropriate ("If you need relationships, use context instead of get_node + get_references separately")
-3. **Documents navigation strategy** — establishes the traversal-first pattern ("Start at root, read children, then traverse. Search is a fallback, not the primary navigation method")
-4. **Includes per-parameter examples** — every parameter should describe its type, default, and at least one example value
-5. **States defaults and limits** — "depth defaults to 1", "search returns at most 20 results"
+1. **Prevents misuse** — explicitly states what NOT to do ("Do not dump all content at once — use get_node with depth=1 first, then drill into specific paths").
+2. **Redirects to related tools** — tells the agent when a different tool is more appropriate ("If you need relationships, use context instead of get_node + get_references separately").
+3. **Documents navigation strategy** — establishes the traversal-first pattern ("Start at root, read children, then traverse. Search is a fallback, not the primary navigation method").
+4. **Includes per-parameter examples** — every parameter should describe its type, default, and at least one example value.
+5. **States defaults and limits** — "depth defaults to 1", "search returns at most 20 results".
 
 Descriptions should be under 2048 characters. Longer descriptions waste tokens in the system prompt without improving agent behavior.
 
@@ -63,46 +64,35 @@ How response formatting affects agent performance, informed by retrieval and con
 
 ## Writer
 
-The writer handles file operations for mutations: creating markdown files with frontmatter, updating existing files, and deleting files. It operates on the file system, not on the storage layer — mutations write to markdown files, then the compiler recompiles the affected node.
+The writer in `writer.ts` handles file operations for mutations: creating markdown files with frontmatter, updating existing files, and deleting files. It operates on the file system, not on the storage layer — mutations write to markdown files, then the compiler recompiles the affected node.
 
-This keeps the markdown files as the source of truth. The storage layer is always a derived artifact.
+This keeps the markdown files as the source of truth. The storage layer is always a derived artifact, and the AccessPolicy gates only wire writes — local edits via an editor or `git pull` are unconstrained.
 
 ## Deployment
 
-For local development, the MCP server runs over stdio (piped from Claude Desktop or Claude Code). The GraphQL server runs as a local HTTP server.
+For local development, the MCP server runs over stdio (piped from Claude Desktop or Claude Code) and the REST surface runs over an HTTP server on a local port.
 
-For production, both run as serverless functions (or long-running HTTP handlers) on whatever runtime the operator chooses:
-- GraphQL endpoint: standard HTTP
-- MCP endpoint: streamable HTTP (MCP over HTTP transport)
+For production, the same factory works against the MCP SDK's streamable-HTTP transport. Pass the constructed server to whatever runtime hosts the request (Vercel Edge Function, Cloudflare Worker, Node):
 
-The same code serves both modes — the transport layer is the only difference.
+```ts
+import { createMcpServer } from "spandrel/server/mcp";
+import { AccessPolicy } from "spandrel/access/policy";
+import { loadAccessConfig } from "spandrel/access/config";
+import { RemoteGraphStore } from "spandrel/storage/remote-graph-store";
+
+const store = new RemoteGraphStore({ bundleUrl: process.env.SPANDREL_BUNDLE_URL! });
+const policy = new AccessPolicy(loadAccessConfig(process.env.ROOT_DIR ?? "."));
+const mcp = await createMcpServer({ store, policy });
+// Wire to the runtime's HTTP surface via the MCP SDK's
+// StreamableHTTPServerTransport.
+```
 
 ### Static-bundle deployment
 
 The MCP server works unchanged against a published static bundle. The pattern:
 
 1. `spandrel publish` writes the bundle (`graph.json` + per-node `.md`/`.json` files + SPA + optional prerendered HTML) to a directory.
-2. Host the directory anywhere static files are served (GitHub Pages, Netlify, Vercel's CDN, S3, a subdirectory of an existing site).
-3. Deploy a thin HTTP handler (Vercel Edge Function, Cloudflare Worker, Netlify Function, plain Node) that constructs a `RemoteGraphStore` pointed at the bundle URL and hands it to the standard MCP server factory.
+2. Host the directory anywhere static files are served.
+3. Deploy a thin HTTP handler that constructs a `RemoteGraphStore` pointed at the bundle URL and hands it to `createMcpServer`.
 
-The MCP server code is unchanged — it reads the `GraphStore` interface, which `RemoteGraphStore` satisfies by fetching bundle files on demand. Tool calls resolve to HTTP fetches against the CDN. Write tools reject at the store layer.
-
-Shape of the handler — construct the store, build the schema, build the MCP server, wrap in the MCP SDK's streamable-HTTP transport:
-
-```ts
-import { createSchema } from "spandrel/schema";
-import { createMcpServer } from "spandrel/server/mcp";
-import { RemoteGraphStore } from "spandrel/storage/remote-graph-store";
-
-const store = new RemoteGraphStore({
-  bundleUrl: process.env.SPANDREL_BUNDLE_URL!,
-});
-const schema = createSchema(store);
-const mcp = await createMcpServer(schema, { graph: store });
-// Wire `mcp` to the runtime's HTTP surface via the MCP SDK's
-// StreamableHTTPServerTransport. See docs/deployment/static-mcp.md.
-```
-
-The handler ships as a single serverless function alongside the bundle it reads. No database, no compile step at request time, no runtime state except the in-memory cache of fetched node files.
-
-Access control in this mode happens at the HTTP layer in front of the handler (Basic Auth, Cloudflare Access, a custom header check). Per-user identity-aware filtering is out of scope — for that, use a writable backend (Postgres-backed GraphStore) instead.
+The handler ships as a single serverless function alongside the bundle it reads. No database, no compile step at request time, no runtime state except the in-memory cache of fetched node files. Per-request access shaping happens via the AccessPolicy layered on top — the same code path as the local server, so the same policy file works against either deployment.

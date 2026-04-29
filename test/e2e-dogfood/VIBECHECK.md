@@ -50,19 +50,14 @@ Now query your graph. Open another terminal:
 
 ```bash
 # What's in it?
-curl -s localhost:4000/graphql -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"query":"{ node(path: \"/\") { name description children { name description path } } }"}' | jq
+curl -s 'localhost:4000/node?depth=1' | jq
 
 # Search for something you know is there
-curl -s localhost:4000/graphql -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"query":"{ search(query: \"your term here\") { path name score } }"}' | jq
+curl -s 'localhost:4000/search?q=your%20term%20here' | jq
 
-# Get full context on a node
-curl -s localhost:4000/graphql -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"query":"{ context(path: \"/your/node\") { name description content outgoing { name path } incoming { name path } } }"}' | jq
+# Get a node + its content body
+curl -s 'localhost:4000/node/your/node?includeContent=true' | jq
+curl -s 'localhost:4000/content/your/node'
 ```
 
 Pay attention to:
