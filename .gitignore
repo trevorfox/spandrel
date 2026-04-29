@@ -4,9 +4,6 @@ _site/
 *.tsbuildinfo
 .claude/*
 !.claude/skills/
-context-hub-architecture-notes.md
+_notes/
 ROADMAP.md
-RESEARCH.md
-SPANDREL-FEEDBACK.md
-PLAYBOOK-spandrel.org.md
 CLAUDE.local.md
