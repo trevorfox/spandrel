@@ -39,8 +39,8 @@ Commands:
   init      Create a new knowledge repo
   init-mcp  Output MCP config JSON for your editor
   compile   Compile and validate the graph
-  dev       Start in development mode (REST + MCP + file watcher + viewer)
-  mcp       Start the MCP server (stdio)
+  dev       Start REST + viewer + file watcher (HTTP at :4000); MCP runs separately via stdio
+  mcp       Start the MCP server (stdio) — connect agents via 'spandrel init-mcp' config
   publish   Emit a static bundle (graph.json + SPA) to --out
 `);
   process.exit(1);
@@ -164,8 +164,9 @@ async function dev(rootDir: string) {
 
   const port = parseInt(process.env.PORT || "4000", 10);
   server.listen(port, () => {
-    console.log(`[spandrel] REST + MCP at http://localhost:${port}/`);
-    console.log(`[spandrel] Viewer at     http://localhost:${port}/`);
+    console.log(`[spandrel] Viewer  http://localhost:${port}/`);
+    console.log(`[spandrel] REST    http://localhost:${port}/{node,content,search,graph,linkTypes}`);
+    console.log(`[spandrel] MCP     stdio — run \`spandrel init-mcp\` for the client config`);
   });
 
   // Watcher → SSE. chokidar emits rapidly on editor saves (atomic write +

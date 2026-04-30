@@ -44,7 +44,7 @@
     "model-context-protocol"
   ],
   "scripts": {
-    "build": "rm -rf dist && npm run build:web && tsc",
+    "build": "rm -rf dist && npm run build:web && tsc && chmod +x dist/cli.js",
     "build:web": "vite build --config src/web/app/vite.config.ts",
     "prepublishOnly": "npm run build",
     "dev": "tsx src/cli.ts dev",
