@@ -56,6 +56,8 @@ Optionally later: `/runbooks/`, `/integrations/`, `/glossary/`. Don't propose th
 
 Ask the user: "Is the knowledge graph a separate repo, or does it live inside this code repo as `docs/knowledge/`?" Either works; adjust paths accordingly.
 
+**If `docs/` is already in use** (e.g. ADRs, RFCs, `AGENTS.md` referencing specific `docs/spec/*` paths): seed at `knowledge/` or `docs/knowledge/` rather than overwriting `docs/`. Repos already shape their own meaning into `docs/` — agent-facing manifests, sphinx builds, doc-site generators, hand-curated reference. A mid-flight swap into that namespace is unsafe; downstream tooling and links break silently. The new staging dir gets the spandrel structure; existing `docs/` content stays intact and can be referenced or migrated incrementally if the user wants.
+
 ## Seeding
 
 For each module/package/service:

@@ -317,7 +317,7 @@ export function registerReadOnlyTools(
   if (!registerOpts.skipSearch) {
     server.tool(
       "search",
-      "Keyword search across node text and edge metadata. Use when you don't know where to look; follow up with context() on results to get the full picture.",
+      "Keyword search across node text and edge metadata. Use ONLY for discovery — when you don't know where to look. For relationship or structural questions ('what links to X', 'who owns Y', 'what's under /clients'), prefer context() or get_references() — answers live in edges, not keyword matches. Follow any search hit with context() on the result path to get the full picture.",
       {
         query: z.string().describe("Search query string"),
         path: z.string().optional().describe("Scope search to this subtree path"),

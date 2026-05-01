@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import readline from "node:readline/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { compile, addGitMetadata, getHistory } from "./compiler/compiler.js";
@@ -20,7 +21,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 const args = process.argv.slice(2);
 const command = args[0];
 
-if (command === "dev") {
+if (command === "--version" || command === "-v" || command === "version") {
+  console.log(readPackageVersion());
+  process.exit(0);
+} else if (command === "dev") {
   dev(parsePositional(args));
 } else if (command === "mcp") {
   mcp(parsePositional(args));
@@ -33,7 +37,9 @@ if (command === "dev") {
 } else if (command === "publish") {
   publishCmd(args.slice(1));
 } else {
-  console.log(`Usage: spandrel <command> [root-dir]
+  console.log(`spandrel ${readPackageVersion()}
+
+Usage: spandrel <command> [root-dir]
 
 Commands:
   init      Create a new knowledge repo
@@ -42,8 +48,20 @@ Commands:
   dev       Start REST + viewer + file watcher (HTTP at :4000); MCP runs separately via stdio
   mcp       Start the MCP server (stdio) — connect agents via 'spandrel init-mcp' config
   publish   Emit a static bundle (graph.json + SPA) to --out
+
+Flags:
+  --version, -v   Print the installed version and exit
 `);
   process.exit(1);
+}
+
+function readPackageVersion(): string {
+  // package.json sits one level up from this file in both source layout
+  // (src/cli.ts → ../package.json) and dist layout (dist/cli.js →
+  // ../package.json), so a single resolution covers both.
+  const pkgPath = fileURLToPath(new URL("../package.json", import.meta.url));
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+  return String(pkg.version ?? "unknown");
 }
 
 async function publishCmd(argv: string[]) {

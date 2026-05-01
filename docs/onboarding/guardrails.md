@@ -33,6 +33,16 @@ Corollary: when a fan-out completes, run `find <kb-root> -type d -empty -delete`
 
 ## 3. Version-check the CLI (and know the npx fallback)
 
+The happy path is a globally-installed CLI pointed at a knowledge repo:
+
+```bash
+spandrel compile <kb-root>     # one-shot validation
+spandrel dev <kb-root>         # REST + viewer + watcher at :4000
+spandrel mcp <kb-root>         # stdio MCP server for agents
+```
+
+If `spandrel` resolves and the commands run, you're done — skip ahead. The rest of this section is for the failure modes.
+
 `npm link` points the global `spandrel` CLI at whatever the local build was the last time `npm run build` ran. It drifts. Before trusting any compile output, confirm:
 
 ```bash
