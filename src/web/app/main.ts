@@ -1,6 +1,6 @@
 /** App entry. Wires route, data, and component mounts. */
 
-import { currentPath$, graph$, parseHash, viewFormat$, error$ } from "./state.js";
+import { currentPath$, graph$, parseHash, viewFormat$, error$, treeRailOpen$ } from "./state.js";
 import { fetchGraph } from "./graph-data.js";
 import { mountTopBar } from "./components/top-bar.js";
 import { mountContent } from "./components/content.js";
@@ -8,6 +8,7 @@ import { mountGraphViz } from "./components/graph-viz.js";
 import { mountDrawer } from "./components/drawer.js";
 import { mountSiteBanner } from "./components/site-banner.js";
 import { mountViewPill } from "./components/view-pill.js";
+import { mountTreeRail, readStoredRailOpen } from "./components/tree-rail.js";
 import { startSse } from "./lib/sse.js";
 import { updateMeta } from "./lib/meta.js";
 import { isStaticMode, setStaticMode, staticPathFromLocation } from "./lib/mode.js";
@@ -81,8 +82,9 @@ function init(): void {
   const graphPane = document.getElementById("graph-pane") as HTMLElement;
   const drawer = document.getElementById("drawer") as HTMLElement;
   const viewPill = document.getElementById("view-pill") as HTMLElement;
+  const treeRail = document.getElementById("tree-rail") as HTMLElement;
 
-  if (!siteBanner || !topBar || !content || !graphPane || !drawer || !viewPill) {
+  if (!siteBanner || !topBar || !content || !graphPane || !drawer || !viewPill || !treeRail) {
     throw new Error("App layout elements missing from index.html");
   }
 
@@ -100,9 +102,16 @@ function init(): void {
   // The SEO value is already captured in the initial HTML the server sent.
   prerender?.remove();
 
+  // Default the tree rail open in dev (authoring) and closed in publish
+  // (reading). User overrides via the rail's collapse chevron persist to
+  // localStorage and win over the mode default on subsequent loads.
+  const stored = readStoredRailOpen();
+  treeRailOpen$.set(stored !== null ? stored : !isStaticMode());
+
   mountSiteBanner(siteBanner);
   mountTopBar(topBar);
   mountContent(content);
+  mountTreeRail(treeRail);
   mountGraphViz(graphPane);
   mountDrawer(drawer);
   mountViewPill(viewPill);

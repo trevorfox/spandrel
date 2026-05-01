@@ -56,28 +56,29 @@ Mental model: **init = birth, dev = daily work, publish = ship.**
 ## Viewer layout
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│ [breadcrumb]              [search]              [theme ☽] │
-├──────────────────────────────────┬───────────────────────┤
-│                                  │                       │
-│  rendered markdown body          │                       │
-│  (limestone content frame:       │   d3-force graph      │
-│   serif body, wide margins,      │   (clickable nav,     │
-│   thin rules, small-caps         │    collection-colored │
-│   metadata labels)               │    nodes, thin edges) │
-│                                  │                       │
-│                                  │                       │
-├──────────────────────────────────┴───────────────────────┤
-│ ▲ related nodes (grouped by link type) | warnings        │
-│   (collapsible drawer)                                   │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ [breadcrumb]                  [search]              [theme ☽] │
+├────────┬─────────────────────────────┬───────────────────────┤
+│        │                             │                       │
+│  Tree  │  rendered markdown body     │                       │
+│        │  (limestone content frame:  │   d3-force graph      │
+│  ‹/›   │   serif body, wide margins, │   (clickable nav,     │
+│        │   thin rules, small-caps    │    collection-colored │
+│  file  │   metadata labels)          │    nodes, thin edges) │
+│  tree  │                             │                       │
+│        │                             │                       │
+├────────┴─────────────────────────────┴───────────────────────┤
+│ ▲ related nodes (grouped by link type) | warnings            │
+│   (collapsible drawer)                                       │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-Four regions:
+Five regions:
 
 - **Top bar.** Breadcrumbs (from the path segments), client-side fuzzy search over names and descriptions, theme toggle.
-- **Main content (left/center).** The current node. Rendered markdown body in a limestone frame. Frontmatter metadata shown as small-caps header. Reading surface — should feel calm.
-- **Right.** The full graph visualization, d3-force, always visible. Click a node to navigate. Collections color-coded. Current node highlighted. This is the primary navigator.
+- **Tree rail (left, collapsible).** Indented file-tree navigator over the same `hierarchyChildren` map the graph viz uses. Default open in `spandrel dev` (authoring), default closed in `spandrel publish` (reading) — user toggles persist to `localStorage` and win over the mode default. Header strip carries the scope picker (All / current path / top-level collections) — the single source of truth for `scopePath$`. Each tree row also exposes a hover-revealed ⌘ handle for direct subtree-scoping. Hidden on phones; the rail is a desktop affordance.
+- **Main content (center).** The current node. Rendered markdown body in a limestone frame. Frontmatter metadata shown as small-caps header. Reading surface — should feel calm.
+- **Right.** The full graph visualization, d3-force, always visible. Click a node to navigate. Collections color-coded. Current node highlighted. The primary navigator for relational/structural questions ("what links to what"); the tree rail covers locational questions ("where am I, what else is in this collection").
 - **Bottom drawer (collapsible).** Related nodes grouped by link type, each showing the type's description. Warnings strip (broken links, undeclared linkTypes, missing descriptions) piped straight from compiler output.
 
 ## Theme

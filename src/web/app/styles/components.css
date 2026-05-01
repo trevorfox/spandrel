@@ -423,6 +423,345 @@
 }
 
 /* =========================================================================
+ * tree-rail — left-rail file-tree navigator.
+ *
+ * Open: ~17rem of vertical scroll. Header strip with small-caps "Tree"
+ * label and a left-pointing chevron to collapse. Closed: a 28px reveal
+ * strip with a right-pointing chevron. The body holds the same indented
+ * tree component the graph pane mounts, so expansion state stays in
+ * sync between the two surfaces.
+ * ========================================================================= */
+
+.tree-rail[data-open="true"] {
+  width: 17rem;
+}
+
+.tree-rail[data-open="false"] {
+  width: 28px;
+}
+
+.tree-rail .rail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s-2) var(--s-3);
+  border-bottom: var(--rule) solid var(--rule-color);
+  flex: 0 0 auto;
+}
+
+.tree-rail[data-open="false"] .rail-header,
+.tree-rail[data-open="false"] .rail-body {
+  display: none;
+}
+
+.tree-rail[data-open="true"] .rail-reveal {
+  display: none;
+}
+
+.tree-rail .rail-label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-smcaps);
+  color: var(--fg-subtle);
+}
+
+.tree-rail .rail-toggle,
+.tree-rail .rail-reveal {
+  background: transparent;
+  border: 0;
+  padding: 2px 6px;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  line-height: 1;
+  color: var(--fg-subtle);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.tree-rail .rail-toggle:hover,
+.tree-rail .rail-reveal:hover {
+  color: var(--fg);
+  background: var(--bg-sunken);
+}
+
+.tree-rail .rail-reveal {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: var(--s-3);
+  border-radius: 0;
+}
+
+.tree-rail .rail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s-2) 0 var(--s-4);
+}
+
+/* Scope strip — sits below rail-header, owns scope-changing UX for the
+ * whole app. Eyebrow + value + caret form the trigger; ✕ shows only
+ * when scoped. Menu is an inline section, not a popover, so the rail
+ * stays one rectangular surface. */
+.tree-rail[data-open="false"] .rail-scope,
+.tree-rail[data-open="false"] .rail-scope-menu {
+  display: none;
+}
+
+/* `display: flex` below has higher specificity than the UA `[hidden]`
+ * rule, so without this explicit override the strip stays visible even
+ * when JS sets the hidden attribute on initial unscoped state. */
+.tree-rail .rail-scope[hidden] {
+  display: none;
+}
+
+.tree-rail .rail-scope {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-1);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: var(--rule) solid var(--rule-color);
+  flex: 0 0 auto;
+}
+
+.tree-rail .rail-scope-trigger {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  background: transparent;
+  border: 0;
+  padding: 2px 4px;
+  margin: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  transition: background 120ms ease;
+}
+
+.tree-rail .rail-scope-trigger:hover {
+  background: var(--bg-sunken);
+}
+
+.tree-rail .rail-scope-eyebrow {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-smcaps);
+  color: var(--fg-subtle);
+  flex: 0 0 auto;
+}
+
+.tree-rail .rail-scope-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tree-rail .rail-scope-value.unscoped {
+  font-family: var(--font-serif);
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+}
+
+.tree-rail .rail-scope-caret {
+  color: var(--fg-subtle);
+  font-size: 0.85em;
+  flex: 0 0 auto;
+}
+
+.tree-rail .rail-scope-clear {
+  background: transparent;
+  border: 0;
+  padding: 0 4px;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  color: var(--fg-subtle);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  flex: 0 0 auto;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.tree-rail .rail-scope-clear:hover {
+  color: var(--fg);
+  background: var(--bg-sunken);
+}
+
+/* Inline dropdown — slots between scope strip and tree body so the rail
+ * stays one continuous column. Hidden by default. */
+.tree-rail .rail-scope-menu[hidden] {
+  display: none;
+}
+
+.tree-rail .rail-scope-menu {
+  padding: var(--s-1) 0;
+  background: var(--bg-sunken);
+  border-bottom: var(--rule) solid var(--rule-color);
+  max-height: 16rem;
+  overflow-y: auto;
+  flex: 0 0 auto;
+}
+
+.tree-rail .rail-scope-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  width: 100%;
+  padding: var(--s-2) var(--s-3);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.tree-rail .rail-scope-item:hover {
+  background: var(--bg-elevated);
+}
+
+.tree-rail .rail-scope-item .item-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--fg);
+}
+
+.tree-rail .rail-scope-item .item-hint {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  color: var(--fg-subtle);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-smcaps);
+}
+
+/* The shared tree component is styled under `.graph-pane` selectors;
+ * mirror the row/chev/swatch/name/scope rules onto `.tree-rail` so the
+ * rail picks up the same look without forking the markup. The hover
+ * dim/highlight chrome stays graph-pane-only because it's tied to the
+ * d3 viz, not the tree. */
+.tree-rail .tree-empty {
+  text-align: center;
+  color: var(--fg-subtle);
+  font-style: italic;
+  font-size: var(--fs-sm);
+  padding: var(--s-4);
+}
+
+.tree-rail .tree-root,
+.tree-rail ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.tree-rail .tree-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 2px var(--s-3) 2px 0;
+  font-family: var(--font-serif);
+  font-size: var(--fs-sm);
+  color: var(--fg);
+  transition: background 120ms ease;
+}
+
+.tree-rail .tree-row:hover {
+  background: var(--bg-elevated);
+}
+
+.tree-rail .tree-row.current {
+  background: var(--selection);
+  color: var(--fg);
+}
+
+.tree-rail .tree-chev {
+  display: inline-flex;
+  width: 1em;
+  color: var(--fg-muted);
+  font-size: 0.8em;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 120ms ease;
+  flex: 0 0 auto;
+}
+
+.tree-rail .tree-chev.invisible {
+  visibility: hidden;
+  cursor: default;
+}
+
+.tree-rail li[aria-expanded="true"] > .tree-row .tree-chev {
+  transform: rotate(90deg);
+}
+
+.tree-rail .tree-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.tree-rail .tree-name {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-rail .tree-name:hover {
+  color: var(--accent);
+}
+
+.tree-rail .tree-scope {
+  background: transparent;
+  border: 0;
+  padding: 2px 6px;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  color: var(--fg-subtle);
+  cursor: pointer;
+  opacity: 0;
+  border-radius: var(--radius-sm);
+  flex: 0 0 auto;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.tree-rail .tree-row:hover .tree-scope,
+.tree-rail .tree-scope:focus-visible {
+  opacity: 1;
+}
+
+.tree-rail .tree-scope:hover {
+  color: var(--accent);
+  background: var(--bg-sunken);
+}
+
+/* =========================================================================
  * graph-viz
  * ========================================================================= */
 
@@ -503,6 +842,22 @@
   stroke: var(--accent);
 }
 
+/* Tree-driven hover: when the user hovers a row in the rail, the
+ * matching graph node lifts visually so the eye can locate it.
+ * Composes with `.current` — hovering the active node combines both
+ * styles. The label is forced visible even on small nodes that would
+ * normally hide it; otherwise the highlight reads as ambiguous. */
+.graph-pane .node.hovered circle {
+  stroke: var(--accent);
+  stroke-width: 2;
+  r: 8;
+}
+
+.graph-pane .node.hovered text {
+  fill: var(--fg);
+  font-weight: 500;
+}
+
 .graph-pane .node text {
   font-family: var(--font-serif);
   font-size: 11px;
@@ -547,6 +902,12 @@
   overflow: hidden;
 }
 
+/* Same specificity gotcha as the rail strip — without an explicit
+ * `[hidden]` rule the UA fallback loses to `display: flex` above. */
+.graph-pane .graph-chrome[hidden] {
+  display: none;
+}
+
 /* Hide on phones — corner controls eat thumb territory; the drawer's
  * Outlinks/Inlinks columns cover navigation needs there. */
 @media (max-width: 600px) {
@@ -584,94 +945,25 @@
   flex: 0 0 auto;
 }
 
-/* View switcher — text-based, no boxed buttons. Active side is full
- * `fg`, inactive is `fg-subtle`; middot separator in between. Reads
- * like an editorial toggle rather than a UI widget. */
-.graph-pane .view-switcher {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--s-1);
-  margin-left: auto;
-}
-
-.graph-pane .view-switcher button {
-  background: transparent;
-  border: 0;
-  padding: 0;
-  font-family: var(--font-serif);
-  font-size: var(--fs-sm);
-  color: var(--fg-subtle);
-  cursor: pointer;
-  transition: color 120ms ease;
-}
-
-.graph-pane .view-switcher button:hover {
-  color: var(--fg-muted);
-}
-
-.graph-pane .view-switcher button.active {
-  color: var(--fg);
-  cursor: default;
-}
-
-.graph-pane .view-switcher .switch-sep {
-  color: var(--fg-subtle);
-  user-select: none;
-}
-
-/* Scope row — value + optional clear + optional "→ current" link.
- * Wraps to a second line if the path is long; the label stays at the
- * left, actions cluster after the value. */
+/* Read-only scope indicator. The picker UI lives in the tree-rail; this
+ * is just feedback that scope is active, with a one-click clear. The
+ * row hides entirely when unscoped (see `[hidden]` in markup). */
 .graph-pane .scope-body {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--s-2);
-  flex-wrap: wrap;
+  gap: var(--s-1);
   margin-left: auto;
   min-width: 0;
 }
 
-/* Scope value is itself the dropdown trigger — no separate "button"
- * affordance because the value IS the button. Hover shifts color to
- * hint at interactivity; `▾` caret makes the dropdown obvious. */
-.graph-pane .scope-value {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--s-1);
-  background: transparent;
-  border: 0;
-  padding: 0 2px;
-  margin: 0;
+.graph-pane .scope-body .scope-text {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--fg);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  max-width: 12rem;
-  transition: color 120ms ease, background 120ms ease;
-}
-
-.graph-pane .scope-value .scope-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.graph-pane .scope-value .scope-caret {
-  color: var(--fg-subtle);
-  font-size: 0.85em;
-  flex: 0 0 auto;
-}
-
-.graph-pane .scope-value.unscoped {
-  color: var(--fg-muted);
-  font-family: var(--font-serif);
-  font-size: var(--fs-sm);
-}
-
-.graph-pane .scope-value:hover {
-  color: var(--fg);
-  background: var(--bg-sunken);
+  max-width: 12rem;
 }
 
 .graph-pane .scope-clear {
@@ -690,52 +982,6 @@
 .graph-pane .scope-clear:hover {
   color: var(--fg);
   background: var(--bg-sunken);
-}
-
-/* Inline dropdown — slots between scope row and legend as another
- * chrome section rather than floating absolutely. When closed, the
- * section is hidden and the legend sits directly below scope. */
-.graph-pane .scope-menu[hidden] {
-  display: none;
-}
-
-.graph-pane .scope-menu {
-  padding: var(--s-1) 0;
-  background: var(--bg-sunken);
-}
-
-.graph-pane .scope-menu .scope-item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s-3);
-  width: 100%;
-  padding: var(--s-2) var(--s-3);
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  color: var(--fg);
-  text-align: left;
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-
-.graph-pane .scope-menu .scope-item:hover {
-  background: var(--bg-elevated);
-}
-
-.graph-pane .scope-menu .scope-item .item-label {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--fg);
-}
-
-.graph-pane .scope-menu .scope-item .item-hint {
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  color: var(--fg-subtle);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-smcaps);
 }
 
 /* Legend section — collection swatches + names, each row also a
@@ -778,138 +1024,6 @@
 
 .graph-pane .legend-row:hover .legend-name {
   color: var(--accent);
-}
-
-/* Tree view — fills the graph pane when `graphView$ === "tree"`. The
- * SVG is hidden via inline `display:none` from graph-viz.ts; we take
- * over the whole pane with a scrollable indented list. */
-.graph-pane .tree-view {
-  position: absolute;
-  inset: 0;
-  overflow-y: auto;
-  padding: var(--s-3) calc(18rem + var(--s-4)) var(--s-5) var(--s-3);
-  /* Right-gutter = chrome max-width + gap, so tree rows never flow
-   * under the floating chrome card. Below `min-width: 14rem` would
-   * waste space; at 1440×900 the graph pane is ~720px wide so the
-   * remaining ~432px is plenty for tree names. If the pane is
-   * narrower than ~20rem total, rows wrap — acceptable tradeoff for
-   * keeping the chrome persistent. */
-  background: var(--bg);
-}
-
-.graph-pane .tree-view[hidden] {
-  display: none;
-}
-
-.graph-pane .tree-view .tree-empty {
-  text-align: center;
-  color: var(--fg-subtle);
-  font-style: italic;
-  font-size: var(--fs-sm);
-}
-
-.graph-pane .tree-root,
-.graph-pane .tree-view ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.graph-pane .tree-row {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  padding: 2px 0;
-  font-family: var(--font-serif);
-  font-size: var(--fs-sm);
-  color: var(--fg);
-  border-radius: var(--radius-sm);
-  transition: background 120ms ease;
-}
-
-.graph-pane .tree-row:hover {
-  background: var(--bg-elevated);
-}
-
-.graph-pane .tree-row.current {
-  background: var(--selection);
-  color: var(--fg);
-}
-
-.graph-pane .tree-chev {
-  display: inline-flex;
-  width: 1em;
-  color: var(--fg-muted);
-  font-size: 0.8em;
-  cursor: pointer;
-  user-select: none;
-  transition: transform 120ms ease;
-  flex: 0 0 auto;
-}
-
-.graph-pane .tree-chev.invisible {
-  visibility: hidden;
-  cursor: default;
-}
-
-.graph-pane li[aria-expanded="true"] > .tree-row .tree-chev {
-  transform: rotate(90deg);
-}
-
-.graph-pane .tree-swatch {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex: 0 0 auto;
-}
-
-.graph-pane .tree-name {
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.graph-pane .tree-name:hover {
-  color: var(--accent);
-}
-
-/* Scope icon — hover-revealed on each row. Fades in rather than
- * popping; gives a sense of the row being "actionable" without
- * visual noise across the whole tree. */
-.graph-pane .tree-scope {
-  background: transparent;
-  border: 0;
-  padding: 2px 6px;
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-xs);
-  color: var(--fg-subtle);
-  cursor: pointer;
-  opacity: 0;
-  border-radius: var(--radius-sm);
-  flex: 0 0 auto;
-  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
-}
-
-.graph-pane .tree-row:hover .tree-scope,
-.graph-pane .tree-scope:focus-visible {
-  opacity: 1;
-}
-
-.graph-pane .tree-scope:hover {
-  color: var(--accent);
-  background: var(--bg-sunken);
 }
 
 /* Collection highlight: hovering a legend row dims every non-matching node

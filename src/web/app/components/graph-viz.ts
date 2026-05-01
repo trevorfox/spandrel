@@ -21,10 +21,9 @@ import { select, type Selection } from "d3-selection";
 import { drag, type D3DragEvent } from "d3-drag";
 import "d3-transition";
 
-import { currentPath$, derived$, graph$, graphView$, scopePath$, collectionOfPath, type WireNode } from "../state.js";
+import { currentPath$, derived$, graph$, hoveredPath$, scopePath$, collectionOfPath, type WireNode } from "../state.js";
 import { pathToUrl } from "../lib/mode.js";
 import type { Graph, SpandrelEdge } from "../../types.js";
-import { mountGraphTree } from "./graph-tree.js";
 
 interface VizNode extends SimulationNodeDatum {
   id: string;
@@ -51,19 +50,14 @@ const COLLECTION_PALETTE = [
 ];
 
 export function mountGraphViz(root: HTMLElement): void {
-  root.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Knowledge graph"></svg><div class="tree-view" hidden></div><div class="empty" hidden>No graph loaded.</div><div class="graph-chrome"><div class="chrome-row view-row"><span class="chrome-label">View</span><span class="view-switcher" role="group" aria-label="View mode"><button type="button" data-view="graph" class="active" aria-pressed="true">Graph</button><span class="switch-sep" aria-hidden="true">·</span><button type="button" data-view="tree" aria-pressed="false">Tree</button></span></div><div class="chrome-row scope-row"><span class="chrome-label">Scope</span><span class="scope-body"></span></div><div class="chrome-section scope-menu" role="listbox" hidden></div><div class="chrome-section legend-section" hidden></div></div><div class="node-tooltip" aria-hidden="true"></div>`;
+  root.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Knowledge graph"></svg><div class="empty" hidden>No graph loaded.</div><div class="graph-chrome"><div class="chrome-row scope-row" hidden><span class="chrome-label">Scope</span><span class="scope-body"><span class="scope-text"></span><button type="button" class="scope-clear" data-action="clear" aria-label="Clear scope">✕</button></span></div><div class="chrome-section legend-section" hidden></div></div><div class="node-tooltip" aria-hidden="true"></div>`;
   const svgEl = root.querySelector("svg") as SVGSVGElement;
-  const treeViewEl = root.querySelector(".tree-view") as HTMLElement;
   const emptyEl = root.querySelector(".empty") as HTMLElement;
   const chromeEl = root.querySelector(".graph-chrome") as HTMLElement;
   const legendEl = root.querySelector(".legend-section") as HTMLElement;
   const scopeRowEl = root.querySelector(".scope-row") as HTMLElement;
-  const scopeBodyEl = root.querySelector(".scope-body") as HTMLElement;
-  const scopeMenuEl = root.querySelector(".scope-menu") as HTMLElement;
-  const viewSwitcherEl = root.querySelector(".view-switcher") as HTMLElement;
+  const scopeTextEl = root.querySelector(".scope-row .scope-text") as HTMLElement;
   const tooltipEl = root.querySelector(".node-tooltip") as HTMLElement;
-
-  mountGraphTree(treeViewEl);
 
   const svg = select(svgEl);
   const gLinks = svg.append("g").attr("class", "links");
@@ -254,11 +248,53 @@ export function mountGraphViz(root: HTMLElement): void {
     });
 
     applyCurrentHighlight();
+    applyHoverHighlight();
   };
 
   const applyCurrentHighlight = () => {
     const current = currentPath$.get();
     gNodes.selectAll<SVGGElement, VizNode>("g.node").classed("current", (d) => d.id === current);
+  };
+
+  // Driven by `hoveredPath$`, which the rail tree publishes on row hover.
+  // For a leaf, just the single node lights up. For a directory, we walk
+  // `hierarchyChildren` to compute every descendant and dim everything
+  // else — the same overlay treatment the legend uses for collections.
+  // The hovered node alone gets `.hovered` (which forces its label
+  // visible), so the user can read which subtree they're inspecting.
+  const applyHoverHighlight = () => {
+    const hovered = hoveredPath$.get();
+    if (!hovered) {
+      root.removeAttribute("data-highlight-collection");
+      gNodes
+        .selectAll<SVGGElement, VizNode>("g.node")
+        .classed("hovered", false)
+        .classed("highlighted", false)
+        .select<SVGTextElement>("text")
+        .text((d) => (visibleLabel(d) ? d.name : ""));
+      return;
+    }
+    const maps = derived$.get();
+    const subtree = new Set<string>([hovered]);
+    if (maps) {
+      const stack = [hovered];
+      while (stack.length > 0) {
+        const p = stack.pop() as string;
+        for (const child of maps.hierarchyChildren.get(p) ?? []) {
+          if (!subtree.has(child)) {
+            subtree.add(child);
+            stack.push(child);
+          }
+        }
+      }
+    }
+    root.setAttribute("data-highlight-collection", "true");
+    gNodes
+      .selectAll<SVGGElement, VizNode>("g.node")
+      .classed("hovered", (d) => d.id === hovered)
+      .classed("highlighted", (d) => subtree.has(d.id))
+      .select<SVGTextElement>("text")
+      .text((d) => (d.id === hovered || visibleLabel(d) ? d.name : ""));
   };
 
   // Legend hover: highlight every node in the named collection and dim the
@@ -319,141 +355,41 @@ export function mountGraphViz(root: HTMLElement): void {
 
   // ── scope row ─────────────────────────────────────────────────────────
   //
-  // The value itself is the dropdown trigger — clicking `All ▾` or a
-  // scoped path opens the menu inline below (as another chrome
-  // section, not a floating popover, so the card stays one visual
-  // object). The ✕ clear affordance sits right next to the text when
-  // scoped.
+  // Read-only indicator. The picker UI lives in the tree-rail header so
+  // there's one place to change scope; here we just show what's active
+  // and offer one-click clear. The whole chrome card hides when unscoped
+  // so the initial view is just the graph — chrome only appears when
+  // there's something worth surfacing (active scope).
   const renderScopeRow = () => {
     const scope = scopePath$.get();
-    const parts: string[] = [];
-    parts.push(
-      `<button type="button" class="scope-value${scope === null ? " unscoped" : ""}" data-action="toggle-menu" aria-haspopup="listbox"><span class="scope-text">${escapeHtml(scope ?? "All")}</span><span class="scope-caret" aria-hidden="true">▾</span></button>`,
-    );
-    if (scope !== null) {
-      parts.push(
-        `<button type="button" class="scope-clear" data-action="clear" aria-label="Clear scope">✕</button>`,
-      );
+    if (scope === null) {
+      scopeRowEl.hidden = true;
+      chromeEl.hidden = true;
+      return;
     }
-    scopeBodyEl.innerHTML = parts.join("");
+    scopeRowEl.hidden = false;
+    chromeEl.hidden = false;
+    scopeTextEl.textContent = scope;
   };
 
-  const closeScopeMenu = () => {
-    scopeMenuEl.hidden = true;
-    const btn = scopeBodyEl.querySelector(".scope-value");
-    if (btn) btn.setAttribute("aria-expanded", "false");
-  };
-
-  const openScopeMenu = () => {
-    const graph = graph$.get();
-    const current = currentPath$.get();
-    const scope = scopePath$.get();
-
-    // Build the choice set. Order: clear first (if scoped), then
-    // current path (if meaningful and not already scope), then the
-    // top-level collections. Skip the scope that's already active so
-    // the menu never offers a no-op.
-    const items: Array<{ path: string | null; label: string; hint?: string }> = [];
-    if (scope !== null) {
-      items.push({ path: null, label: "All", hint: "clear" });
-    }
-    if (current && current !== "/" && current !== scope) {
-      items.push({ path: current, label: current, hint: "current" });
-    }
-    const seen = new Set<string>([scope ?? "", current]);
-    if (graph) {
-      const topLevel = new Set<string>();
-      for (const n of graph.nodes) {
-        const parts = n.path.split("/").filter(Boolean);
-        if (parts.length >= 1) topLevel.add("/" + parts[0]);
-      }
-      for (const p of [...topLevel].sort()) {
-        if (seen.has(p)) continue;
-        items.push({ path: p, label: p });
-      }
-    }
-
-    scopeMenuEl.innerHTML = items
-      .map(
-        (it) =>
-          `<button type="button" class="scope-item" role="option" data-action="pick-scope" data-path="${escapeAttr(it.path ?? "__all__")}"><span class="item-label">${escapeHtml(it.label)}</span>${it.hint ? `<span class="item-hint">${escapeHtml(it.hint)}</span>` : ""}</button>`,
-      )
-      .join("");
-    scopeMenuEl.hidden = false;
-    const btn = scopeBodyEl.querySelector(".scope-value");
-    if (btn) btn.setAttribute("aria-expanded", "true");
-  };
-
-  // Delegated chrome click handler for view toggle + scope actions.
+  // Delegated chrome click handler for the scope-chip clear button.
   chromeEl.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
-    const viewBtn = target.closest<HTMLButtonElement>(".view-switcher button[data-view]");
-    if (viewBtn) {
-      const view = viewBtn.getAttribute("data-view");
-      if (view === "graph" || view === "tree") graphView$.set(view);
-      return;
-    }
     const action = target.closest<HTMLElement>("[data-action]");
-    if (!action) return;
-    const kind = action.getAttribute("data-action");
-    if (kind === "clear") {
+    if (action?.getAttribute("data-action") === "clear") {
       scopePath$.set(null);
-      closeScopeMenu();
-      return;
-    }
-    if (kind === "toggle-menu") {
-      if (scopeMenuEl.hidden) openScopeMenu();
-      else closeScopeMenu();
-      return;
-    }
-    if (kind === "pick-scope") {
-      const path = action.getAttribute("data-path");
-      scopePath$.set(path === "__all__" ? null : path);
-      closeScopeMenu();
-      return;
     }
   });
 
-  // Click outside the scope row or menu → close the menu. Guards the
-  // chrome's other interactive regions (view switcher, legend) from
-  // being treated as "outside" dismissals.
-  document.addEventListener("click", (e) => {
-    const t = e.target as Node;
-    if (!scopeRowEl.contains(t) && !scopeMenuEl.contains(t)) closeScopeMenu();
-  });
-
-  // ── view toggle (Graph | Tree) ────────────────────────────────────────
-  //
-  // Two buttons share the graph pane; `graphView$` controls which is
-  // visible. Hiding the SVG skips the d3 tick cost while in tree mode;
-  // the tree component self-updates via derived$/scopePath$ subs, so
-  // no coordination needed here beyond show/hide.
-  // Two view modes share the graph pane; `graphView$` controls which
-  // is visible. Hiding the SVG skips d3 tick cost while in tree mode;
-  // the tree component self-updates via derived$/scopePath$ subs, so
-  // no coordination needed here beyond show/hide + active-button class.
-  const applyView = () => {
-    const view = graphView$.get();
-    const isGraph = view === "graph";
-    svgEl.style.display = isGraph ? "" : "none";
-    treeViewEl.hidden = isGraph;
-    viewSwitcherEl.querySelectorAll<HTMLButtonElement>("button[data-view]").forEach((btn) => {
-      const match = btn.getAttribute("data-view") === view;
-      btn.classList.toggle("active", match);
-      btn.setAttribute("aria-pressed", String(match));
-    });
-  };
-
-  graphView$.subscribe(applyView);
-  currentPath$.subscribe(renderScopeRow);
+  scopePath$.subscribe(renderScopeRow);
 
   // Initial render + subscriptions.
   renderScopeRow();
-  applyView();
   rebuild(graph$.get());
   graph$.subscribe(rebuild);
   scopePath$.subscribe(() => rebuild(graph$.get()));
   currentPath$.subscribe(applyCurrentHighlight);
+  hoveredPath$.subscribe(applyHoverHighlight);
 
   // Size.
   const resizeObserver = new ResizeObserver(() => {

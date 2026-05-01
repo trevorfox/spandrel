@@ -134,19 +134,26 @@ export const derived$ = new Signal<DerivedMaps | null>(null);
 export const scopePath$ = new Signal<string | null>(null);
 
 /**
- * Which view of the graph is visible in the graph pane — the D3
- * force-directed layout or the indented tree. Transient; resets to
- * `"graph"` on reload.
- */
-export type GraphView = "graph" | "tree";
-export const graphView$ = new Signal<GraphView>("graph");
-
-/**
  * Paths currently expanded in the tree view. Transient. Seeded on
  * first render from the ancestors of `currentPath$`, so whichever
  * node the user is reading is visible without manual expansion.
  */
 export const treeExpanded$ = new Signal<Set<string>>(new Set<string>());
+
+/**
+ * Whether the left-rail tree is open. Persisted to localStorage so the
+ * user's choice survives reloads. Initial default is mode-dependent and
+ * set in `main.ts`: open in dev (authoring), closed in publish (reading).
+ */
+export const treeRailOpen$ = new Signal<boolean>(true);
+
+/**
+ * Path the user is hovering — currently driven by tree-row mouseenter
+ * in the rail, consumed by the graph viz to highlight the matching
+ * node circle. `null` means nothing is hovered. Transient, never
+ * persisted.
+ */
+export const hoveredPath$ = new Signal<string | null>(null);
 
 /**
  * Body content by node path, populated lazily when a node is visited.

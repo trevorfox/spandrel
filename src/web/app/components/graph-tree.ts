@@ -14,6 +14,7 @@
 import {
   currentPath$,
   derived$,
+  hoveredPath$,
   scopePath$,
   treeExpanded$,
   collectionOfPath,
@@ -123,6 +124,20 @@ export function mountGraphTree(root: HTMLElement): void {
       treeExpanded$.set(expanded);
     }
   };
+
+  // Delegated mouseover/mouseout: every tree row publishes its path to
+  // `hoveredPath$` so the graph viz can highlight the matching node.
+  // Using mouseover (bubbles) instead of mouseenter (doesn't) so a single
+  // listener at the root covers every dynamically-rendered row.
+  root.addEventListener("mouseover", (e) => {
+    const row = (e.target as HTMLElement).closest("li[data-path]") as HTMLElement | null;
+    if (!row) return;
+    const path = row.getAttribute("data-path");
+    if (path) hoveredPath$.set(path);
+  });
+  root.addEventListener("mouseleave", () => {
+    hoveredPath$.set(null);
+  });
 
   // Delegated click handler for the three actions: toggle / navigate / scope.
   root.addEventListener("click", (e) => {

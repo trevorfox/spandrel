@@ -197,7 +197,11 @@ textarea:focus {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* tree-rail | content | graph-pane.
+   * Rail width is driven by `.tree-rail` itself (auto here), so when it
+   * collapses to a thin reveal strip the column shrinks with it without
+   * a layout signal. */
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -208,6 +212,16 @@ textarea:focus {
   padding: var(--s-7) var(--s-8);
   border-right: var(--rule) solid var(--rule-color);
   min-width: 0;
+}
+
+.tree-rail {
+  border-right: var(--rule) solid var(--rule-color);
+  background: var(--bg);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .graph-pane {
@@ -249,6 +263,12 @@ textarea:focus {
   .content {
     border-right: 0;
     border-bottom: var(--rule) solid var(--rule-color);
+  }
+  /* Tree rail is a desktop affordance — on phones and small tablets the
+   * graph pane's own Tree view toggle covers the same need without
+   * stealing scarce horizontal space. */
+  .tree-rail {
+    display: none;
   }
 }
 
