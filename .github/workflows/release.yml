@@ -28,7 +28,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Node 22 ships with npm 11.x, which has built-in OIDC
+          # trusted-publisher support for `npm publish --provenance`.
+          # Node 20's bundled npm (10.x) does not, and silently falls
+          # through to the empty _authToken that setup-node writes when
+          # NODE_AUTH_TOKEN is unset — surfacing as a generic 404.
+          node-version: '22'
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
       - run: npm ci
