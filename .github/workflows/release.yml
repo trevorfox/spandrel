@@ -40,4 +40,10 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm run build
       - run: npm test
+      # `actions/setup-node` writes `_authToken=${NODE_AUTH_TOKEN}` to
+      # ~/.npmrc; with no NODE_AUTH_TOKEN that becomes an empty token,
+      # which npm uses verbatim and gets a 404 instead of falling
+      # through to the OIDC trusted-publisher exchange. Stripping the
+      # token line lets the OIDC path engage.
+      - run: rm -f ~/.npmrc
       - run: npm publish --provenance --access public
