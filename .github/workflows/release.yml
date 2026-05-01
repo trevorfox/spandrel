@@ -31,10 +31,6 @@ jobs:
           node-version: '22'
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
-      # OIDC trusted-publisher publish landed in npm 11.5.1; Node 22
-      # still ships with npm 10.9. Explicitly upgrade so the publish
-      # step can do the OIDC exchange against the registry.
-      - run: npm install -g npm@latest
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm run build
@@ -46,4 +42,9 @@ jobs:
       # falling through to the OIDC trusted-publisher exchange.
       # Removing the file lets the OIDC path engage.
       - run: rm -f "$NPM_CONFIG_USERCONFIG"
-      - run: npm publish --provenance --access public
+      # Node 22 still ships with npm 10.9, but OIDC trusted-publisher
+      # publish needs npm 11.5.1+. `npm install -g npm@latest` self-
+      # upgrades into a broken state (promise-retry not-found). Using
+      # `npx -p npm@latest` runs the latest npm from a cache for just
+      # this step without disturbing the system install.
+      - run: npx -y -p npm@latest npm publish --provenance --access public
