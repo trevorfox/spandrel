@@ -1,0 +1,38 @@
+name: Release to npm
+
+# Triggered by pushing a version tag (e.g. `v0.4.3`). Tag the release
+# locally, push it, and the rest happens here:
+#
+#   npm version patch    # bumps package.json + commits + tags
+#   git push --follow-tags
+#
+# npm's trusted-publisher mechanism (configured at
+# https://www.npmjs.com/package/spandrel/access) exchanges the
+# workflow's OIDC token for a short-lived publish credential, so no
+# NPM_TOKEN secret is stored anywhere. The `--provenance` flag attaches
+# a signed attestation to the published tarball that ties it back to
+# this exact workflow run.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run build
+      - run: npm test
+      - run: npm publish --provenance --access public
