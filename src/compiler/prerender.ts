@@ -430,6 +430,7 @@ export function renderPage(input: RenderPageInput): string {
       <header id="site-banner" class="site-banner" aria-label="Site">${bannerHtml}</header>
       <header id="top-bar" class="top-bar" aria-label="Navigation"></header>
       <main id="layout" class="layout">
+        <aside id="tree-rail" class="tree-rail" aria-label="File tree"></aside>
         <section id="content" class="content" aria-label="Node content">
           <div id="prerender-content" class="content-body">
             ${

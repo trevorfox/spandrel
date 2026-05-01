@@ -370,7 +370,7 @@ describe("spandrel publish — --static prerender", () => {
       path.join(out, "clients/index.html"),
       path.join(out, "clients/acme-corp/index.html"),
     ];
-    const required = ["site-banner", "top-bar", "content", "graph-pane", "drawer", "view-pill"];
+    const required = ["site-banner", "top-bar", "tree-rail", "content", "graph-pane", "drawer", "view-pill"];
     for (const page of pages) {
       const html = fs.readFileSync(page, "utf-8");
       for (const id of required) {
