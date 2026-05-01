@@ -46,4 +46,14 @@ jobs:
       # through to the OIDC trusted-publisher exchange. Stripping the
       # token line lets the OIDC path engage.
       - run: rm -f ~/.npmrc
-      - run: npm publish --provenance --access public
+      - name: Diagnose OIDC environment
+        run: |
+          echo "npm version: $(npm --version)"
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}"
+          echo "GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
+          echo "GITHUB_WORKFLOW_REF: $GITHUB_WORKFLOW_REF"
+          echo "GITHUB_REF: $GITHUB_REF"
+          echo "--- ~/.npmrc state (after rm) ---"
+          cat ~/.npmrc 2>/dev/null || echo "(absent)"
+      - run: npm publish --provenance --access public --loglevel=verbose
