@@ -198,9 +198,10 @@ The mount root must contain the standard layout skeleton (elements with ids `sit
 - External routing (`routing: "external"` + `onNavigate`) for hosts with their own router.
 
 **0.5.0 Phase A known limitations** (deferred to a later release when a real consumer asks):
-- Component CSS specificity is non-zero. Hosts overriding rules beyond token redefinition need higher-specificity selectors or `!important`. A `:where()` wrap pass that drops specificity to zero is mechanical work for a future release.
 - Module-level signals (per-mount state) — multiple viewers on one page share state. Single-mount works correctly; multi-mount lands when a consumer needs it.
-- CSS bundle path — Vite emits a hashed filename in `dist/web/assets/`. Consumers either import it via the SPA's `index.html` shell or copy `src/web/app/styles/{tokens,components,base}.css` directly. A stable `spandrel/web/styles.css` re-export ships with the same Phase B refactor as the `:where()` wrap.
+- CSS bundle path — Vite emits a hashed filename in `dist/web/assets/`. Consumers either import it via the SPA's `index.html` shell or copy `src/web/app/styles/{tokens,components,base}.css` directly. A stable `spandrel/web/styles.css` re-export is still pending.
+
+Viewer styles ship in cascade layers (`@layer spandrel-base`, `@layer spandrel-components`). Host CSS that lives outside any layer — or in a layer declared after `spandrel-components` — wins over the viewer's rules regardless of specificity. No `:where()`, no `!important`.
 
 ---
 

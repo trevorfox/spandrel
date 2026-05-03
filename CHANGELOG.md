@@ -6,9 +6,15 @@ All notable changes to Spandrel are documented here. The format is based on [Kee
 
 **BREAKING: companion-file lowercase forms are now a hard error.** The `companion_file_lowercase` deprecation warning introduced in 0.5.0 is promoted to a compile error. Rename any lowercase companion files (`design.md`, `skill.md`, `agent.md`, `readme.md`, `claude.md`, `agents.md`) to their uppercase canonical stems (`DESIGN.md`, `SKILL.md`, `AGENT.md`, `README.md`, `CLAUDE.md`, `AGENTS.md`) before upgrading.
 
+This release also lands the three Phase A viewer deferrals from 0.5.0 (CSS specificity, per-mount state, stable `spandrel/web/styles.css` re-export) — see "Phase B viewer polish" below.
+
 ### Changed
 
 - **`companion_file_lowercase` warning → compile error.** `src/compiler/compiler.ts` now throws when it encounters a lowercase companion-file form. The error message names the offending file and tells the user the canonical uppercase stem to rename to. Compilation aborts on the first violation; fix and re-run.
+
+### Phase B viewer polish
+
+- **Cascade layers for viewer styles.** `src/web/app/styles/components.css` and `base.css` are wrapped in `@layer spandrel-components` and `@layer spandrel-base` respectively, with explicit layer ordering. Hosts embedding the viewer override visual rules with unlayered CSS (or rules in a later layer) — their selectors win regardless of specificity, no `!important` needed. Internal cascade behaves normally, so state-toggling rules using attribute selectors (e.g. `.tree-rail[data-open="false"]`) keep their natural specificity. A regression test (`test/web/css-specificity.test.ts`) asserts the layer wrap holds across edits.
 
 ### Migration notes
 
@@ -17,6 +23,7 @@ All notable changes to Spandrel are documented here. The format is based on [Kee
 - **No other breaking changes in 0.6.0.** Top-level imports, sub-path imports, REST/MCP wire surfaces, and storage contracts are unchanged from 0.5.0.
 
 ---
+
 
 ## [0.5.0] — 2026-05-03
 

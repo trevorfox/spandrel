@@ -1,3 +1,7 @@
+@layer spandrel-base, spandrel-components;
+
+@layer spandrel-components {
+
 /* Per-component visual styles. */
 
 /* =========================================================================
@@ -1339,5 +1343,7 @@
     padding: var(--s-1) var(--s-2);
     white-space: nowrap;
   }
+
+}
 
 }
