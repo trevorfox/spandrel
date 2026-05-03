@@ -197,9 +197,17 @@ The mount root must contain the standard layout skeleton (elements with ids `sit
 - Token CSS scoped to `[data-theme]` (no `:root` prefix) so tokens apply wherever the attribute lives. Hosts override colors/typography/spacing by redefining tokens for `[data-theme="custom"]`.
 - External routing (`routing: "external"` + `onNavigate`) for hosts with their own router.
 
+Stable CSS import:
+
+```ts
+// In a bundler that resolves package CSS imports (Vite, Webpack, esbuild, …)
+import "spandrel/web/styles.css";
+```
+
+The export concatenates `tokens.css` → `components.css` → `base.css` from the viewer source in load order. Hosts that need only the design tokens can copy `src/web/app/styles/tokens.css` directly; the bundled export is the all-in-one path for embedders.
+
 **0.5.0 Phase A known limitations** (deferred to a later release when a real consumer asks):
 - Module-level signals (per-mount state) — multiple viewers on one page share state. Single-mount works correctly; multi-mount lands when a consumer needs it.
-- CSS bundle path — Vite emits a hashed filename in `dist/web/assets/`. Consumers either import it via the SPA's `index.html` shell or copy `src/web/app/styles/{tokens,components,base}.css` directly. A stable `spandrel/web/styles.css` re-export is still pending.
 
 Viewer styles ship in cascade layers (`@layer spandrel-base`, `@layer spandrel-components`). Host CSS that lives outside any layer — or in a layer declared after `spandrel-components` — wins over the viewer's rules regardless of specificity. No `:where()`, no `!important`.
 

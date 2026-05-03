@@ -26,6 +26,7 @@
       "import": "./dist/*",
       "default": "./dist/*"
     },
+    "./web/styles.css": "./dist/web/styles.css",
     "./package.json": "./package.json"
   },
   "bin": {
@@ -47,9 +48,10 @@
     "model-context-protocol"
   ],
   "scripts": {
-    "build": "rm -rf dist && npm run build:web && tsc && chmod +x dist/cli.js && npm run build:schema",
+    "build": "rm -rf dist && npm run build:web && npm run build:web-styles && tsc && chmod +x dist/cli.js && npm run build:schema",
     "build:schema": "tsx scripts/generate-schema-json.ts",
     "build:web": "vite build --config src/web/app/vite.config.ts",
+    "build:web-styles": "tsx scripts/build-web-styles.ts",
     "prepublishOnly": "npm run build",
     "dev": "tsx src/cli.ts dev",
     "dev:web": "vite --config src/web/app/vite.config.ts",

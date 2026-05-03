@@ -15,6 +15,7 @@ This release also lands the three Phase A viewer deferrals from 0.5.0 (CSS speci
 ### Phase B viewer polish
 
 - **Cascade layers for viewer styles.** `src/web/app/styles/components.css` and `base.css` are wrapped in `@layer spandrel-components` and `@layer spandrel-base` respectively, with explicit layer ordering. Hosts embedding the viewer override visual rules with unlayered CSS (or rules in a later layer) — their selectors win regardless of specificity, no `!important` needed. Internal cascade behaves normally, so state-toggling rules using attribute selectors (e.g. `.tree-rail[data-open="false"]`) keep their natural specificity. A regression test (`test/web/css-specificity.test.ts`) asserts the layer wrap holds across edits.
+- **Stable CSS import path: `spandrel/web/styles.css`.** The viewer's source CSS (`tokens.css` + `components.css` + `base.css`) is concatenated at build time into `dist/web/styles.css` and exposed via `package.json` `exports`. Embedders using `mountViewer()` can now `import "spandrel/web/styles.css"` from a bundler that resolves package CSS, instead of reaching into the hashed Vite output.
 
 ### Migration notes
 
@@ -52,11 +53,10 @@ Document nodes + embeddable viewer (Phase A). See `_notes/PROPOSAL-0.5.0-documen
 
 ### Phase A scope and Phase B deferrals
 
-The embeddable viewer ships Phase A: data-source pluggability, theme-root locality, token CSS scoping. Three items are explicitly deferred to a later release when a real second consumer asks:
+The embeddable viewer ships Phase A: data-source pluggability, theme-root locality, token CSS scoping, and the stable `spandrel/web/styles.css` re-export path. Two items are explicitly deferred to a later release when a real second consumer asks:
 
 - Component CSS specificity reduction (`:where()` wrap of all 1,343 lines of component rules).
 - Per-mount state (multiple viewers on one page sharing or not sharing state).
-- Stable `spandrel/web/styles.css` re-export path (Vite currently emits a hashed filename).
 
 Single-mount embedding works correctly today; the deferrals affect rare use cases and are tracked in `PUBLIC-API.md` and the proposal doc.
 
