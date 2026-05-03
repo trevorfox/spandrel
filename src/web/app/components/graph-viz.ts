@@ -21,7 +21,7 @@ import { select, type Selection } from "d3-selection";
 import { drag, type D3DragEvent } from "d3-drag";
 import "d3-transition";
 
-import { currentPath$, derived$, graph$, hoveredPath$, scopePath$, collectionOfPath, type WireNode } from "../state.js";
+import { collectionOfPath, type ViewerState, type WireNode } from "../state.js";
 import { pathToUrl } from "../lib/mode.js";
 import type { Graph, SpandrelEdge } from "../../types.js";
 
@@ -49,7 +49,8 @@ const COLLECTION_PALETTE = [
   "#8a5c3c",
 ];
 
-export function mountGraphViz(root: HTMLElement): void {
+export function mountGraphViz(root: HTMLElement, state: ViewerState): void {
+  const { currentPath$, derived$, graph$, hoveredPath$, scopePath$ } = state;
   root.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Knowledge graph"></svg><div class="empty" hidden>No graph loaded.</div><div class="graph-chrome"><div class="chrome-row scope-row" hidden><span class="chrome-label">Scope</span><span class="scope-body"><span class="scope-text"></span><button type="button" class="scope-clear" data-action="clear" aria-label="Clear scope">✕</button></span></div><div class="chrome-section legend-section" hidden></div></div><div class="node-tooltip" aria-hidden="true"></div>`;
   const svgEl = root.querySelector("svg") as SVGSVGElement;
   const emptyEl = root.querySelector(".empty") as HTMLElement;

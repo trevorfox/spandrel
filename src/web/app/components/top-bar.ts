@@ -1,16 +1,13 @@
 /** Top bar: breadcrumb, search, format toggle, theme toggle. */
 
-import {
-  currentPath$,
-  derived$,
-  graph$,
-} from "../state.js";
+import type { ViewerState } from "../state.js";
 import { pathToUrl } from "../lib/mode.js";
 import { rawHref } from "../lib/raw-href.js";
 import { currentTheme, toggleTheme } from "../lib/theme.js";
 import type { SearchHit } from "./search.js";
 
-export function mountTopBar(root: HTMLElement): void {
+export function mountTopBar(root: HTMLElement, state: ViewerState): void {
+  const { currentPath$, derived$, graph$ } = state;
   root.innerHTML = `
     <nav class="breadcrumb" aria-label="Path"></nav>
     <div class="search" role="search">

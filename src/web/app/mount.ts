@@ -1,11 +1,17 @@
 /**
- * Public mount API for the embeddable Spandrel viewer.
+ * Public mount API for the embeddable viewer.
  *
  * Hosts call `mountViewer(rootEl, options)` to render the viewer inside
  * `rootEl`. The viewer expects a specific DOM skeleton to be present inside
  * `rootEl` (the same skeleton `spandrel publish` ships in `index.html`).
  *
- * Phase A surface:
+ * Each call instantiates an isolated `ViewerState` (per-mount state), so
+ * multiple viewers on one page navigate independently. Hosts get true
+ * multi-mount: two `mountViewer()` calls under different roots can read
+ * different paths, scope to different subtrees, and toggle their rails
+ * without interfering.
+ *
+ * Phase A surface (0.5.0):
  *   - Pluggable data source (`createStaticDataSource()` for bundles,
  *     `createRestDataSource()` for any spec-conformant REST endpoint).
  *   - Theme root local to the viewer (defaults to the mount root, falls back
@@ -15,18 +21,12 @@
  *     stylesheets can override without `!important`. Token CSS is keyed off
  *     `[data-theme]` rather than `:root[data-theme]` so it scopes to whatever
  *     element carries the attribute.
- *
- * Phase B (per-mount state, sub-component embeds, write hooks) is documented
- * in the proposal and lands when a real consumer asks for it.
  */
 
 import {
-  currentPath$,
-  graph$,
+  createViewerState,
   parseHash,
-  viewFormat$,
-  error$,
-  treeRailOpen$,
+  type ViewerState,
 } from "./state.js";
 import { fetchGraph, setDataSource } from "./graph-data.js";
 import {
@@ -103,18 +103,27 @@ export interface ViewerHandle {
  * `index.html`.
  */
 export function mountViewer(rootEl: HTMLElement, options: ViewerOptions = {}): ViewerHandle {
-  // 1. Wire the data source first so any subsequent fetch goes through it.
+  // 1. Create per-mount state. All component subscriptions and updates flow
+  //    through this object, so two simultaneous mounts on the same page
+  //    don't share signals.
+  const state: ViewerState = createViewerState();
+
+  // 2. Wire the data source first so any subsequent fetch goes through it.
+  //    The data-source registry is module-level (shared across mounts) — it
+  //    holds I/O configuration, not viewer state. Two mounts that want
+  //    different sources call `setDataSource` in sequence; the last write
+  //    wins, which matches Phase A scope.
   const dataSource = options.data ?? createStaticDataSource();
   setDataSource(dataSource);
 
-  // 2. Choose the theme root. Default to the mount element so embedded
+  // 3. Choose the theme root. Default to the mount element so embedded
   //    viewers don't fight a host page's own theming. Static publish
   //    explicitly passes `document.documentElement` for whole-page styling.
   const themeHost = options.themeRoot ?? rootEl;
   setThemeRoot(themeHost);
   applyTheme(readStoredTheme() ?? defaultTheme());
 
-  // 3. Look up layout regions inside the mount root.
+  // 4. Look up layout regions inside the mount root.
   const find = <T extends HTMLElement>(id: string): T => {
     const el = rootEl.querySelector<T>(`#${CSS.escape(id)}`) ?? document.getElementById(id);
     if (!el) throw new Error(`Spandrel viewer: missing element #${id} in mount root`);
@@ -129,43 +138,43 @@ export function mountViewer(rootEl: HTMLElement, options: ViewerOptions = {}): V
   const viewPill = find<HTMLElement>("view-pill");
   const treeRail = find<HTMLElement>("tree-rail");
 
-  // 4. Static-mode detection: a prerender block in the page is the signal.
+  // 5. Static-mode detection: a prerender block in the page is the signal.
   //    Embedded contexts won't have one, so `isStaticMode()` returns false
   //    naturally.
   const prerender = document.getElementById("prerender-content");
   setStaticMode(prerender !== null);
   prerender?.remove();
 
-  // 5. Tree rail default.
+  // 6. Tree rail default.
   const stored = readStoredRailOpen();
-  treeRailOpen$.set(stored !== null ? stored : !isStaticMode());
+  state.treeRailOpen$.set(stored !== null ? stored : !isStaticMode());
 
-  // 6. Mount components.
-  mountSiteBanner(siteBanner);
-  mountTopBar(topBar);
-  mountContent(content);
-  mountTreeRail(treeRail);
-  mountGraphViz(graphPane);
-  mountDrawer(drawer);
+  // 7. Mount components, threading state into each.
+  mountSiteBanner(siteBanner, state);
+  mountTopBar(topBar, state);
+  mountContent(content, state);
+  mountTreeRail(treeRail, state);
+  mountGraphViz(graphPane, state);
+  mountDrawer(drawer, state);
   mountViewPill(viewPill);
 
-  // 7. Fatal-error surface.
-  const errorUnsub = error$.subscribe((msg) => {
+  // 8. Fatal-error surface.
+  const errorUnsub = state.error$.subscribe((msg) => {
     if (msg) renderFatalError(content, msg);
   });
 
-  // 8. Route handling.
+  // 9. Route handling.
   const routing = options.routing ?? "hash";
   const syncRoute = (): void => {
     const staticPath = staticPathFromLocation();
     if (staticPath !== null) {
-      currentPath$.set(staticPath);
-      viewFormat$.set("rendered");
+      state.currentPath$.set(staticPath);
+      state.viewFormat$.set("rendered");
       return;
     }
     const { path, format } = parseHash(window.location.hash);
-    currentPath$.set(path);
-    viewFormat$.set(format);
+    state.currentPath$.set(path);
+    state.viewFormat$.set(format);
   };
 
   let navigateUnsub: () => void = () => {};
@@ -181,50 +190,50 @@ export function mountViewer(rootEl: HTMLElement, options: ViewerOptions = {}): V
     // External routing: caller drives currentPath$ via the returned handle's
     // navigate(). Notify caller of internal navigations (link clicks).
     if (options.initialPath) {
-      currentPath$.set(options.initialPath);
+      state.currentPath$.set(options.initialPath);
     }
     if (options.onNavigate) {
-      navigateUnsub = currentPath$.subscribe(options.onNavigate);
+      navigateUnsub = state.currentPath$.subscribe(options.onNavigate);
     }
   }
 
-  // 9. Lazy content loader.
-  startNodeLoader();
+  // 10. Lazy content loader.
+  startNodeLoader(state);
 
-  // 10. Meta sync (only meaningful when the viewer owns the document).
+  // 11. Meta sync (only meaningful when the viewer owns the document).
   function syncMeta(): void {
     if (themeHost !== document.documentElement) return;
-    const g = graph$.get();
-    const path = currentPath$.get();
+    const g = state.graph$.get();
+    const path = state.currentPath$.get();
     if (!g) return;
     const node = g.nodes.find((n) => n.path === path);
     if (!node) return;
     const root = g.nodes.find((n) => n.path === "/");
     updateMeta(node, root?.name ?? "");
   }
-  const metaUnsubA = graph$.subscribe(syncMeta);
-  const metaUnsubB = currentPath$.subscribe(syncMeta);
+  const metaUnsubA = state.graph$.subscribe(syncMeta);
+  const metaUnsubB = state.currentPath$.subscribe(syncMeta);
 
-  // 11. Initial data load.
-  void loadGraph();
+  // 12. Initial data load.
+  void loadGraph(state);
 
-  // 12. Live updates. Prefer the data source's own `subscribe` if it has
+  // 13. Live updates. Prefer the data source's own `subscribe` if it has
   //     one; fall back to the legacy SSE channel for the static-publish
   //     case where the dev server pushes `reload` on `/events`.
   let liveUnsub: () => void = () => {};
   if (typeof dataSource.subscribe === "function") {
     liveUnsub = dataSource.subscribe(() => {
-      void loadGraph();
+      void loadGraph(state);
     });
   } else if (!isStaticMode()) {
     liveUnsub = startSse(() => {
-      void loadGraph();
+      void loadGraph(state);
     });
   }
 
   return {
     navigate(path: string) {
-      currentPath$.set(path);
+      state.currentPath$.set(path);
     },
     destroy() {
       navigateUnsub();
@@ -236,16 +245,16 @@ export function mountViewer(rootEl: HTMLElement, options: ViewerOptions = {}): V
   };
 }
 
-async function loadGraph(): Promise<void> {
+async function loadGraph(state: ViewerState): Promise<void> {
   try {
     const g = await fetchGraph();
-    graph$.set(g);
-    error$.set(null);
+    state.graph$.set(g);
+    state.error$.set(null);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     // eslint-disable-next-line no-console
     console.error("[spandrel] graph fetch failed:", msg);
-    error$.set(msg);
+    state.error$.set(msg);
   }
 }
 

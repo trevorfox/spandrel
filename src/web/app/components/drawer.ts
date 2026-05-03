@@ -1,6 +1,6 @@
 /** Bottom drawer: outlinks · inlinks · warnings. Three columns. Collapsible. */
 
-import { currentPath$, derived$ } from "../state.js";
+import type { ViewerState, DerivedMaps } from "../state.js";
 import { pathToUrl } from "../lib/mode.js";
 import type { LinkTypeInfo, SpandrelEdge } from "../../types.js";
 
@@ -9,7 +9,8 @@ import type { LinkTypeInfo, SpandrelEdge } from "../../types.js";
 // has room and keeps it open so users see relations alongside content.
 const MOBILE_BP = 600;
 
-export function mountDrawer(root: HTMLElement): void {
+export function mountDrawer(root: HTMLElement, state: ViewerState): void {
+  const { currentPath$, derived$ } = state;
   const startCollapsed = window.innerWidth <= MOBILE_BP;
   root.setAttribute("data-collapsed", String(startCollapsed));
   root.innerHTML = `
@@ -74,7 +75,7 @@ export function mountDrawer(root: HTMLElement): void {
 
 function renderEdges(
   edges: SpandrelEdge[],
-  maps: NonNullable<ReturnType<typeof derived$.get>>,
+  maps: DerivedMaps,
   direction: "in" | "out",
 ): string {
   if (edges.length === 0) {

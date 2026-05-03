@@ -11,7 +11,7 @@
  * wrap to its natural height. Tapping again collapses back to one line.
  */
 
-import { graph$ } from "../state.js";
+import type { ViewerState } from "../state.js";
 import { pathToUrl } from "../lib/mode.js";
 
 function escapeHtml(s: string): string {
@@ -33,7 +33,8 @@ function escapeHtml(s: string): string {
   });
 }
 
-export function mountSiteBanner(el: HTMLElement): void {
+export function mountSiteBanner(el: HTMLElement, state: ViewerState): void {
+  const { graph$ } = state;
   el.setAttribute("data-expanded", "false");
 
   function render(): void {

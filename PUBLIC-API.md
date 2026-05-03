@@ -206,10 +206,10 @@ import "spandrel/web/styles.css";
 
 The export concatenates `tokens.css` → `components.css` → `base.css` from the viewer source in load order. Hosts that need only the design tokens can copy `src/web/app/styles/tokens.css` directly; the bundled export is the all-in-one path for embedders.
 
-**0.5.0 Phase A known limitations** (deferred to a later release when a real consumer asks):
-- Module-level signals (per-mount state) — multiple viewers on one page share state. Single-mount works correctly; multi-mount lands when a consumer needs it.
-
-Viewer styles ship in cascade layers (`@layer spandrel-base`, `@layer spandrel-components`). Host CSS that lives outside any layer — or in a layer declared after `spandrel-components` — wins over the viewer's rules regardless of specificity. No `:where()`, no `!important`.
+**0.5.0 Phase A deferrals — resolved in 0.6.0:**
+- Viewer styles ship in cascade layers (`@layer spandrel-base`, `@layer spandrel-components`). Host CSS outside any layer — or in a layer declared after `spandrel-components` — wins over the viewer's rules regardless of specificity. No `:where()`, no `!important`.
+- Per-mount viewer state — each `mountViewer()` call instantiates an isolated state object. Multiple viewers under different roots on the same page navigate, scope, and toggle their rails independently.
+- Stable CSS import path — `import "spandrel/web/styles.css"` resolves to the bundled tokens + components + base concatenation documented above.
 
 ---
 

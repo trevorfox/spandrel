@@ -1,12 +1,13 @@
 /** Content pane: metadata header + node body in the selected format. */
 
-import { contentCache$, currentPath$, derived$, viewFormat$ } from "../state.js";
+import type { ViewerState, DerivedMaps } from "../state.js";
 import { renderMarkdown } from "../lib/markdown.js";
 import { renderNodeAsMarkdown } from "../lib/render-node-markdown.js";
 import { pathToUrl } from "../lib/mode.js";
 import type { SpandrelNode } from "../../types.js";
 
-export function mountContent(root: HTMLElement): void {
+export function mountContent(root: HTMLElement, state: ViewerState): void {
+  const { contentCache$, currentPath$, derived$, viewFormat$ } = state;
   const render = () => {
     const path = currentPath$.get();
     const maps = derived$.get();
@@ -57,7 +58,7 @@ export function mountContent(root: HTMLElement): void {
 
 function renderNode(
   node: SpandrelNode,
-  maps: NonNullable<ReturnType<typeof derived$.get>>,
+  maps: DerivedMaps,
   loading: boolean,
 ): string {
   const fmPairs = collectFrontmatterPairs(node.frontmatter);
