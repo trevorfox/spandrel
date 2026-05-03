@@ -114,6 +114,7 @@ Full walkthrough: [docs/deployment/](docs/deployment/).
 - [**docs/patterns/**](docs/patterns/index.md) — linking conventions, governance, progressive disclosure as a craft
 - [**docs/philosophy.md**](docs/philosophy.md) — why a knowledge graph, not a vector store
 - [**MCP tool reference**](docs/architecture/mcp.md) — read and write surface
+- [**PUBLIC-API.md**](PUBLIC-API.md) — stable npm imports for embedding Spandrel in another TS/JS project
 
 ## License
 

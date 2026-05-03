@@ -2,6 +2,10 @@
 
 // Compiler
 export { compile, recompileNode, addGitMetadata, getHistory } from "./compiler/compiler.js";
+export { buildManifest } from "./compiler/manifest.js";
+export type { BuildManifest, BuildManifestOptions } from "./compiler/manifest.js";
+export { nodeFrontmatterSchema } from "./compiler/frontmatter-schema.js";
+export type { NodeFrontmatterSchema } from "./compiler/frontmatter-schema.js";
 
 // Core types
 export type {
@@ -17,14 +21,9 @@ export type {
 export type { GraphStore, EdgeFilter } from "./storage/graph-store.js";
 export { InMemoryGraphStore } from "./storage/in-memory-graph-store.js";
 
-// Conformance kit — for third-party GraphStore implementations to validate
-// themselves against the interface contract.
-export { runConformanceTests } from "./storage/conformance.js";
-
 // Access policy
 export { AccessPolicy, accessLevelAtLeast } from "./access/policy.js";
 export { loadAccessConfig } from "./access/config.js";
-export { runAccessPolicyConformance } from "./access/conformance.js";
 export type {
   Actor,
   AccessLevel,
@@ -36,11 +35,23 @@ export type {
   ShapedEdge,
 } from "./access/types.js";
 
+// Markdown serialization — round-trip a SpandrelNode back to its source form
+export { renderNodeAsMarkdown } from "./web/render-node.js";
+
 // REST wire surface
-export { createRestRouter } from "./rest/router.js";
+export {
+  createRestRouter,
+  jsonResponse,
+  textResponse,
+  errorResponse,
+  readJsonBody,
+} from "./rest/router.js";
 export { actorFromRequest } from "./rest/actor.js";
 export { shapeNodeAsJson } from "./rest/shape.js";
+export { createNodeAdapter } from "./rest/node-adapter.js";
+export type { WebRouter, NodeRouter } from "./rest/node-adapter.js";
 export type { NodeJson, NodeReference, NodeJsonLinks } from "./rest/shape.js";
+export type { RestContext, RestHandler, ParsedUrl } from "./rest/types.js";
 
 // MCP wire surface
 export {

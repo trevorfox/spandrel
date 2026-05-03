@@ -266,18 +266,26 @@ export function registerReadOnlyTools(
 
   server.tool(
     "context",
-    "Full node context in one call: content, children, outgoing links with target names, incoming backlinks with source names. Start at '/' and follow edges to discover answers.",
+    "Full node context in one call: content, children, outgoing links with target names, incoming backlinks with source names. Start at '/' and follow edges to discover answers. Companion documents (DESIGN, SKILL, AGENT, README, CLAUDE, AGENTS) are excluded by default; pass includeNonNavigable=true to surface them.",
     {
       path: z.string().describe("Path to the node"),
+      includeNonNavigable: z
+        .boolean()
+        .optional()
+        .describe(
+          "Include non-navigable nodes (companion documents) in child listings. Default false."
+        ),
     },
-    async ({ path: nodePath }) => {
+    async ({ path: nodePath, includeNonNavigable }) => {
       const node = await ctx.store.getNode(nodePath);
       if (!node) return asTextResult(null);
 
       const level = ctx.policy.resolveLevel(ctx.actor, nodePath, node.frontmatter);
       if (level === "none") return asTextResult(null);
 
-      const result = await resolveContext(ctx.store, nodePath);
+      const result = await resolveContext(ctx.store, nodePath, {
+        includeNonNavigable: includeNonNavigable ?? false,
+      });
       if (!result) return asTextResult(null);
 
       result.children = await filterReadable(ctx.store, ctx.policy, ctx.actor, result.children);
@@ -331,17 +339,23 @@ export function registerReadOnlyTools(
 
   server.tool(
     "navigate",
-    "Filtered one-hop traversal: returns children and linked nodes, optionally narrowed by keyword or edge type (e.g. 'owns_client'). Call repeatedly to walk the graph.",
+    "Filtered one-hop traversal: returns children and linked nodes, optionally narrowed by keyword or edge type (e.g. 'owns_client'). Call repeatedly to walk the graph. Companion documents are excluded by default; pass includeNonNavigable=true to surface them.",
     {
       path: z.string().describe("Starting node path (e.g. '/' or '/clients')"),
       keyword: z.string().optional().describe("Filter neighbors by keyword (matches name, description, or edge description)"),
       edgeType: z.string().optional().describe("Filter to edges of this type only (e.g. 'owns_client', 'leads_execution')"),
+      includeNonNavigable: z
+        .boolean()
+        .optional()
+        .describe("Include non-navigable nodes (companion documents) as neighbors. Default false."),
     },
-    async ({ path: nodePath, keyword, edgeType }) => {
+    async ({ path: nodePath, keyword, edgeType, includeNonNavigable }) => {
       const level = ctx.policy.resolveLevel(ctx.actor, nodePath);
       if (!accessLevelAtLeast(level, "description")) return asTextResult(null);
 
-      const result = await resolveNavigate(ctx.store, nodePath, keyword, edgeType);
+      const result = await resolveNavigate(ctx.store, nodePath, keyword, edgeType, {
+        includeNonNavigable: includeNonNavigable ?? false,
+      });
       if (!result) return asTextResult(null);
 
       result.neighbors = await filterReadable(ctx.store, ctx.policy, ctx.actor, result.neighbors);

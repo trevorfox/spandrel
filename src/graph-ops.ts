@@ -168,10 +168,28 @@ export interface NodeSummary {
   children: string[];
 }
 
+/**
+ * `navigable: false` nodes (companion documents) are excluded from default
+ * traversal. Pass `includeNonNavigable: true` to surface them — useful for
+ * search, full-graph views, and explicit "show me everything" requests.
+ */
+export interface ChildResolutionOptions {
+  includeNonNavigable?: boolean;
+}
+
+/**
+ * Returns true if a node should appear in default child listings. A node is
+ * navigable unless it explicitly opts out via `navigable: false` frontmatter.
+ */
+export function isNavigable(node: SpandrelNode): boolean {
+  return node.navigable !== false;
+}
+
 export async function resolveChildren(
   store: GraphStore,
   nodePath: string,
-  depth: number
+  depth: number,
+  options: ChildResolutionOptions = {}
 ): Promise<NodeSummary[]> {
   const node = await store.getNode(nodePath);
   if (!node || depth <= 0) return [];
@@ -183,7 +201,11 @@ export async function resolveChildren(
       const child = childMap.get(cp);
       if (!child) return null;
 
-      const grandchildren = depth > 1 ? await resolveChildren(store, cp, depth - 1) : [];
+      // Filter non-navigable children unless explicitly requested.
+      if (!options.includeNonNavigable && !isNavigable(child)) return null;
+
+      const grandchildren =
+        depth > 1 ? await resolveChildren(store, cp, depth - 1, options) : [];
 
       return {
         path: child.path,
@@ -191,9 +213,15 @@ export async function resolveChildren(
         description: child.description,
         nodeType: child.nodeType,
         depth: child.depth,
-        children: grandchildren.length > 0
-          ? grandchildren.map((gc) => gc.path)
-          : child.children,
+        children:
+          grandchildren.length > 0
+            ? grandchildren.map((gc) => gc.path)
+            : options.includeNonNavigable
+              ? child.children
+              : child.children.filter((cp2) => {
+                  const c = childMap.get(cp2);
+                  return c ? isNavigable(c) : true;
+                }),
       };
     })
   );
@@ -221,7 +249,8 @@ export async function resolveNode(
   store: GraphStore,
   nodePath: string,
   depth?: number,
-  includeContent?: boolean
+  includeContent?: boolean,
+  options: ChildResolutionOptions = {}
 ): Promise<ResolvedNode | null> {
   const node = await store.getNode(nodePath);
   if (!node) return null;
@@ -231,12 +260,14 @@ export async function resolveNode(
 
   let children: NodeSummary[];
   if (depth !== undefined && depth > 0) {
-    children = await resolveChildren(store, nodePath, depth);
+    children = await resolveChildren(store, nodePath, depth, options);
   } else {
     const childMap = await store.getNodes(node.children);
     children = node.children
       .map((cp) => {
         const child = childMap.get(cp);
+        if (!child) return null;
+        if (!options.includeNonNavigable && !isNavigable(child)) return null;
         return child
           ? {
               path: child.path,
@@ -286,7 +317,8 @@ export interface ResolvedContext {
 
 export async function resolveContext(
   store: GraphStore,
-  nodePath: string
+  nodePath: string,
+  options: ChildResolutionOptions = {}
 ): Promise<ResolvedContext | null> {
   const node = await store.getNode(nodePath);
   if (!node) return null;
@@ -298,16 +330,16 @@ export async function resolveContext(
   const children = node.children
     .map((cp) => {
       const child = childMap.get(cp);
-      return child
-        ? {
-            path: child.path,
-            name: child.name,
-            description: child.description,
-            nodeType: child.nodeType,
-            depth: child.depth,
-            children: child.children,
-          }
-        : null;
+      if (!child) return null;
+      if (!options.includeNonNavigable && !isNavigable(child)) return null;
+      return {
+        path: child.path,
+        name: child.name,
+        description: child.description,
+        nodeType: child.nodeType,
+        depth: child.depth,
+        children: child.children,
+      };
     })
     .filter(Boolean) as NodeSummary[];
 
@@ -446,7 +478,8 @@ export async function resolveNavigate(
   store: GraphStore,
   nodePath: string,
   keyword?: string,
-  edgeType?: string
+  edgeType?: string,
+  options: ChildResolutionOptions = {}
 ): Promise<NavigateResult | null> {
   const node = await store.getNode(nodePath);
   if (!node) return null;
@@ -474,6 +507,7 @@ export async function resolveNavigate(
     for (const childPath of node.children) {
       const child = childMap.get(childPath);
       if (child && !seen.has(childPath) && matchesKeyword(child)) {
+        if (!options.includeNonNavigable && !isNavigable(child)) continue;
         seen.add(childPath);
         neighbors.push({
           path: child.path,
@@ -551,7 +585,8 @@ export interface GraphResult {
 export async function resolveGraph(
   store: GraphStore,
   rootPath: string,
-  depth: number
+  depth: number,
+  options: ChildResolutionOptions = {}
 ): Promise<GraphResult> {
   const deadline = Date.now() + QUERY_TIMEOUT_MS;
   const collectedNodes = new Set<string>();
@@ -565,8 +600,15 @@ export async function resolveGraph(
     if (d <= 0) continue;
     const node = await store.getNode(p);
     if (!node) continue;
-    for (const child of node.children) {
-      toVisit.push({ path: child, d: d - 1 });
+    for (const childPath of node.children) {
+      // Skip non-navigable children unless explicitly requested. They're
+      // still in the store and reachable via direct path lookup; the graph
+      // walk just doesn't surface them by default.
+      if (!options.includeNonNavigable) {
+        const child = await store.getNode(childPath);
+        if (child && !isNavigable(child)) continue;
+      }
+      toVisit.push({ path: childPath, d: d - 1 });
     }
   }
 

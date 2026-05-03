@@ -75,7 +75,11 @@ export async function shapeNodeAsJson(
   policy: AccessPolicy,
   actor: Actor,
   nodePath: string,
-  options: { depth?: number; includeContent?: boolean } = {}
+  options: {
+    depth?: number;
+    includeContent?: boolean;
+    includeNonNavigable?: boolean;
+  } = {}
 ): Promise<NodeJson | null> {
   const node = await store.getNode(nodePath);
   if (!node) return null;
@@ -116,15 +120,19 @@ export async function shapeNodeAsJson(
 
   // Children — nested Node JSON to the requested depth, or a flat summary list.
   const depth = options.depth ?? 0;
+  const includeNonNavigable = options.includeNonNavigable ?? false;
   const childMap = await store.getNodes(node.children);
   const children: NodeJson[] = [];
   for (const childPath of node.children) {
     const child = childMap.get(childPath);
     if (!child) continue;
+    // Filter non-navigable children (companion documents) unless explicitly requested.
+    if (!includeNonNavigable && child.navigable === false) continue;
     if (depth > 0) {
       const shaped = await shapeNodeAsJson(store, policy, actor, childPath, {
         depth: depth - 1,
         includeContent: options.includeContent,
+        includeNonNavigable,
       });
       if (shaped) children.push(shaped);
     } else {

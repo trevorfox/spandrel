@@ -1,5 +1,5 @@
 import type { RestHandler } from "../types.js";
-import { sendJson, sendError } from "../router.js";
+import { jsonResponse, errorResponse } from "../router.js";
 import { resolveSearch } from "../../graph-ops.js";
 import { accessLevelAtLeast } from "../../access/policy.js";
 import { nodeHref } from "../shape.js";
@@ -10,9 +10,9 @@ import { nodeHref } from "../shape.js";
  * Results below `description` access for the actor are dropped before
  * serialization. Optional `path` parameter scopes search to a subtree.
  */
-export const handleSearch: RestHandler = async (_req, res, url, ctx) => {
+export const handleSearch: RestHandler = async (_req, url, ctx) => {
   const q = url.searchParams.get("q");
-  if (!q) return sendError(res, 400, "missing q parameter");
+  if (!q) return errorResponse(400, "missing q parameter");
 
   const scopePath = url.searchParams.get("path") ?? undefined;
   const results = await resolveSearch(ctx.store, q, scopePath);
@@ -24,7 +24,7 @@ export const handleSearch: RestHandler = async (_req, res, url, ctx) => {
     return accessLevelAtLeast(level, "description");
   });
 
-  return sendJson(res, 200, {
+  return jsonResponse(200, {
     results: accessible.map((r) => ({
       ...r,
       _links: { self: { href: nodeHref(r.path) } },

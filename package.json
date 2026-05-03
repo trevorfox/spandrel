@@ -1,6 +1,6 @@
 {
   "name": "spandrel",
-  "version": "0.4.9",
+  "version": "0.5.0",
   "description": "Turn markdown file trees into navigable, queryable knowledge graphs served via REST and MCP",
   "type": "module",
   "license": "MIT",
@@ -34,7 +34,10 @@
   "files": [
     "dist",
     "DESIGN.md",
-    "README.md"
+    "README.md",
+    "PUBLIC-API.md",
+    "CHANGELOG.md",
+    "schema.json"
   ],
   "keywords": [
     "knowledge-graph",
@@ -44,7 +47,8 @@
     "model-context-protocol"
   ],
   "scripts": {
-    "build": "rm -rf dist && npm run build:web && tsc && chmod +x dist/cli.js",
+    "build": "rm -rf dist && npm run build:web && tsc && chmod +x dist/cli.js && npm run build:schema",
+    "build:schema": "tsx scripts/generate-schema-json.ts",
     "build:web": "vite build --config src/web/app/vite.config.ts",
     "prepublishOnly": "npm run build",
     "dev": "tsx src/cli.ts dev",

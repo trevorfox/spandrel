@@ -48,7 +48,7 @@ navigable: false     # default: true
 ```
 
 - **`kind: document`** signals this Thing is reference material, not part of the authored navigation structure. Defaults to `node`.
-- **`navigable: false`** excludes the Thing from default `get_node` child listings and from collection `index` enumerations. Full-text search still reaches it; traversal still follows edges to and from it; access control still applies.
+- **`navigable: false`** excludes the Thing from default `get_node` child listings and from collection `index` enumerations. Wire surfaces accept an `includeNonNavigable` opt-in to surface them when explicitly requested. Full-text search still reaches them by default; traversal still follows edges to and from them; access control still applies.
 
 Use `navigable: false` when:
 
@@ -58,4 +58,8 @@ Use `navigable: false` when:
 
 Curated graph nodes (clients, decisions, people, features) stay `navigable: true` — they're what the graph is for.
 
-> **Status:** These fields are documented as a spec. Compiler support for honoring them is tracked in `ROADMAP.md` under the onboarding-redesign deferred items. Declaring them today is harmless (the compiler ignores unknown fields) and forward-compatible.
+### Companion files inherit these defaults
+
+The canonical use case for `kind: document, navigable: false` is companion files. `DESIGN.md`, `SKILL.md`, `AGENT.md`, `README.md`, `CLAUDE.md`, and `AGENTS.md` alongside a composite compile with these frontmatter values automatically — you don't declare them. See [content-model/nodes](/content-model/nodes#companion-files-as-documents) for the full mechanics.
+
+To override (for example, to surface a particular `SKILL.md` in default child listings), set `navigable: true` in the file's frontmatter.

@@ -1,24 +1,30 @@
-/** Loader for graph.json — always relative to document.baseURI. */
+/**
+ * Graph fetcher. Delegates to the configured data source.
+ *
+ * When no data source is set explicitly (the default static-bundle path),
+ * this resolves a static data source at call time. The mount API
+ * (`mountViewer`) sets a custom source for embed contexts.
+ */
 
 import type { Graph } from "../types.js";
+import {
+  createStaticDataSource,
+  type ViewerDataSource,
+} from "./data-source.js";
 
-export async function fetchGraph(): Promise<Graph> {
-  // Cache-bust so SSE-triggered reloads always see fresh data.
-  const url = new URL(`graph.json?t=${Date.now()}`, document.baseURI).toString();
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) {
-    throw new Error(`Failed to load graph.json: ${res.status} ${res.statusText}`);
-  }
-  const json = (await res.json()) as Graph;
-  return normalize(json);
+let activeDataSource: ViewerDataSource | null = null;
+
+export function setDataSource(source: ViewerDataSource): void {
+  activeDataSource = source;
 }
 
-/** Defensive defaults so the SPA doesn't crash on partial payloads. */
-function normalize(g: Partial<Graph>): Graph {
-  return {
-    nodes: g.nodes ?? [],
-    edges: g.edges ?? [],
-    linkTypes: g.linkTypes ?? [],
-    warnings: g.warnings ?? [],
-  };
+export function getDataSource(): ViewerDataSource {
+  if (!activeDataSource) {
+    activeDataSource = createStaticDataSource();
+  }
+  return activeDataSource;
+}
+
+export async function fetchGraph(): Promise<Graph> {
+  return getDataSource().fetchGraph();
 }

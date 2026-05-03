@@ -1,5 +1,5 @@
 import type { RestHandler } from "../types.js";
-import { sendJson } from "../router.js";
+import { jsonResponse } from "../router.js";
 import { accessLevelAtLeast } from "../../access/policy.js";
 import { nodeHref } from "../shape.js";
 
@@ -9,7 +9,7 @@ import { nodeHref } from "../shape.js";
  * Only surfaces link types the actor can see at description-level access —
  * consistent with how other read endpoints filter.
  */
-export const handleLinkTypes: RestHandler = async (_req, res, _url, ctx) => {
+export const handleLinkTypes: RestHandler = async (_req, _url, ctx) => {
   const linkTypes = await ctx.store.getLinkTypes();
 
   const all = Array.from(linkTypes.values());
@@ -21,7 +21,7 @@ export const handleLinkTypes: RestHandler = async (_req, res, _url, ctx) => {
     })
   );
 
-  return sendJson(res, 200, {
+  return jsonResponse(200, {
     linkTypes: visible.filter(Boolean).map((lt) => ({
       ...lt!,
       _links: { self: { href: nodeHref(lt!.path) } },

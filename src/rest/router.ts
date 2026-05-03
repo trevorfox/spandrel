@@ -1,4 +1,3 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
 import type { RestContext, RestHandler, ParsedUrl } from "./types.js";
 import type { GraphStore } from "../storage/graph-store.js";
 import type { AccessPolicy } from "../access/policy.js";
@@ -17,15 +16,20 @@ export interface RestRouterOptions {
 }
 
 /**
- * Returns a node:http handler that dispatches to the REST handlers and
- * resolves to `false` (via the boolean return) when no route matched —
- * letting the host server fall through to other routes (SSE, static SPA).
+ * Returns a Web-standard handler that dispatches to the REST handlers and
+ * resolves to `null` when no route matched — letting the host server fall
+ * through to other routes (SSE, static SPA, etc.).
+ *
+ * Web-standard primitives (`Request` / `Response`) work natively on Next.js,
+ * Hono, Bun, Cloudflare Workers, Deno Deploy, Vercel Functions, and any other
+ * runtime that follows the Fetch API. For `node:http` consumers, wrap with
+ * `createNodeAdapter` from `./node-adapter.js`.
  */
 export function createRestRouter(options: RestRouterOptions) {
-  return async function router(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  return async function router(req: Request): Promise<Response | null> {
     const url = parseUrl(req);
-    const handler = matchRoute(req.method ?? "GET", url.pathname);
-    if (!handler) return false;
+    const handler = matchRoute(req.method, url.pathname);
+    if (!handler) return null;
 
     const ctx: RestContext = {
       store: options.store,
@@ -36,11 +40,10 @@ export function createRestRouter(options: RestRouterOptions) {
     };
 
     try {
-      await handler(req, res, url, ctx);
+      return await handler(req, url, ctx);
     } catch (err) {
-      sendError(res, 500, `internal error: ${(err as Error).message}`);
+      return errorResponse(500, `internal error: ${(err as Error).message}`);
     }
-    return true;
   };
 }
 
@@ -62,49 +65,45 @@ function matchRoute(method: string, pathname: string): RestHandler | null {
   return null;
 }
 
-function parseUrl(req: IncomingMessage): ParsedUrl {
-  const raw = req.url ?? "/";
-  const u = new URL(raw, "http://localhost");
+function parseUrl(req: Request): ParsedUrl {
+  const u = new URL(req.url);
   return { pathname: u.pathname, searchParams: u.searchParams };
 }
 
 // --- Response helpers ----------------------------------------------------
 
-export function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Cache-Control": "no-store",
+const NO_STORE = { "Cache-Control": "no-store" };
+
+export function jsonResponse(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...NO_STORE,
+      "Content-Type": "application/json; charset=utf-8",
+    },
   });
-  res.end(JSON.stringify(body));
 }
 
-export function sendText(
-  res: ServerResponse,
+export function textResponse(
   status: number,
   body: string,
   contentType = "text/plain; charset=utf-8"
-): void {
-  res.writeHead(status, {
-    "Content-Type": contentType,
-    "Cache-Control": "no-store",
+): Response {
+  return new Response(body, {
+    status,
+    headers: {
+      ...NO_STORE,
+      "Content-Type": contentType,
+    },
   });
-  res.end(body);
 }
 
-export function sendError(res: ServerResponse, status: number, message: string): void {
-  res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Cache-Control": "no-store",
-  });
-  res.end(JSON.stringify({ error: message }));
+export function errorResponse(status: number, message: string): Response {
+  return jsonResponse(status, { error: message });
 }
 
-export async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(Buffer.from(chunk));
-  }
-  const raw = Buffer.concat(chunks).toString("utf-8");
-  if (!raw) return {};
-  return JSON.parse(raw);
+export async function readJsonBody(req: Request): Promise<Record<string, unknown>> {
+  const text = await req.text();
+  if (!text) return {};
+  return JSON.parse(text);
 }

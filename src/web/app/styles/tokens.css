@@ -45,8 +45,11 @@
   --content-max-w: 44rem;
 }
 
-/* Light — limestone. Warm off-white, deep graphite, soft ochre. */
-:root[data-theme="light"] {
+/* Light — limestone. Warm off-white, deep graphite, soft ochre.
+ * Selector is `[data-theme="light"]` (no `:root` prefix) so the same tokens
+ * apply whether the attribute is on `documentElement` (static publish) or
+ * on a viewer mount root (embed contexts). */
+[data-theme="light"] {
   --bg: #f4efe6;
   --bg-elevated: #ede7db;
   --bg-sunken: #ece5d6;
@@ -70,7 +73,7 @@
 }
 
 /* Dark — candlelit stone. Warm charcoal, cream, amber. */
-:root[data-theme="dark"] {
+[data-theme="dark"] {
   --bg: #1e1c19;
   --bg-elevated: #26231f;
   --bg-sunken: #181614;

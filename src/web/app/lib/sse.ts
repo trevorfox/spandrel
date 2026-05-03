@@ -11,10 +11,15 @@ export interface SseHandle {
   close(): void;
 }
 
-export function startSse(onReload: () => void): SseHandle | null {
+/**
+ * Returns an unsubscribe function for symmetry with the data-source
+ * `subscribe()` contract. The mount API uses this so the legacy SSE path
+ * and the new data-source-driven path have identical teardown.
+ */
+export function startSse(onReload: () => void): () => void {
   // Skip in environments where live reload makes no sense.
-  if (typeof EventSource === "undefined") return null;
-  if (window.location.protocol === "file:") return null;
+  if (typeof EventSource === "undefined") return () => {};
+  if (window.location.protocol === "file:") return () => {};
 
   let attempts = 0;
   let source: EventSource | null = null;
@@ -56,11 +61,9 @@ export function startSse(onReload: () => void): SseHandle | null {
 
   connect();
 
-  return {
-    close() {
-      closed = true;
-      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
-      if (source) source.close();
-    },
+  return () => {
+    closed = true;
+    if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+    if (source) source.close();
   };
 }

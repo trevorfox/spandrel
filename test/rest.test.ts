@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import { compile } from "../src/compiler/compiler.js";
 import { AccessPolicy } from "../src/access/policy.js";
 import { createRestRouter } from "../src/rest/router.js";
+import { createNodeAdapter } from "../src/rest/node-adapter.js";
 import { createTempDir, writeIndex } from "./test-helpers.js";
 
 const adminPolicy = new AccessPolicy({
@@ -46,7 +47,7 @@ interface Harness {
 
 async function startHarness(rootDir: string, policy: AccessPolicy): Promise<Harness> {
   const store = await compile(rootDir);
-  const router = createRestRouter({ store, policy, rootDir });
+  const router = createNodeAdapter(createRestRouter({ store, policy, rootDir }));
   const server = createServer(async (req, res) => {
     if (await router(req, res)) return;
     res.writeHead(404, { "Content-Type": "text/plain" });
@@ -173,6 +174,74 @@ describe("REST — wire surface", () => {
       expect(paths).toContain("/clients");
       expect(paths).toContain("/clients/acme");
       expect(paths).not.toContain("/projects");
+    });
+  });
+
+  describe("includeNonNavigable", () => {
+    let companionRoot: string;
+    let companionHarness: Harness;
+
+    beforeAll(async () => {
+      companionRoot = createTempDir();
+      writeIndex(companionRoot, { name: "Root", description: "Root" });
+      writeIndex(path.join(companionRoot, "clients"), {
+        name: "Clients",
+        description: "Clients",
+      });
+      writeIndex(path.join(companionRoot, "clients", "acme"), {
+        name: "Acme",
+        description: "Test client",
+      });
+      fs.writeFileSync(
+        path.join(companionRoot, "clients", "acme", "SKILL.md"),
+        "---\ndescription: Acme skill\n---\nFollow /clients/acme for context.\n"
+      );
+      companionHarness = await startHarness(companionRoot, adminPolicy);
+    });
+
+    afterAll(async () => {
+      await companionHarness.close();
+      fs.rmSync(companionRoot, { recursive: true, force: true });
+    });
+
+    it("excludes companion documents from default /graph traversal", async () => {
+      const r = await fetch(`${companionHarness.baseUrl}/graph?root=/&depth=10`);
+      const body = await r.json();
+      const paths = body.nodes.map((n: { path: string }) => n.path);
+      expect(paths).toContain("/clients/acme");
+      expect(paths).not.toContain("/clients/acme/SKILL");
+    });
+
+    it("surfaces companion documents when includeNonNavigable=true", async () => {
+      const r = await fetch(
+        `${companionHarness.baseUrl}/graph?root=/&depth=10&includeNonNavigable=true`
+      );
+      const body = await r.json();
+      const paths = body.nodes.map((n: { path: string }) => n.path);
+      expect(paths).toContain("/clients/acme/SKILL");
+    });
+
+    it("excludes companion documents from default /node children", async () => {
+      const r = await fetch(`${companionHarness.baseUrl}/node/clients/acme?depth=1`);
+      const body = await r.json();
+      const childPaths = (body.children ?? []).map((c: { path: string }) => c.path);
+      expect(childPaths).not.toContain("/clients/acme/SKILL");
+    });
+
+    it("includes companion documents in /node when includeNonNavigable=true", async () => {
+      const r = await fetch(
+        `${companionHarness.baseUrl}/node/clients/acme?depth=1&includeNonNavigable=true`
+      );
+      const body = await r.json();
+      const childPaths = (body.children ?? []).map((c: { path: string }) => c.path);
+      expect(childPaths).toContain("/clients/acme/SKILL");
+    });
+
+    it("companion documents are addressable directly even by default", async () => {
+      const r = await fetch(`${companionHarness.baseUrl}/node/clients/acme/SKILL`);
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      expect(body.path).toBe("/clients/acme/SKILL");
     });
   });
 

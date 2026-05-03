@@ -176,7 +176,7 @@ describe("Compiler — Tree Walking", () => {
     expect(await store.hasNode("/content")).toBe(true);
   });
 
-  it("does not compile design.md files as nodes", async () => {
+  it("compiles lowercase design.md as a document node and warns about the case", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     fs.writeFileSync(
       path.join(root, "design.md"),
@@ -184,18 +184,53 @@ describe("Compiler — Tree Walking", () => {
     );
 
     const store = await compile(root);
-    // design.md should not create a separate node
-    expect(store.nodeCount).toBe(1); // only root
+    // Root + /DESIGN companion document
+    expect(store.nodeCount).toBe(2);
+    const designNode = await store.getNode("/DESIGN");
+    expect(designNode).toBeTruthy();
+    expect(designNode?.kind).toBe("document");
+    expect(designNode?.navigable).toBe(false);
+    expect(designNode?.parent).toBe("/");
+
+    const warnings = await store.getWarnings();
+    expect(warnings.some((w) => w.type === "companion_file_lowercase")).toBe(true);
   });
 
-  it("excluded .md files are not compiled as nodes", async () => {
+  it("compiles companion files as document nodes (kind=document, navigable=false)", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
-    fs.writeFileSync(path.join(root, "SKILL.md"), "---\nname: test\n---\n");
-    fs.writeFileSync(path.join(root, "AGENT.md"), "---\nname: test\n---\n");
+    fs.writeFileSync(path.join(root, "SKILL.md"), "---\ndescription: A skill\n---\n");
+    fs.writeFileSync(path.join(root, "AGENT.md"), "---\ndescription: Agent notes\n---\n");
     fs.writeFileSync(path.join(root, "README.md"), "# Readme\n");
+    fs.writeFileSync(path.join(root, "CLAUDE.md"), "# Claude instructions\n");
+    fs.writeFileSync(path.join(root, "AGENTS.md"), "# Agents instructions\n");
 
     const store = await compile(root);
-    expect(store.nodeCount).toBe(1); // only root
+    // Root + 5 companion documents at uppercase canonical paths
+    expect(store.nodeCount).toBe(6);
+    for (const stem of ["SKILL", "AGENT", "README", "CLAUDE", "AGENTS"]) {
+      const node = await store.getNode(`/${stem}`);
+      expect(node, `expected node /${stem} to exist`).toBeTruthy();
+      expect(node?.kind).toBe("document");
+      expect(node?.navigable).toBe(false);
+    }
+
+    // No companion_file_lowercase warnings — all uppercase canonical
+    const warnings = await store.getWarnings();
+    expect(warnings.some((w) => w.type === "companion_file_lowercase")).toBe(false);
+  });
+
+  it("companion files alongside a node attach to that node, not the root", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    const acmeDir = path.join(root, "clients", "acme");
+    fs.mkdirSync(acmeDir, { recursive: true });
+    writeIndex(path.join(root, "clients"), { name: "Clients", description: "Clients" });
+    writeIndex(acmeDir, { name: "Acme", description: "Test client" });
+    fs.writeFileSync(path.join(acmeDir, "SKILL.md"), "---\ndescription: Acme skill\n---\n");
+
+    const store = await compile(root);
+    const skillNode = await store.getNode("/clients/acme/SKILL");
+    expect(skillNode?.parent).toBe("/clients/acme");
+    expect(skillNode?.kind).toBe("document");
   });
 });
 

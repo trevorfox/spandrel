@@ -1,4 +1,3 @@
-import type { IncomingMessage } from "node:http";
 import type { Actor } from "../access/types.js";
 
 /**
@@ -14,21 +13,15 @@ import type { Actor } from "../access/types.js";
  *   - X-Identity-Email: foo@bar  → identified, id=email
  *   - neither                    → anonymous
  */
-export function actorFromRequest(req: IncomingMessage): Actor {
-  const auth = headerValue(req, "authorization");
+export function actorFromRequest(req: Request): Actor {
+  const auth = req.headers.get("authorization");
   if (auth && /^bearer\s+\S+/i.test(auth)) {
     const token = auth.replace(/^bearer\s+/i, "").trim();
     return { tier: "authenticated", id: token };
   }
 
-  const email = headerValue(req, "x-identity-email");
+  const email = req.headers.get("x-identity-email");
   if (email) return { tier: "identified", id: email };
 
   return { tier: "anonymous" };
-}
-
-function headerValue(req: IncomingMessage, name: string): string | undefined {
-  const v = req.headers[name];
-  if (Array.isArray(v)) return v[0];
-  return v;
 }

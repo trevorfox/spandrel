@@ -1,6 +1,6 @@
 ---
 name: SKILL.md
-description: Agent skill loading specs — what capabilities an agent should have when working in a context
+description: Agent skill loading specs — capability context for working in a domain. Compiled as a document node alongside its containing composite.
 links:
   - to: /content-model/design-md
     type: relates-to
@@ -9,6 +9,8 @@ links:
 # SKILL.md
 
 A `SKILL.md` is a companion file that defines what an agent should know and be capable of when working in a particular context. It's a capability loading spec — not instructions for a single task, but the baseline context an agent needs to operate effectively in a domain.
+
+Starting in 0.5.0, a `SKILL.md` alongside a composite compiles as a `kind: document, navigable: false` child at `<parent-path>/SKILL`. An agent connected via [MCP](/architecture/mcp) can `context("/clients/acme/SKILL")` to load the skill body and follow any internal links inside it as typed graph edges — turning skills into traversal recipes against the same MCP the agent is already authorized against. The skill describes "to do X here, traverse to /processes/intake then call get_node" and the markdown links are real edges the agent can follow without leaving the MCP session.
 
 A SKILL.md typically includes:
 - What the agent's role is in this context

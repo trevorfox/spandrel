@@ -1,4 +1,3 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
 import type { GraphStore } from "../storage/graph-store.js";
 import type { AccessPolicy } from "../access/policy.js";
 import type { Actor } from "../access/types.js";
@@ -24,9 +23,16 @@ export interface ParsedUrl {
   searchParams: URLSearchParams;
 }
 
+/**
+ * Web-standard handler signature.
+ *
+ * Receives a `Request` plus pre-parsed URL and per-request context, returns a
+ * `Response`. Hosts on Next.js, Hono, Bun, Cloudflare Workers, Deno Deploy,
+ * Vercel Functions consume this directly. The reference Node CLI consumes
+ * via `createNodeAdapter` from `./node-adapter.js`.
+ */
 export type RestHandler = (
-  req: IncomingMessage,
-  res: ServerResponse,
+  req: Request,
   url: ParsedUrl,
   ctx: RestContext
-) => Promise<void> | void;
+) => Promise<Response> | Response;

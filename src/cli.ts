@@ -5,12 +5,14 @@ import { fileURLToPath } from "node:url";
 import readline from "node:readline/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { compile, addGitMetadata, getHistory } from "./compiler/compiler.js";
+import { buildManifest } from "./compiler/manifest.js";
 import { createMcpServer } from "./server/mcp.js";
 import { watchTree } from "./compiler/watcher.js";
 import { loadAccessConfig } from "./access/config.js";
 import { AccessPolicy } from "./access/policy.js";
 import type { Actor } from "./access/types.js";
 import { createRestRouter } from "./rest/router.js";
+import { createNodeAdapter } from "./rest/node-adapter.js";
 import { scaffoldInit, type InitOptions } from "./cli-init.js";
 import { publish, parsePublishArgs, resolveBundleDir } from "./cli-publish.js";
 import { emitGraph } from "./compiler/emit-graph.js";
@@ -29,7 +31,7 @@ if (command === "--version" || command === "-v" || command === "version") {
 } else if (command === "mcp") {
   mcp(parsePositional(args));
 } else if (command === "compile") {
-  compileOnly(parsePositional(args));
+  compileOnly(args.slice(1));
 } else if (command === "init") {
   init(args.slice(1));
 } else if (command === "init-mcp") {
@@ -50,7 +52,8 @@ Commands:
   publish   Emit a static bundle (graph.json + SPA) to --out
 
 Flags:
-  --version, -v   Print the installed version and exit
+  --version, -v       Print the installed version and exit
+  --manifest [path]   (compile) Write a JSON build manifest. Path defaults to spandrel-manifest.json
 `);
   process.exit(1);
 }
@@ -93,7 +96,7 @@ async function dev(rootDir: string) {
   }
   const policy = new AccessPolicy(accessConfig);
 
-  const restRouter = createRestRouter({ store, policy, rootDir, getHistory });
+  const restRouter = createNodeAdapter(createRestRouter({ store, policy, rootDir, getHistory }));
 
   // SSE channel — one Set for all open long-lived viewer connections. We
   // track these so the graceful-shutdown path can destroy them before
@@ -468,7 +471,8 @@ function initMcp(rootDir: string) {
   console.log(`  claude mcp add spandrel -- ${command} ${args.join(" ")}`);
 }
 
-async function compileOnly(rootDir: string) {
+async function compileOnly(argv: string[]) {
+  const { rootDir, manifestPath } = parseCompileArgs(argv);
   console.log(`Compiling ${rootDir}...`);
   const store = await compile(rootDir);
   const warnings = await store.getWarnings();
@@ -488,4 +492,36 @@ async function compileOnly(rootDir: string) {
     const indent = "  ".repeat(node.depth);
     console.log(`${indent}${node.path} (${node.nodeType}) — ${node.name}`);
   }
+
+  if (manifestPath) {
+    const manifest = await buildManifest(store, {
+      spandrelVersion: readPackageVersion(),
+    });
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+    console.log(`\nManifest: ${manifestPath}`);
+  }
+}
+
+function parseCompileArgs(argv: string[]): { rootDir: string; manifestPath: string | null } {
+  let rootDir = ".";
+  let manifestPath: string | null = null;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--manifest") {
+      // Default path used when --manifest is passed without a value, or when
+      // the next arg looks like another flag.
+      const next = argv[i + 1];
+      if (next && !next.startsWith("--")) {
+        manifestPath = next;
+        i++;
+      } else {
+        manifestPath = "spandrel-manifest.json";
+      }
+    } else if (a.startsWith("--manifest=")) {
+      manifestPath = a.slice("--manifest=".length);
+    } else if (!a.startsWith("--")) {
+      rootDir = a;
+    }
+  }
+  return { rootDir, manifestPath };
 }

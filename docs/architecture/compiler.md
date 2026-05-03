@@ -16,6 +16,6 @@ The compiler walks a directory tree and produces a graph. Given a root directory
 
 The compiler resolves leaf vs composite nodes, parses frontmatter, extracts links, builds the parent/child hierarchy, generates backlinks, and emits validation warnings for malformed content.
 
-Companion files (`design.md`, `SKILL.md`, `AGENT.md`, `README.md`) and system directories (`_` prefix) are excluded from compilation.
+Companion files (`design.md`, `SKILL.md`, `AGENT.md`, `README.md`) and [reserved-prefix](/content-model/reserved-prefixes) directories (`_*` — e.g. `_access/`) are excluded from compilation.
 
 See `src/compiler/design.md` for the reference implementation spec.

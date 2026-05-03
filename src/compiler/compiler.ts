@@ -9,6 +9,7 @@ import type {
 } from "./types.js";
 import type { GraphStore } from "../storage/graph-store.js";
 import { InMemoryGraphStore } from "../storage/in-memory-graph-store.js";
+import { matchCompanionFile, isCompanionFile } from "./companion-files.js";
 
 const INLINE_LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/g;
 
@@ -18,7 +19,15 @@ export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 /** Max compile time per node in ms — nodes that take longer are skipped with a warning */
 export const COMPILE_TIMEOUT_MS = 30_000; // 30 seconds
 
-/** Markdown files that should never become leaf nodes */
+/**
+ * Legacy export retained for backwards compatibility with any external code
+ * that imported the skip list directly. Companion files now compile as
+ * document nodes (see `./companion-files.ts`); the set still represents the
+ * names that bypass leaf-node compilation, but the matching is case-
+ * insensitive at the call site.
+ *
+ * @deprecated Use `isCompanionFile` from `./companion-files.js` instead.
+ */
 export const EXCLUDED_LEAF_MD_FILES = new Set([
   "design.md",
   "SKILL.md",
@@ -63,7 +72,13 @@ export async function recompileNode(
     if (basename === "index.md") {
       const dir = path.dirname(filePath);
       node = parseNode(rootDir, dir, filePath, compileWarnings);
-    } else if (basename.endsWith(".md") && !EXCLUDED_LEAF_MD_FILES.has(basename)) {
+    } else if (isCompanionFile(basename)) {
+      // Companion files live alongside a composite — the parent path is the
+      // directory's node path, not the would-be leaf path.
+      const dir = path.dirname(filePath);
+      const parentNodePath = dirToNodePath(rootDir, dir);
+      node = parseCompanionNode(rootDir, filePath, parentNodePath, compileWarnings);
+    } else if (basename.toLowerCase().endsWith(".md")) {
       node = parseLeafNode(rootDir, filePath, compileWarnings);
     }
 
@@ -95,13 +110,25 @@ export async function recompileNode(
 }
 
 function filePathToNodePath(rootDir: string, filePath: string): string {
+  const basename = path.basename(filePath);
+  const companionMatch = matchCompanionFile(basename);
+
+  if (companionMatch) {
+    // Companion files: parent dir's node path + uppercase canonical stem.
+    const parentDir = path.dirname(filePath);
+    const parentNodePath = dirToNodePath(rootDir, parentDir);
+    return parentNodePath === "/"
+      ? "/" + companionMatch.stem
+      : parentNodePath + "/" + companionMatch.stem;
+  }
+
   let rel = path.relative(rootDir, filePath);
   // Strip index.md from end (directory-based node)
   if (rel.endsWith(path.sep + "index.md") || rel === "index.md") {
     rel = rel.replace(/[/\\]?index\.md$/, "");
-  } else if (rel.endsWith(".md")) {
+  } else if (rel.toLowerCase().endsWith(".md")) {
     // Leaf .md file — strip extension
-    rel = rel.replace(/\.md$/, "");
+    rel = rel.replace(/\.md$/i, "");
   }
   const nodePath = "/" + rel.split(path.sep).filter(Boolean).join("/");
   return nodePath === "/" ? "/" : nodePath;
@@ -180,15 +207,152 @@ function walkTree(
     }
   }
 
+  // Process companion files in this directory — DESIGN.md, SKILL.md, etc.
+  // become `kind: document, navigable: false` children of this composite.
+  const companionFiles = getCompanionFiles(currentDir);
+  for (const companionFile of companionFiles) {
+    const companionNode = parseCompanionNode(rootDir, companionFile, nodePath, warnings);
+    if (!companionNode) continue;
+    nodes.set(companionNode.path, companionNode);
+    extractEdges(companionNode, edges);
+    edges.push({ from: nodePath, to: companionNode.path, type: "hierarchy" });
+  }
+
   // After recursion, set children on this node
   const node = nodes.get(nodePath);
   if (node) {
     const subdirChildren = subdirs.map((d) => dirToNodePath(rootDir, d));
     const leafChildren = leafFiles.map((f) => leafFileToNodePath(rootDir, f));
-    node.children = [...subdirChildren, ...leafChildren];
+    const companionChildren = companionFiles.map((f) => companionFileToNodePath(nodePath, f));
+    node.children = [...subdirChildren, ...leafChildren, ...companionChildren];
     if (node.children.length > 0) {
       node.nodeType = "composite";
     }
+  }
+}
+
+/**
+ * List companion files (DESIGN.md, SKILL.md, AGENT.md, README.md, CLAUDE.md,
+ * AGENTS.md) in a directory — case-insensitive. Returned as absolute paths.
+ */
+function getCompanionFiles(dir: string): string[] {
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return [];
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isFile() && isCompanionFile(d.name))
+    .map((d) => path.join(dir, d.name))
+    .sort();
+}
+
+/**
+ * Map a companion-file path to its graph path. The path segment is the
+ * canonical uppercase stem regardless of the on-disk file's case, so paths
+ * stay stable across the lowercase→uppercase migration.
+ */
+function companionFileToNodePath(parentNodePath: string, filePath: string): string {
+  const basename = path.basename(filePath);
+  const match = matchCompanionFile(basename);
+  if (!match) {
+    // Shouldn't reach here — getCompanionFiles already filtered. Keep safe fallback.
+    return parentNodePath === "/" ? "/" + basename : parentNodePath + "/" + basename;
+  }
+  return parentNodePath === "/" ? "/" + match.stem : parentNodePath + "/" + match.stem;
+}
+
+function parseCompanionNode(
+  rootDir: string,
+  filePath: string,
+  parentNodePath: string,
+  warnings?: ValidationWarning[]
+): SpandrelNode | null {
+  const basename = path.basename(filePath);
+  const match = matchCompanionFile(basename);
+  if (!match) return null;
+
+  const nodePath = companionFileToNodePath(parentNodePath, filePath);
+
+  if (!match.isCanonical && warnings) {
+    warnings.push({
+      path: nodePath,
+      type: "companion_file_lowercase",
+      message: `Companion file ${path.relative(rootDir, filePath)} uses a deprecated lowercase form. Rename to ${match.stem}.md — lowercase support will be removed in 0.6.0.`,
+    });
+  }
+
+  const stat = fs.statSync(filePath);
+  if (stat.size > MAX_FILE_SIZE_BYTES) {
+    if (warnings) {
+      warnings.push({
+        path: nodePath,
+        type: "file_too_large",
+        message: `Skipping ${filePath}: file size ${stat.size} bytes exceeds ${MAX_FILE_SIZE_BYTES} byte limit`,
+      });
+    }
+    return null;
+  }
+
+  const startTime = Date.now();
+  const raw = fs.readFileSync(filePath, "utf-8");
+  const { data, content } = matter(raw);
+  const elapsed = Date.now() - startTime;
+
+  if (elapsed > COMPILE_TIMEOUT_MS) {
+    if (warnings) {
+      warnings.push({
+        path: nodePath,
+        type: "compile_timeout",
+        message: `Skipping ${filePath}: compile took ${elapsed}ms, exceeded ${COMPILE_TIMEOUT_MS}ms limit`,
+      });
+    }
+    return null;
+  }
+
+  // Defaults: companion files are documents and non-navigable. Frontmatter
+  // can override (`navigable: true` to surface in default child listings,
+  // `kind: node` to treat as regular content — unusual but allowed).
+  const kind = (data.kind as "node" | "document") ?? "document";
+  const navigable = data.navigable === undefined ? false : Boolean(data.navigable);
+
+  // Default name: the canonical stem capitalized as a label, e.g.
+  // "DESIGN" → "Design", "AGENTS" → "Agents". Frontmatter `name` wins.
+  const fallbackName = match.stem.charAt(0) + match.stem.slice(1).toLowerCase();
+  // Default description per filename — generic but better than empty.
+  const fallbackDescription = defaultDescription(match.stem);
+
+  return {
+    path: nodePath,
+    name: (data.name as string) || fallbackName,
+    description: (data.description as string) || fallbackDescription,
+    nodeType: "leaf",
+    depth: nodePath === "/" ? 0 : nodePath.split("/").filter(Boolean).length,
+    parent: parentNodePath,
+    children: [],
+    content: content.trim(),
+    frontmatter: data,
+    created: null,
+    updated: null,
+    author: (data.author as string) || null,
+    kind,
+    navigable,
+  };
+}
+
+function defaultDescription(stem: string): string {
+  switch (stem) {
+    case "DESIGN":
+      return "Design and implementation notes for the containing node";
+    case "SKILL":
+      return "Agent-readable skill: traversal recipes for the containing node";
+    case "AGENT":
+      return "Agent-readable instructions for working with the containing node";
+    case "AGENTS":
+      return "Agent-readable instructions for working with the containing node";
+    case "README":
+      return "Human-readable orientation for the containing node";
+    case "CLAUDE":
+      return "Claude-Code agent instructions for working with the containing node";
+    default:
+      return "Companion document for the containing node";
   }
 }
 
@@ -229,12 +393,12 @@ function getLeafMdFiles(dir: string): string[] {
     .filter(
       (d) =>
         d.isFile() &&
-        d.name.endsWith(".md") &&
-        d.name !== "index.md" &&
+        d.name.toLowerCase().endsWith(".md") &&
+        d.name.toLowerCase() !== "index.md" &&
         !d.name.startsWith("_") &&
         !d.name.startsWith(".") &&
-        !EXCLUDED_LEAF_MD_FILES.has(d.name) &&
-        !subdirNames.has(d.name.replace(/\.md$/, ""))
+        !isCompanionFile(d.name) &&
+        !subdirNames.has(d.name.replace(/\.md$/i, ""))
     )
     .map((d) => path.join(dir, d.name))
     .sort();
@@ -472,6 +636,10 @@ function validate(
   warnings: ValidationWarning[]
 ): void {
   for (const node of nodes.values()) {
+    // Document nodes (companion files) have sensible default names and
+    // descriptions derived from the filename; missing_name / missing_description
+    // are author concerns for curated graph content, not for documents.
+    if (node.kind === "document") continue;
     if (!node.frontmatter.name) {
       warnings.push({
         path: node.path,

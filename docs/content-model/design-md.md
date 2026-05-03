@@ -1,6 +1,6 @@
 ---
-name: design.md
-description: Design documents as companion files — intent over configuration at two levels
+name: DESIGN.md
+description: Design documents as companion files — intent over configuration, compiled as document nodes alongside their containing composite
 links:
   - to: /philosophy
     type: relates-to
@@ -10,9 +10,11 @@ links:
     type: relates-to
 ---
 
-# design.md
+# DESIGN.md
 
-A `design.md` is a companion file — it sits alongside a node's `index.md` but is not compiled as a node itself. It describes intent rather than toggling configuration.
+A `DESIGN.md` is a companion file — it sits alongside a composite node's `index.md` and describes intent rather than toggling configuration. Starting in 0.5.0, it compiles as a `kind: document, navigable: false` child of its containing composite, addressable as `<parent-path>/DESIGN`. Through 0.4.x companion files were excluded from compilation; the document-node treatment makes them traversable via MCP and REST without cluttering default child listings.
+
+Lowercase `design.md` is accepted in 0.5.0 with a `companion_file_lowercase` deprecation warning. Uppercase canonical names land in 0.6.0; rename when convenient.
 
 ## Two roles
 

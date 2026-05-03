@@ -20,3 +20,4 @@ The content model covers:
 - **Links** — how Things connect to each other via frontmatter declarations
 - **Paths** — how file paths become graph addresses
 - **Companion files** — non-node files that travel with nodes (`design.md`, `SKILL.md`, `AGENT.md`, `README.md`)
+- **Reserved prefixes** — files and directories starting with `_` are excluded from the graph (e.g. `_access/`, `_agents/`)

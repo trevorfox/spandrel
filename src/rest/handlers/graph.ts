@@ -1,28 +1,31 @@
 import type { RestHandler } from "../types.js";
-import { sendJson, sendError } from "../router.js";
+import { jsonResponse, errorResponse } from "../router.js";
 import { resolveGraph, MAX_GRAPH_DEPTH } from "../../graph-ops.js";
 import { nodeHref } from "../shape.js";
 import { accessLevelAtLeast } from "../../access/policy.js";
 
 /**
- * GET /graph?root=&depth= — return the subgraph rooted at `root`.
+ * GET /graph?root=&depth=&includeNonNavigable= — return the subgraph rooted at `root`.
  *
- * Defaults: root="/", depth=10. Nodes the actor cannot see at level `exists`
- * are dropped along with any edges that touch them.
+ * Defaults: root="/", depth=10, includeNonNavigable=false. Nodes the actor
+ * cannot see at level `exists` are dropped along with any edges that touch
+ * them. Companion documents (`navigable: false`) are excluded from the walk
+ * unless `includeNonNavigable=true`.
  */
-export const handleGraph: RestHandler = async (_req, res, url, ctx) => {
+export const handleGraph: RestHandler = async (_req, url, ctx) => {
   const root = url.searchParams.get("root") ?? "/";
   const depthRaw = url.searchParams.get("depth");
   const depth = depthRaw ? parseInt(depthRaw, 10) : MAX_GRAPH_DEPTH;
+  const includeNonNavigable = url.searchParams.get("includeNonNavigable") === "true";
 
   if (Number.isNaN(depth) || depth < 0) {
-    return sendError(res, 400, "invalid depth");
+    return errorResponse(400, "invalid depth");
   }
   if (depth > MAX_GRAPH_DEPTH) {
-    return sendError(res, 400, `depth exceeds maximum of ${MAX_GRAPH_DEPTH}`);
+    return errorResponse(400, `depth exceeds maximum of ${MAX_GRAPH_DEPTH}`);
   }
 
-  const result = await resolveGraph(ctx.store, root, depth);
+  const result = await resolveGraph(ctx.store, root, depth, { includeNonNavigable });
 
   // Filter nodes by access; drop edges whose endpoints are invisible.
   const nodeMap = await ctx.store.getNodes(result.nodes.map((n) => n.path));
@@ -39,7 +42,7 @@ export const handleGraph: RestHandler = async (_req, res, url, ctx) => {
     (e) => visiblePaths.has(e.from) && visiblePaths.has(e.to)
   );
 
-  return sendJson(res, 200, {
+  return jsonResponse(200, {
     nodes: visibleNodes.map((n) => ({
       ...n,
       _links: { self: { href: nodeHref(n.path) } },
