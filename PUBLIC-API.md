@@ -234,8 +234,8 @@ While Spandrel is on `0.x`, the surface is committed but the version itself is p
 - **0.3.x** — GraphQL-based serving. Top-level exports included `createSchema`, `SchemaContext`, and free-function access helpers.
 - **0.4.0** — GraphQL removed from the spec; `AccessPolicy` class introduced; REST elevated to a peer of MCP. Top-level access free functions (`canAccess`, `canWrite`, `filterNodeFields`) moved to `AccessPolicy` methods.
 - **0.4.10** — Conformance re-exports removed from the top-level barrel. REST router switches to Web-standard primitives (`createNodeAdapter` provided for `node:http` consumers). JSON Schema export for node frontmatter (`nodeFrontmatterSchema` + `schema.json` at package root). Build manifest from `spandrel compile --manifest`. `_*` reserved-prefix contract formalized in `/content-model`.
-- **0.5.0** *(planned)* — Compiler resolves companion files as `kind: document, navigable: false` nodes. Embeddable viewer at `spandrel/web` with `mountViewer()`, injected data sources, theme-root locality, and CSS isolation.
-- **0.6.0** *(planned)* — Drop deprecated lowercase companion-file forms (`design.md` → `DESIGN.md`, etc.). Lint warning becomes hard error.
+- **0.5.0** — Compiler resolves companion files as `kind: document, navigable: false` nodes. Embeddable viewer at `spandrel/web` with `mountViewer()`, injected data sources, theme-root locality, and CSS isolation.
+- **0.6.0** — Dropped deprecated lowercase companion-file forms (`design.md` → `DESIGN.md`, etc.). The `companion_file_lowercase` warning from 0.5.0 is now a compile error.
 
 ---
 

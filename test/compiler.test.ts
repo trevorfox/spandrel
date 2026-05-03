@@ -176,24 +176,15 @@ describe("Compiler — Tree Walking", () => {
     expect(await store.hasNode("/content")).toBe(true);
   });
 
-  it("compiles lowercase design.md as a document node and warns about the case", async () => {
+  it("throws on lowercase design.md (0.6.0 hard error)", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     fs.writeFileSync(
       path.join(root, "design.md"),
       "---\nname: Design\ndescription: Design file\n---\n\nDesign content\n"
     );
 
-    const store = await compile(root);
-    // Root + /DESIGN companion document
-    expect(store.nodeCount).toBe(2);
-    const designNode = await store.getNode("/DESIGN");
-    expect(designNode).toBeTruthy();
-    expect(designNode?.kind).toBe("document");
-    expect(designNode?.navigable).toBe(false);
-    expect(designNode?.parent).toBe("/");
-
-    const warnings = await store.getWarnings();
-    expect(warnings.some((w) => w.type === "companion_file_lowercase")).toBe(true);
+    await expect(compile(root)).rejects.toThrow(/deprecated lowercase form/);
+    await expect(compile(root)).rejects.toThrow(/DESIGN\.md/);
   });
 
   it("compiles companion files as document nodes (kind=document, navigable=false)", async () => {

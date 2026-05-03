@@ -2,6 +2,22 @@
 
 All notable changes to Spandrel are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The stable surface for consumers is documented in [PUBLIC-API.md](./PUBLIC-API.md).
 
+## [0.6.0] — 2026-05-03
+
+**BREAKING: companion-file lowercase forms are now a hard error.** The `companion_file_lowercase` deprecation warning introduced in 0.5.0 is promoted to a compile error. Rename any lowercase companion files (`design.md`, `skill.md`, `agent.md`, `readme.md`, `claude.md`, `agents.md`) to their uppercase canonical stems (`DESIGN.md`, `SKILL.md`, `AGENT.md`, `README.md`, `CLAUDE.md`, `AGENTS.md`) before upgrading.
+
+### Changed
+
+- **`companion_file_lowercase` warning → compile error.** `src/compiler/compiler.ts` now throws when it encounters a lowercase companion-file form. The error message names the offending file and tells the user the canonical uppercase stem to rename to. Compilation aborts on the first violation; fix and re-run.
+
+### Migration notes
+
+- **Authors:** rename any lowercase companion files in your knowledge repo to the uppercase canonical form. Path identity is preserved — `/architecture/compiler/DESIGN` is the same node either way; only the on-disk filename changes.
+- **Consumers (hosts and integrations):** no API surface change. The error surfaces through the same `compile()` call that previously emitted a warning.
+- **No other breaking changes in 0.6.0.** Top-level imports, sub-path imports, REST/MCP wire surfaces, and storage contracts are unchanged from 0.5.0.
+
+---
+
 ## [0.5.0] — 2026-05-03
 
 Document nodes + embeddable viewer (Phase A). See `_notes/PROPOSAL-0.5.0-document-nodes-and-embeddable-viewer.md` for the full design.

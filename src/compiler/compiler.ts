@@ -271,12 +271,10 @@ function parseCompanionNode(
 
   const nodePath = companionFileToNodePath(parentNodePath, filePath);
 
-  if (!match.isCanonical && warnings) {
-    warnings.push({
-      path: nodePath,
-      type: "companion_file_lowercase",
-      message: `Companion file ${path.relative(rootDir, filePath)} uses a deprecated lowercase form. Rename to ${match.stem}.md — lowercase support will be removed in 0.6.0.`,
-    });
+  if (!match.isCanonical) {
+    throw new Error(
+      `Companion file ${path.relative(rootDir, filePath)} uses a deprecated lowercase form. Rename to ${match.stem}.md — lowercase support was removed in 0.6.0.`,
+    );
   }
 
   const stat = fs.statSync(filePath);
