@@ -42,7 +42,7 @@ describe("buildManifest", () => {
     expect(manifest.collections).toEqual(["/clients"]);
   });
 
-  it("groups warnings by type and counts top-level collections", async () => {
+  it("counts top-level collections", async () => {
     writeIndex(root, { name: "Root", description: "Root" });
     writeIndex(path.join(root, "clients"), {
       name: "Clients",
@@ -52,19 +52,22 @@ describe("buildManifest", () => {
       name: "Projects",
       description: "Projects",
     });
-    // Companion file alongside root → companion_file_lowercase warning
+
+    const store = await compile(root);
+    const manifest = await buildManifest(store, {
+      spandrelVersion: "0.6.0",
+    });
+
+    expect(manifest.collections).toEqual(["/clients", "/projects"]);
+  });
+
+  it("compile throws on lowercase companion files (0.6.0 hard error)", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
     fs.writeFileSync(
       path.join(root, "design.md"),
       "---\ndescription: lowercase\n---\n",
     );
 
-    const store = await compile(root);
-    const manifest = await buildManifest(store, {
-      spandrelVersion: "0.5.0",
-    });
-
-    expect(manifest.collections).toEqual(["/clients", "/projects"]);
-    expect(manifest.warningsByType.companion_file_lowercase).toBe(1);
-    expect(manifest.warningCount).toBe(1);
+    await expect(compile(root)).rejects.toThrow(/deprecated lowercase form/);
   });
 });

@@ -18,7 +18,7 @@
  * fallback for users who collapse it.
  */
 
-import { treeRailOpen$, scopePath$, currentPath$, graph$ } from "../state.js";
+import type { ViewerState } from "../state.js";
 import { mountGraphTree } from "./graph-tree.js";
 
 const STORAGE_KEY = "spandrel.tree-rail";
@@ -42,7 +42,8 @@ function writeStoredRailOpen(open: boolean): void {
   }
 }
 
-export function mountTreeRail(root: HTMLElement): void {
+export function mountTreeRail(root: HTMLElement, state: ViewerState): void {
+  const { treeRailOpen$, scopePath$, currentPath$, graph$ } = state;
   root.innerHTML = `
     <div class="rail-header">
       <span class="rail-label">Tree</span>
@@ -67,7 +68,7 @@ export function mountTreeRail(root: HTMLElement): void {
   const scopeValueEl = root.querySelector(".rail-scope-value") as HTMLElement;
   const scopeClearEl = root.querySelector(".rail-scope-clear") as HTMLButtonElement;
   const scopeMenuEl = root.querySelector(".rail-scope-menu") as HTMLElement;
-  mountGraphTree(bodyEl);
+  mountGraphTree(bodyEl, state);
 
   const renderScope = () => {
     const scope = scopePath$.get();

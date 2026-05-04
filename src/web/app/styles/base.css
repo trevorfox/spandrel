@@ -1,3 +1,5 @@
+@layer spandrel-base {
+
 /* Reset, typography, layout grid. */
 
 *,
@@ -318,4 +320,6 @@ textarea:focus {
   #app[data-view="map"] .content {
     display: none;
   }
+}
+
 }

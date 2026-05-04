@@ -2,6 +2,11 @@
  *
  * We deliberately do not pull in a framework. A typed signal + a derived
  * cache is enough for the viewer's needs.
+ *
+ * State is per-mount: every `mountViewer()` call instantiates its own
+ * `ViewerState` via `createViewerState()` and threads it through component
+ * constructors. This keeps multiple viewers on the same page (multi-embed)
+ * isolated — navigating one doesn't drag the others along.
  */
 
 import type { Graph, SpandrelNode, SpandrelEdge, LinkTypeInfo } from "../types.js";
@@ -117,61 +122,86 @@ export interface DerivedMaps {
   searchIndex: SearchIndex;
 }
 
-export const graph$ = new Signal<Graph | null>(null);
-export const currentPath$ = new Signal<string>("/");
-export const viewFormat$ = new Signal<ViewFormat>("rendered");
-export const error$ = new Signal<string | null>(null);
-export const derived$ = new Signal<DerivedMaps | null>(null);
+/**
+ * Per-mount viewer state. Every `mountViewer()` call instantiates one of
+ * these and passes it to each component's mount function. The shape is the
+ * full set of signals that components subscribe to and update — there's no
+ * hidden module-level state.
+ */
+export interface ViewerState {
+  graph$: Signal<Graph | null>;
+  currentPath$: Signal<string>;
+  viewFormat$: Signal<ViewFormat>;
+  error$: Signal<string | null>;
+  derived$: Signal<DerivedMaps | null>;
+  /**
+   * Subtree scope for the graph viz. `null` means "show everything"; a
+   * path like `/architecture` prunes the graph to nodes under that
+   * subtree. Independent of `currentPath$` — navigating doesn't change
+   * scope, and a user can keep the graph scoped to one subtree while
+   * reading content in another. Transient (not persisted to URL or
+   * localStorage), matching the legend-highlight pattern.
+   */
+  scopePath$: Signal<string | null>;
+  /**
+   * Paths currently expanded in the tree view. Transient. Seeded on
+   * first render from the ancestors of `currentPath$`, so whichever
+   * node the user is reading is visible without manual expansion.
+   */
+  treeExpanded$: Signal<Set<string>>;
+  /**
+   * Whether the left-rail tree is open. Persisted to localStorage so the
+   * user's choice survives reloads. Initial default is mode-dependent and
+   * set in `mount.ts`: open in dev (authoring), closed in publish (reading).
+   */
+  treeRailOpen$: Signal<boolean>;
+  /**
+   * Path the user is hovering — currently driven by tree-row mouseenter
+   * in the rail, consumed by the graph viz to highlight the matching
+   * node circle. `null` means nothing is hovered. Transient, never
+   * persisted.
+   */
+  hoveredPath$: Signal<string | null>;
+  /**
+   * Body content by node path, populated lazily when a node is visited.
+   * Separate from `graph$` so the structural payload stays small and
+   * navigation doesn't force a content fetch for nodes the user never
+   * opens. `undefined` means "not yet loaded"; empty string means "loaded,
+   * node has no body". See `lib/node-loader.ts`.
+   */
+  contentCache$: Signal<Map<string, string>>;
+}
 
 /**
- * Subtree scope for the graph viz. `null` means "show everything"; a
- * path like `/architecture` prunes the graph to nodes under that
- * subtree. Independent of `currentPath$` — navigating doesn't change
- * scope, and a user can keep the graph scoped to one subtree while
- * reading content in another. Transient (not persisted to URL or
- * localStorage), matching the legend-highlight pattern.
+ * Construct a fresh state object. Wires `graph$ → derived$` rebuild
+ * internally so consumers only have to subscribe to `derived$`.
  */
-export const scopePath$ = new Signal<string | null>(null);
+export function createViewerState(): ViewerState {
+  const graph$ = new Signal<Graph | null>(null);
+  const derived$ = new Signal<DerivedMaps | null>(null);
 
-/**
- * Paths currently expanded in the tree view. Transient. Seeded on
- * first render from the ancestors of `currentPath$`, so whichever
- * node the user is reading is visible without manual expansion.
- */
-export const treeExpanded$ = new Signal<Set<string>>(new Set<string>());
+  // Rebuild derived maps when the graph changes.
+  graph$.subscribe((g) => {
+    if (!g) {
+      derived$.set(null);
+      return;
+    }
+    derived$.set(buildDerived(g));
+  });
 
-/**
- * Whether the left-rail tree is open. Persisted to localStorage so the
- * user's choice survives reloads. Initial default is mode-dependent and
- * set in `main.ts`: open in dev (authoring), closed in publish (reading).
- */
-export const treeRailOpen$ = new Signal<boolean>(true);
-
-/**
- * Path the user is hovering — currently driven by tree-row mouseenter
- * in the rail, consumed by the graph viz to highlight the matching
- * node circle. `null` means nothing is hovered. Transient, never
- * persisted.
- */
-export const hoveredPath$ = new Signal<string | null>(null);
-
-/**
- * Body content by node path, populated lazily when a node is visited.
- * Separate from `graph$` so the structural payload stays small and
- * navigation doesn't force a content fetch for nodes the user never
- * opens. `undefined` means "not yet loaded"; empty string means "loaded,
- * node has no body". See `lib/node-loader.ts`.
- */
-export const contentCache$ = new Signal<Map<string, string>>(new Map());
-
-/** Rebuild derived maps when the graph changes. */
-graph$.subscribe((g) => {
-  if (!g) {
-    derived$.set(null);
-    return;
-  }
-  derived$.set(buildDerived(g));
-});
+  return {
+    graph$,
+    currentPath$: new Signal<string>("/"),
+    viewFormat$: new Signal<ViewFormat>("rendered"),
+    error$: new Signal<string | null>(null),
+    derived$,
+    scopePath$: new Signal<string | null>(null),
+    treeExpanded$: new Signal<Set<string>>(new Set<string>()),
+    treeRailOpen$: new Signal<boolean>(true),
+    hoveredPath$: new Signal<string | null>(null),
+    contentCache$: new Signal<Map<string, string>>(new Map()),
+  };
+}
 
 function buildDerived(g: Graph): DerivedMaps {
   const nodeByPath = new Map<string, WireNode>();

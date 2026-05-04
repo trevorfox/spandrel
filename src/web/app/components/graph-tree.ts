@@ -12,12 +12,8 @@
  */
 
 import {
-  currentPath$,
-  derived$,
-  hoveredPath$,
-  scopePath$,
-  treeExpanded$,
   collectionOfPath,
+  type ViewerState,
 } from "../state.js";
 import { pathToUrl } from "../lib/mode.js";
 
@@ -32,7 +28,8 @@ const COLLECTION_PALETTE = [
   "#8a5c3c",
 ];
 
-export function mountGraphTree(root: HTMLElement): void {
+export function mountGraphTree(root: HTMLElement, state: ViewerState): void {
+  const { currentPath$, derived$, hoveredPath$, scopePath$, treeExpanded$ } = state;
   root.innerHTML = `<div class="tree-empty" hidden>No graph loaded.</div><ul class="tree-root" role="tree"></ul>`;
   const emptyEl = root.querySelector(".tree-empty") as HTMLElement;
   const listEl = root.querySelector(".tree-root") as HTMLUListElement;

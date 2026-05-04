@@ -197,10 +197,19 @@ The mount root must contain the standard layout skeleton (elements with ids `sit
 - Token CSS scoped to `[data-theme]` (no `:root` prefix) so tokens apply wherever the attribute lives. Hosts override colors/typography/spacing by redefining tokens for `[data-theme="custom"]`.
 - External routing (`routing: "external"` + `onNavigate`) for hosts with their own router.
 
-**0.5.0 Phase A known limitations** (deferred to a later release when a real consumer asks):
-- Component CSS specificity is non-zero. Hosts overriding rules beyond token redefinition need higher-specificity selectors or `!important`. A `:where()` wrap pass that drops specificity to zero is mechanical work for a future release.
-- Module-level signals (per-mount state) — multiple viewers on one page share state. Single-mount works correctly; multi-mount lands when a consumer needs it.
-- CSS bundle path — Vite emits a hashed filename in `dist/web/assets/`. Consumers either import it via the SPA's `index.html` shell or copy `src/web/app/styles/{tokens,components,base}.css` directly. A stable `spandrel/web/styles.css` re-export ships with the same Phase B refactor as the `:where()` wrap.
+Stable CSS import:
+
+```ts
+// In a bundler that resolves package CSS imports (Vite, Webpack, esbuild, …)
+import "spandrel/web/styles.css";
+```
+
+The export concatenates `tokens.css` → `components.css` → `base.css` from the viewer source in load order. Hosts that need only the design tokens can copy `src/web/app/styles/tokens.css` directly; the bundled export is the all-in-one path for embedders.
+
+**0.5.0 Phase A deferrals — resolved in 0.6.0:**
+- Viewer styles ship in cascade layers (`@layer spandrel-base`, `@layer spandrel-components`). Host CSS outside any layer — or in a layer declared after `spandrel-components` — wins over the viewer's rules regardless of specificity. No `:where()`, no `!important`.
+- Per-mount viewer state — each `mountViewer()` call instantiates an isolated state object. Multiple viewers under different roots on the same page navigate, scope, and toggle their rails independently.
+- Stable CSS import path — `import "spandrel/web/styles.css"` resolves to the bundled tokens + components + base concatenation documented above.
 
 ---
 
@@ -234,8 +243,8 @@ While Spandrel is on `0.x`, the surface is committed but the version itself is p
 - **0.3.x** — GraphQL-based serving. Top-level exports included `createSchema`, `SchemaContext`, and free-function access helpers.
 - **0.4.0** — GraphQL removed from the spec; `AccessPolicy` class introduced; REST elevated to a peer of MCP. Top-level access free functions (`canAccess`, `canWrite`, `filterNodeFields`) moved to `AccessPolicy` methods.
 - **0.4.10** — Conformance re-exports removed from the top-level barrel. REST router switches to Web-standard primitives (`createNodeAdapter` provided for `node:http` consumers). JSON Schema export for node frontmatter (`nodeFrontmatterSchema` + `schema.json` at package root). Build manifest from `spandrel compile --manifest`. `_*` reserved-prefix contract formalized in `/content-model`.
-- **0.5.0** *(planned)* — Compiler resolves companion files as `kind: document, navigable: false` nodes. Embeddable viewer at `spandrel/web` with `mountViewer()`, injected data sources, theme-root locality, and CSS isolation.
-- **0.6.0** *(planned)* — Drop deprecated lowercase companion-file forms (`design.md` → `DESIGN.md`, etc.). Lint warning becomes hard error.
+- **0.5.0** — Compiler resolves companion files as `kind: document, navigable: false` nodes. Embeddable viewer at `spandrel/web` with `mountViewer()`, injected data sources, theme-root locality, and CSS isolation.
+- **0.6.0** — Dropped deprecated lowercase companion-file forms (`design.md` → `DESIGN.md`, etc.). The `companion_file_lowercase` warning from 0.5.0 is now a compile error.
 
 ---
 

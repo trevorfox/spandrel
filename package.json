@@ -1,6 +1,6 @@
 {
   "name": "spandrel",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Turn markdown file trees into navigable, queryable knowledge graphs served via REST and MCP",
   "type": "module",
   "license": "MIT",
@@ -26,6 +26,7 @@
       "import": "./dist/*",
       "default": "./dist/*"
     },
+    "./web/styles.css": "./dist/web/styles.css",
     "./package.json": "./package.json"
   },
   "bin": {
@@ -47,9 +48,10 @@
     "model-context-protocol"
   ],
   "scripts": {
-    "build": "rm -rf dist && npm run build:web && tsc && chmod +x dist/cli.js && npm run build:schema",
+    "build": "rm -rf dist && npm run build:web && npm run build:web-styles && tsc && chmod +x dist/cli.js && npm run build:schema",
     "build:schema": "tsx scripts/generate-schema-json.ts",
     "build:web": "vite build --config src/web/app/vite.config.ts",
+    "build:web-styles": "tsx scripts/build-web-styles.ts",
     "prepublishOnly": "npm run build",
     "dev": "tsx src/cli.ts dev",
     "dev:web": "vite --config src/web/app/vite.config.ts",
@@ -75,7 +77,9 @@
     "@types/d3-selection": "^3.0.11",
     "@types/d3-transition": "^3.0.9",
     "@types/js-yaml": "^4.0.9",
+    "@types/jsdom": "^28.0.1",
     "@types/node": "^22.15.3",
+    "jsdom": "^29.1.1",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vite": "^8.0.10",

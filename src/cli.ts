@@ -167,11 +167,16 @@ async function dev(rootDir: string) {
       if (nodePath !== null) {
         const node = await store.getNode(nodePath);
         if (node) {
+          // Strip raw frontmatter from the JSON output — its keys (name,
+          // description, links) are already promoted to top-level. Showing
+          // both duplicates the same data. Round-trip consumers that need
+          // raw frontmatter fetch the `.md` sibling route instead.
+          const { frontmatter: _frontmatter, ...wireNode } = node;
           res.writeHead(200, {
             "Content-Type": "application/json; charset=utf-8",
             "Cache-Control": "no-store",
           });
-          res.end(JSON.stringify(node, null, 2));
+          res.end(JSON.stringify(wireNode, null, 2));
           return;
         }
       }

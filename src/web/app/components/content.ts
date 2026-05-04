@@ -1,12 +1,13 @@
 /** Content pane: metadata header + node body in the selected format. */
 
-import { contentCache$, currentPath$, derived$, viewFormat$ } from "../state.js";
+import type { ViewerState, DerivedMaps } from "../state.js";
 import { renderMarkdown } from "../lib/markdown.js";
 import { renderNodeAsMarkdown } from "../lib/render-node-markdown.js";
 import { pathToUrl } from "../lib/mode.js";
 import type { SpandrelNode } from "../../types.js";
 
-export function mountContent(root: HTMLElement): void {
+export function mountContent(root: HTMLElement, state: ViewerState): void {
+  const { contentCache$, currentPath$, derived$, viewFormat$ } = state;
   const render = () => {
     const path = currentPath$.get();
     const maps = derived$.get();
@@ -57,7 +58,7 @@ export function mountContent(root: HTMLElement): void {
 
 function renderNode(
   node: SpandrelNode,
-  maps: NonNullable<ReturnType<typeof derived$.get>>,
+  maps: DerivedMaps,
   loading: boolean,
 ): string {
   const fmPairs = collectFrontmatterPairs(node.frontmatter);
@@ -136,9 +137,12 @@ function renderNodeRawMarkdown(node: SpandrelNode): string {
   `;
 }
 
-/** Raw-JSON view: the full node object as pretty JSON, lightly colored. */
+/** Raw-JSON view: the node object as pretty JSON, lightly colored.
+ * Strips the `frontmatter` field — its keys are already promoted to top-level
+ * (`name`, `description`, `links`, …) so showing both duplicates the same data. */
 function renderNodeJson(node: SpandrelNode): string {
-  const json = JSON.stringify(node, null, 2);
+  const { frontmatter: _frontmatter, ...nodeForDisplay } = node;
+  const json = JSON.stringify(nodeForDisplay, null, 2);
   return `
     <div class="content-body raw">
       <header class="meta">
