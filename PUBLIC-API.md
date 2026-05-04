@@ -149,67 +149,11 @@ import { nodeHref } from "spandrel/rest/shape.js";
 
 > **0.4.10 change:** `runConformanceTests` and `runAccessPolicyConformance` are removed from the top-level barrel (they were dragging vitest into consumer runtimes). Import them from `spandrel/storage/conformance.js` and `spandrel/access/conformance.js` respectively in your test files.
 
-### Web viewer (0.5.0)
+### Web viewer
 
-```ts
-import {
-  mountViewer,
-  createStaticDataSource,
-  createRestDataSource,
-  renderNodeAsMarkdown,
-} from "spandrel/web";
+The viewer source ships in `src/web/` and powers `spandrel publish`'s static SPA bundle. **The viewer's mount API is internal as of 0.7.0** — `mountViewer`, `createStaticDataSource`, `createRestDataSource`, `ViewerOptions`, `ViewerHandle`, `ViewerDataSource`, and the `spandrel/web/styles.css` re-export were public in 0.5.0 / 0.6.0 and are now removed from the package's exports map. Hosts that want to embed a graph viewer should run `spandrel publish` and serve (or iframe) the static bundle, or build their own viewer against the REST contract.
 
-import type {
-  ViewerOptions,
-  ViewerHandle,
-  ViewerDataSource,
-  Graph,
-  SpandrelNode,
-  SpandrelEdge,
-  ValidationWarning,
-  LinkTypeInfo,
-} from "spandrel/web";
-```
-
-Embed pattern:
-
-```ts
-const handle = mountViewer(document.getElementById("viewer-host"), {
-  data: createRestDataSource({
-    baseUrl: "/api/acme/docs",
-    headers: () => ({ Authorization: `Bearer ${session.token}` }),
-  }),
-  themeRoot: document.getElementById("viewer-host"), // local theming
-  routing: "external",
-  onNavigate: (path) => router.push(`/viewer${path}`),
-});
-
-// later
-handle.navigate("/clients/acme");
-handle.destroy();
-```
-
-The mount root must contain the standard layout skeleton (elements with ids `site-banner`, `top-bar`, `content`, `graph-pane`, `drawer`, `view-pill`, `tree-rail`). The simplest way to obtain the skeleton is to copy it from `spandrel publish` output's `index.html`.
-
-**0.5.0 Phase A scope:**
-- Pluggable data source (`ViewerDataSource` interface; `createStaticDataSource()` for bundles, `createRestDataSource()` for any spec-conformant REST endpoint).
-- Theme root locality — `data-theme` writes to the configured `themeRoot` (defaults to mount root) instead of `document.documentElement`.
-- Token CSS scoped to `[data-theme]` (no `:root` prefix) so tokens apply wherever the attribute lives. Hosts override colors/typography/spacing by redefining tokens for `[data-theme="custom"]`.
-- External routing (`routing: "external"` + `onNavigate`) for hosts with their own router.
-
-Stable CSS import:
-
-```ts
-// In a bundler that resolves package CSS imports (Vite, Webpack, esbuild, …)
-import "spandrel/web/styles.css";
-```
-
-The export concatenates `tokens.css` → `components.css` → `base.css` from the viewer source in load order. Hosts that need only the design tokens can copy `src/web/app/styles/tokens.css` directly; the bundled export is the all-in-one path for embedders.
-
-**0.5.0 Phase A deferrals — resolved in 0.6.0:**
-- Viewer styles ship in cascade layers (`@layer spandrel-base`, `@layer spandrel-components`). Host CSS outside any layer — or in a layer declared after `spandrel-components` — wins over the viewer's rules regardless of specificity. No `:where()`, no `!important`.
-- Per-mount viewer state — each `mountViewer()` call instantiates an isolated state object. Multiple viewers under different roots on the same page navigate, scope, and toggle their rails independently.
-- Stable CSS import path — `import "spandrel/web/styles.css"` resolves to the bundled tokens + components + base concatenation documented above.
+`renderNodeAsMarkdown` is unchanged and still exported from the top-level (see "Markdown serialization" above).
 
 ---
 
@@ -243,8 +187,9 @@ While Spandrel is on `0.x`, the surface is committed but the version itself is p
 - **0.3.x** — GraphQL-based serving. Top-level exports included `createSchema`, `SchemaContext`, and free-function access helpers.
 - **0.4.0** — GraphQL removed from the spec; `AccessPolicy` class introduced; REST elevated to a peer of MCP. Top-level access free functions (`canAccess`, `canWrite`, `filterNodeFields`) moved to `AccessPolicy` methods.
 - **0.4.10** — Conformance re-exports removed from the top-level barrel. REST router switches to Web-standard primitives (`createNodeAdapter` provided for `node:http` consumers). JSON Schema export for node frontmatter (`nodeFrontmatterSchema` + `schema.json` at package root). Build manifest from `spandrel compile --manifest`. `_*` reserved-prefix contract formalized in `/content-model`.
-- **0.5.0** — Compiler resolves companion files as `kind: document, navigable: false` nodes. Embeddable viewer at `spandrel/web` with `mountViewer()`, injected data sources, theme-root locality, and CSS isolation.
-- **0.6.0** — Dropped deprecated lowercase companion-file forms (`design.md` → `DESIGN.md`, etc.). The `companion_file_lowercase` warning from 0.5.0 is now a compile error.
+- **0.5.0** — Compiler resolves companion files as `kind: document, navigable: false` nodes. Embeddable viewer at `spandrel/web` with `mountViewer()`, injected data sources, theme-root locality, and CSS isolation. *(`spandrel/web` mount API removed in 0.7.0.)*
+- **0.6.0** — Dropped deprecated lowercase companion-file forms (`design.md` → `DESIGN.md`, etc.). The `companion_file_lowercase` warning from 0.5.0 is now a compile error. Cascade-layer wrap on viewer styles; stable `spandrel/web/styles.css` re-export. *(`spandrel/web/styles.css` export removed in 0.7.0.)*
+- **0.7.0** — Removed `spandrel/web` mount API and the `spandrel/web/styles.css` export. The viewer source remains in-tree to power `spandrel publish` only. Hosts that need an embed serve the static bundle or build their own UI against the REST/MCP contract. Top-level exports (compiler, storage, access policy, REST router, MCP server, `renderNodeAsMarkdown`) are unchanged.
 
 ---
 

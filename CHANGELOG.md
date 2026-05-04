@@ -2,6 +2,36 @@
 
 All notable changes to Spandrel are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The stable surface for consumers is documented in [PUBLIC-API.md](./PUBLIC-API.md).
 
+## [0.7.0] — 2026-05-04
+
+**BREAKING: the `spandrel/web` embeddable-viewer surface is removed.** `mountViewer`, `createStaticDataSource`, `createRestDataSource`, the `ViewerOptions` / `ViewerHandle` / `ViewerDataSource` types, and the `spandrel/web/styles.css` re-export are no longer part of the package's exports map. The viewer source stays in-tree and powers `spandrel publish` internally, but it's no longer a documented embed point.
+
+### Why
+
+The mount API shipped in 0.5.0 anticipating multiple host integrations. In practice the cross-coupling friction (host auth model vs. embedded data calls, layout containment, theme bridging) consistently outweighed the value of a public viewer-mount surface for the consumers we observed. Hosts that need a graph viewer in their product can serve `spandrel publish`'s static bundle directly or build their own UI against the documented REST contract.
+
+### Removed
+
+- `mountViewer`, `createStaticDataSource`, `createRestDataSource` from `spandrel/web` (no longer in the exports map).
+- `ViewerOptions`, `ViewerHandle`, `ViewerDataSource` types.
+- `spandrel/web/styles.css` re-export (was added in 0.6.0).
+- `scripts/build-web-styles.ts` and the `build:web-styles` npm script.
+- `test/web/styles-export.test.ts`.
+
+### Kept
+
+- `renderNodeAsMarkdown` (top-level export — still public, used for markdown round-trip).
+- The viewer source under `src/web/` (powers `spandrel publish` only).
+- Cascade-layer setup (`@layer spandrel-base`, `@layer spandrel-components`) and per-mount state — internal, no ongoing API cost.
+- The compiler, storage, access-policy, REST, and MCP public surfaces — unchanged.
+
+### Migration
+
+- **Hosts that imported from `spandrel/web`:** there is no like-for-like replacement in 0.7.0. Either pin to `spandrel@^0.6.0`, serve `spandrel publish`'s static bundle, or build a viewer against the REST contract documented in `PUBLIC-API.md`.
+- **Everyone else:** no action — the framework's documented top-level surface is unchanged.
+
+---
+
 ## [0.6.0] — 2026-05-03
 
 **BREAKING: companion-file lowercase forms are now a hard error.** The `companion_file_lowercase` deprecation warning introduced in 0.5.0 is promoted to a compile error. Rename any lowercase companion files (`design.md`, `skill.md`, `agent.md`, `readme.md`, `claude.md`, `agents.md`) to their uppercase canonical stems (`DESIGN.md`, `SKILL.md`, `AGENT.md`, `README.md`, `CLAUDE.md`, `AGENTS.md`) before upgrading.
