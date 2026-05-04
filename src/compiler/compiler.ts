@@ -13,6 +13,28 @@ import { matchCompanionFile, isCompanionFile } from "./companion-files.js";
 
 const INLINE_LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/g;
 
+/**
+ * Strip fenced code blocks (```…```) and inline code spans (`…`) from
+ * markdown so link extraction sees only prose. The patterns docs use
+ * `[Acme](/clients/acme)` inside fenced examples to *illustrate* the link
+ * syntax — those aren't real edges. Treat code spans the same way: a
+ * literal `` `[label](/path)` `` in prose is documenting the syntax, not
+ * declaring a relationship.
+ */
+function stripCodeFromMarkdown(content: string): string {
+  return content
+    // Strip fenced code blocks (```lang … ``` or ~~~ … ~~~). The closing
+    // fence has to match the opening, but for our purposes the simple
+    // non-greedy match is sufficient — markdown's own parser is more
+    // permissive and we don't need perfect parity here.
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/~~~[\s\S]*?~~~/g, "")
+    // Strip inline code spans (`…`). Greedy on backticks per CommonMark
+    // (a span runs until a matching backtick run); single-backtick is
+    // overwhelmingly the common form in our content.
+    .replace(/`[^`\n]*`/g, "");
+}
+
 /** Max file size in bytes — files larger than this are skipped with a warning */
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -550,7 +572,10 @@ function extractEdges(node: SpandrelNode, edges: SpandrelEdge[]): void {
 
   // Inline markdown links to internal paths — typed as "mentions" to distinguish
   // from declared frontmatter links. Mentions are implicit prose references.
-  const matches = node.content.matchAll(INLINE_LINK_RE);
+  // Skip fenced code blocks and inline code spans so illustrative examples
+  // (`[Acme](/clients/acme)` inside ```…``` blocks) don't become real edges.
+  const prose = stripCodeFromMarkdown(node.content);
+  const matches = prose.matchAll(INLINE_LINK_RE);
   for (const match of matches) {
     const href = match[2];
     if (href.startsWith("/")) {
@@ -654,11 +679,14 @@ function validate(
     }
   }
 
-  // Check for broken links
+  // Check for broken links. Anchor fragments (`#section`) are stripped before
+  // the path lookup — `[content-model/nodes](/content-model/nodes#anchor)`
+  // resolves on the path; we don't yet validate fragments against headings.
   for (const edge of edges) {
-    if (edge.type === "link" && !nodes.has(edge.to)) {
-      // Only flag internal paths, not external URLs
-      if (!edge.to.startsWith("http")) {
+    if (edge.type === "link") {
+      if (edge.to.startsWith("http")) continue;
+      const targetPath = edge.to.split("#", 1)[0];
+      if (!nodes.has(targetPath)) {
         warnings.push({
           path: edge.from,
           type: "broken_link",
@@ -692,12 +720,16 @@ function validate(
     }
   }
 
-  // Check for unlisted children
+  // Check for unlisted children. Skip `navigable: false` children — companion
+  // documents (DESIGN, SKILL, etc.) and other intentionally non-navigable
+  // nodes are by-design *not* part of the parent's surface, so requiring
+  // them to be mentioned in the parent body inverts their purpose.
   for (const node of nodes.values()) {
     if (node.nodeType === "composite" && node.content) {
       for (const childPath of node.children) {
         const childNode = nodes.get(childPath);
         if (childNode) {
+          if (childNode.navigable === false) continue;
           const childName = childNode.name;
           const childBasename = path.basename(childPath);
           // Check if the child is mentioned in the parent's content

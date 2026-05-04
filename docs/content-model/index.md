@@ -16,8 +16,8 @@ A Thing is a [node](/content-model/nodes) in the graph. It has a name, descripti
 
 The content model covers:
 
-- **Nodes** — how Things are represented as files (`foo.md` or `foo/index.md`)
-- **Links** — how Things connect to each other via frontmatter declarations
-- **Paths** — how file paths become graph addresses
-- **Companion files** — non-node files that travel with nodes (`design.md`, `SKILL.md`, `AGENT.md`, `README.md`)
-- **Reserved prefixes** — files and directories starting with `_` are excluded from the graph (e.g. `_access/`, `_agents/`)
+- **[Nodes](/content-model/nodes)** — how Things are represented as files (`foo.md` or `foo/index.md`)
+- **[Links](/content-model/links)** — how Things connect to each other via frontmatter declarations
+- **[Paths](/content-model/paths)** — how file paths become graph addresses
+- **[Companion files](/content-model/design-md)** — non-node files that travel with nodes (`DESIGN.md`, `SKILL.md`, `AGENT.md`, `README.md`, `CLAUDE.md`, `AGENTS.md`)
+- **[Reserved prefixes](/content-model/reserved-prefixes)** — files and directories starting with `_` are excluded from the graph (e.g. `_access/`, `_agents/`)
