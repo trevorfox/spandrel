@@ -66,14 +66,14 @@ Through 0.4.x these files were excluded from compilation. **Starting in 0.5.0, t
 The path is stem-based and uppercase-canonical regardless of the on-disk filename's case:
 
 ```
-docs/architecture/compiler/design.md   →  /architecture/compiler/DESIGN
+docs/architecture/compiler/DESIGN.md   →  /architecture/compiler/DESIGN
 docs/SKILL.md                          →  /SKILL
 docs/clients/acme/AGENT.md             →  /clients/acme/AGENT
 ```
 
 Companion files at the **compile root** describe the root composite and become root-level document children (`/CLAUDE`, `/AGENTS`, `/README`, etc.).
 
-Lowercase forms (`design.md`, `skill.md`, ...) are accepted in 0.5.0 with a `companion_file_lowercase` warning and dropped in 0.6.0. Uppercase canonical names are recommended.
+Lowercase forms (`design.md`, `skill.md`, ...) were accepted in 0.5.0 with a `companion_file_lowercase` warning; 0.6.0 requires the uppercase canonical names.
 
 ## What's not a node
 
