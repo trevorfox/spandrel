@@ -137,9 +137,12 @@ function renderNodeRawMarkdown(node: SpandrelNode): string {
   `;
 }
 
-/** Raw-JSON view: the full node object as pretty JSON, lightly colored. */
+/** Raw-JSON view: the node object as pretty JSON, lightly colored.
+ * Strips the `frontmatter` field — its keys are already promoted to top-level
+ * (`name`, `description`, `links`, …) so showing both duplicates the same data. */
 function renderNodeJson(node: SpandrelNode): string {
-  const json = JSON.stringify(node, null, 2);
+  const { frontmatter: _frontmatter, ...nodeForDisplay } = node;
+  const json = JSON.stringify(nodeForDisplay, null, 2);
   return `
     <div class="content-body raw">
       <header class="meta">
