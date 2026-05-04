@@ -2,6 +2,23 @@
 
 All notable changes to Spandrel are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The stable surface for consumers is documented in [PUBLIC-API.md](./PUBLIC-API.md).
 
+## [0.7.1] — 2026-05-04
+
+Compiler honesty pass. Three small fixes that turn the validation output from "mostly false-positive noise" into actual signal. Audited against the framework's own `docs/` KG: 15 warnings → 0 warnings (three compiler fixes resolved 13; two real content gaps fixed in `docs/content-model/index.md`).
+
+### Fixed
+
+- **`broken_link` no longer flags inline links inside fenced code blocks or inline code spans.** Pattern docs use `[Acme](/clients/acme)` inside ` ``` ` examples to *illustrate* the linking syntax; those aren't real edges. Link extraction now strips fenced code blocks (` ```…``` `, `~~~…~~~`) and inline code spans (`` `…` ``) before scanning prose. Resolves the case where author-illustrative examples produced spurious broken-link warnings.
+- **`broken_link` strips anchor fragments before path lookup.** `[Section](/content-model/nodes#some-section)` resolves cleanly when `/content-model/nodes` exists; the fragment is no longer treated as part of the target path. (No `unknown_anchor` warning yet — fragment validation against headings is a future capability.)
+- **`unlisted_child` no longer warns for `navigable: false` children.** Companion documents (`DESIGN.md`, `SKILL.md`, `AGENT.md`, etc.) compile as `kind: document, navigable: false` — by design they're *not* part of the parent's navigable surface, so requiring them to be mentioned in the parent body inverts their purpose. The check now correctly skips `navigable: false` nodes.
+
+### Internal
+
+- 4 new compiler test fixtures covering each change.
+- `docs/content-model/index.md` updated to link `/content-model/design-md`, `/content-model/reserved-prefixes`, `/content-model/nodes`, `/content-model/links`, `/content-model/paths` explicitly (closes the two real `unlisted_child` gaps surfaced by the audit).
+
+---
+
 ## [0.7.0] — 2026-05-04
 
 **BREAKING: the `spandrel/web` embeddable-viewer surface is removed.** `mountViewer`, `createStaticDataSource`, `createRestDataSource`, the `ViewerOptions` / `ViewerHandle` / `ViewerDataSource` types, and the `spandrel/web/styles.css` re-export are no longer part of the package's exports map. The viewer source stays in-tree and powers `spandrel publish` internally, but it's no longer a documented embed point.

@@ -293,6 +293,64 @@ describe("Compiler — Validation", () => {
     // Beta is not mentioned in root's content
     expect(unlisted.some((w) => w.message.includes("/beta"))).toBe(true);
   });
+
+  it("does not extract inline links inside fenced code blocks", async () => {
+    writeIndex(
+      root,
+      { name: "Root", description: "Root" },
+      "Real prose link to [Alpha](/alpha).\n\n```markdown\n[Acme](/clients/acme)\n```\n",
+    );
+    writeIndex(path.join(root, "alpha"), { name: "Alpha", description: "Alpha" });
+
+    const store = await compile(root);
+    const broken = (await store.getWarnings()).filter((w) => w.type === "broken_link");
+    // The fenced example should not produce a broken_link for /clients/acme.
+    expect(broken).toHaveLength(0);
+  });
+
+  it("does not extract inline links inside inline code spans", async () => {
+    writeIndex(
+      root,
+      { name: "Root", description: "Root" },
+      "Inline syntax demo: `[label](/internal/path)` is the form.\n",
+    );
+
+    const store = await compile(root);
+    const broken = (await store.getWarnings()).filter((w) => w.type === "broken_link");
+    // The literal `[…](/internal/path)` inside backticks documents the syntax;
+    // it must not become a real edge.
+    expect(broken).toHaveLength(0);
+  });
+
+  it("strips anchor fragments before broken-link check", async () => {
+    writeIndex(
+      root,
+      { name: "Root", description: "Root" },
+      "See [Alpha](/alpha#some-section) for details.\n",
+    );
+    writeIndex(path.join(root, "alpha"), { name: "Alpha", description: "Alpha" });
+
+    const store = await compile(root);
+    const broken = (await store.getWarnings()).filter((w) => w.type === "broken_link");
+    // /alpha exists; the fragment is irrelevant to broken-link validation.
+    expect(broken).toHaveLength(0);
+  });
+
+  it("does not warn unlisted_child for navigable: false children (companion documents)", async () => {
+    writeIndex(root, { name: "Root", description: "Root" }, "Body mentions Alpha only.");
+    writeIndex(path.join(root, "alpha"), { name: "Alpha", description: "Alpha" });
+    // Companion file: DESIGN.md alongside the root composite. Compiles as
+    // kind: document, navigable: false. Should not trigger unlisted_child
+    // even though the parent body doesn't mention it.
+    fs.writeFileSync(
+      path.join(root, "DESIGN.md"),
+      `---\nname: Design\ndescription: Design notes for Root\n---\n\n# Design\n`,
+    );
+
+    const store = await compile(root);
+    const unlisted = (await store.getWarnings()).filter((w) => w.type === "unlisted_child");
+    expect(unlisted.some((w) => w.message.includes("/DESIGN"))).toBe(false);
+  });
 });
 
 describe("Compiler — undeclared_link_type warnings", () => {
