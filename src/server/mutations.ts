@@ -225,6 +225,33 @@ export function buildEditList(
   return { moves, deletes, rewrites, danglingMentions };
 }
 
+export function validateMove(from: string, to: string, graph: SpandrelGraph): void {
+  if (from === "/") {
+    throw new Error("Cannot move root");
+  }
+  if (!graph.nodes.has(from)) {
+    throw new Error(`Source path does not exist: ${from}`);
+  }
+  // Circular check before target-exists: moving into a descendant is a more
+  // specific error and should be surfaced even when the descendant exists.
+  const fromPrefix = from.endsWith("/") ? from : from + "/";
+  if (to.startsWith(fromPrefix)) {
+    throw new Error(`Circular move: ${to} is a descendant of ${from}`);
+  }
+  if (graph.nodes.has(to)) {
+    throw new Error(`Target exists: ${to}`);
+  }
+}
+
+export function validateDelete(path: string, graph: SpandrelGraph): void {
+  if (path === "/") {
+    throw new Error("Cannot delete root");
+  }
+  if (!graph.nodes.has(path)) {
+    throw new Error(`Path does not exist: ${path}`);
+  }
+}
+
 // Public API stubs — implemented in subsequent tasks.
 export function moveThing(
   _rootDir: string,

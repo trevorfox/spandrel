@@ -260,3 +260,33 @@ describe("buildEditList — composite moves", () => {
     });
   });
 });
+
+import { validateMove } from "../src/server/mutations.js";
+
+describe("validateMove", () => {
+  it("rejects moving the root", () => {
+    expect(() => validateMove("/", "/new", leafGraph("/tmp/x"))).toThrow(/cannot move root/i);
+  });
+
+  it("rejects when target already exists in graph", () => {
+    const g = leafGraph("/tmp/x");
+    g.nodes.set("/existing", {
+      path: "/existing", name: "X", description: "", nodeType: "leaf",
+      depth: 1, parent: "/", children: [], content: "",
+      frontmatter: {}, created: null, updated: null, author: null,
+    });
+    expect(() => validateMove("/old", "/existing", g)).toThrow(/target exists/i);
+  });
+
+  it("rejects circular move (target is descendant of source)", () => {
+    expect(() => validateMove("/old", "/old/child", compositeGraph())).toThrow(/circular/i);
+  });
+
+  it("rejects when source does not exist", () => {
+    expect(() => validateMove("/missing", "/new", leafGraph("/tmp/x"))).toThrow(/source.*does not exist/i);
+  });
+
+  it("accepts a valid leaf move", () => {
+    expect(() => validateMove("/old", "/new", leafGraph("/tmp/x"))).not.toThrow();
+  });
+});
