@@ -40,6 +40,8 @@ The compiler skips:
 
 The compiler supports incremental recompilation: given a changed file path, it can recompile just that node and update the graph in place without a full rebuild.
 
+`recompileNode` is not safe to invoke concurrently for different paths — it does a read-filter-write on the store's edge list, so two interleaved calls clobber each other's deletions. The watcher serializes events behind a chained promise; any other caller that drives recompilation must do the same.
+
 ## Git metadata
 
 The compiler optionally enriches nodes with git history: created date, last updated date, author, and per-node commit history.
