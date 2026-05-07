@@ -1,4 +1,6 @@
 import path from "node:path";
+import fs from "node:fs";
+import matter from "gray-matter";
 import type { SpandrelGraph, SpandrelNode } from "../compiler/types.js";
 
 export interface FrontmatterRewrite {
@@ -251,6 +253,73 @@ export function validateDelete(path: string, graph: SpandrelGraph): void {
     throw new Error(`Path does not exist: ${path}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// applyEdits — execute the edit list (real filesystem I/O)
+// ---------------------------------------------------------------------------
+
+export interface ApplyResult {
+  written: string[];
+  deleted: string[];
+}
+
+export function applyEdits(edits: EditList, op: Operation): ApplyResult {
+  const written: string[] = [];
+  const deleted: string[] = [];
+
+  // Phase 1: Rewrite referrers first. They keep working through the move.
+  for (const r of edits.rewrites) {
+    const raw = fs.readFileSync(r.file, "utf-8");
+    const parsed = matter(raw);
+    const links = parsed.data.links;
+    if (Array.isArray(links)) {
+      const next: typeof links = [];
+      for (const link of links) {
+        if (typeof link !== "object" || link == null) {
+          next.push(link);
+          continue;
+        }
+        const to = (link as { to?: unknown }).to;
+        if (typeof to !== "string") {
+          next.push(link);
+          continue;
+        }
+        const rewritten = rewriteLinkTarget(to, r.fromPath, r.toPath);
+        if (rewritten === null) {
+          next.push(link);
+          continue;
+        }
+        if (op === "delete") {
+          // Drop the entry entirely on cascade-delete.
+          continue;
+        }
+        next.push({ ...(link as Record<string, unknown>), to: rewritten });
+      }
+      parsed.data.links = next;
+    }
+    const body = parsed.content.startsWith("\n") ? parsed.content : "\n" + parsed.content;
+    fs.writeFileSync(r.file, matter.stringify(body, parsed.data));
+    written.push(r.file);
+  }
+
+  // Phase 2: Apply filesystem moves and deletes.
+  for (const m of edits.moves) {
+    fs.mkdirSync(path.dirname(m.toFile), { recursive: true });
+    fs.renameSync(m.fromFile, m.toFile);
+  }
+  for (const d of edits.deletes) {
+    if (d.isDirectory) {
+      fs.rmSync(d.file, { recursive: true });
+    } else {
+      fs.unlinkSync(d.file);
+    }
+    deleted.push(d.file);
+  }
+
+  return { written, deleted };
+}
+
+// ---------------------------------------------------------------------------
 
 // Public API stubs — implemented in subsequent tasks.
 export function moveThing(

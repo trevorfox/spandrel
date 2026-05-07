@@ -261,6 +261,77 @@ describe("buildEditList — composite moves", () => {
   });
 });
 
+import { applyEdits } from "../src/server/mutations.js";
+import fs from "node:fs";
+import os from "node:os";
+
+function tmpDir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "spandrel-mut-"));
+}
+
+describe("applyEdits", () => {
+  it("rewrites referrer frontmatter then moves the source file", () => {
+    const root = tmpDir();
+    fs.writeFileSync(path.join(root, "old.md"), "---\nname: Old\ndescription: o\n---\n");
+    fs.writeFileSync(
+      path.join(root, "ref.md"),
+      "---\nname: Ref\ndescription: r\nlinks:\n  - to: /old\n---\nbody\n",
+    );
+
+    const result = applyEdits({
+      moves: [{
+        fromFile: path.join(root, "old.md"),
+        toFile: path.join(root, "new.md"),
+        isDirectory: false,
+      }],
+      deletes: [],
+      rewrites: [{
+        file: path.join(root, "ref.md"),
+        fromPath: "/old",
+        toPath: "/new",
+        prefix: false,
+      }],
+      danglingMentions: [],
+    }, "move");
+
+    expect(result.written).toEqual([path.join(root, "ref.md")]);
+    expect(fs.existsSync(path.join(root, "new.md"))).toBe(true);
+    expect(fs.existsSync(path.join(root, "old.md"))).toBe(false);
+    const ref = fs.readFileSync(path.join(root, "ref.md"), "utf-8");
+    expect(ref).toContain("to: /new");
+    expect(ref).not.toContain("to: /old");
+
+    fs.rmSync(root, { recursive: true });
+  });
+
+  it("removes link entries entirely on a delete cascade", () => {
+    const root = tmpDir();
+    fs.writeFileSync(path.join(root, "old.md"), "---\nname: Old\ndescription: o\n---\n");
+    fs.writeFileSync(
+      path.join(root, "ref.md"),
+      "---\nname: Ref\ndescription: r\nlinks:\n  - to: /old\n  - to: /keep\n---\n",
+    );
+
+    applyEdits({
+      moves: [],
+      deletes: [{ file: path.join(root, "old.md"), isDirectory: false }],
+      rewrites: [{
+        file: path.join(root, "ref.md"),
+        fromPath: "/old",
+        toPath: "",
+        prefix: false,
+      }],
+      danglingMentions: [],
+    }, "delete");
+
+    const ref = fs.readFileSync(path.join(root, "ref.md"), "utf-8");
+    expect(ref).not.toContain("to: /old");
+    expect(ref).toContain("to: /keep");
+
+    fs.rmSync(root, { recursive: true });
+  });
+});
+
 import { validateMove } from "../src/server/mutations.js";
 
 describe("validateMove", () => {
