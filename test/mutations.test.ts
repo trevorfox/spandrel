@@ -104,6 +104,62 @@ describe("rewriteLinkTarget", () => {
   });
 });
 
+import { buildEditList } from "../src/server/mutations.js";
+import path from "node:path";
+
+function leafGraph(rootDir: string): SpandrelGraph {
+  return {
+    nodes: new Map([
+      ["/", {
+        path: "/", name: "Root", description: "", nodeType: "composite",
+        depth: 0, parent: null, children: ["/old", "/ref"], content: "",
+        frontmatter: {}, created: null, updated: null, author: null,
+      }],
+      ["/old", {
+        path: "/old", name: "Old", description: "", nodeType: "leaf",
+        depth: 1, parent: "/", children: [], content: "",
+        frontmatter: {}, created: null, updated: null, author: null,
+      }],
+      ["/ref", {
+        path: "/ref", name: "Ref", description: "", nodeType: "leaf",
+        depth: 1, parent: "/", children: [], content: "",
+        frontmatter: { links: [{ to: "/old", description: "important edge" }] },
+        created: null, updated: null, author: null,
+      }],
+    ]),
+    edges: [], warnings: [], linkTypes: new Map(),
+  };
+}
+
+describe("buildEditList — leaf moves", () => {
+  it("emits a single file move for a leaf", () => {
+    const root = "/tmp/spandrel-test";
+    const edits = buildEditList(root, "/old", "/new", leafGraph(root), "move");
+    expect(edits.moves).toEqual([{
+      fromFile: path.join(root, "old.md"),
+      toFile: path.join(root, "new.md"),
+      isDirectory: false,
+    }]);
+  });
+
+  it("emits a frontmatter rewrite for each referrer", () => {
+    const root = "/tmp/spandrel-test";
+    const edits = buildEditList(root, "/old", "/new", leafGraph(root), "move");
+    expect(edits.rewrites).toEqual([{
+      file: path.join(root, "ref.md"),
+      fromPath: "/old",
+      toPath: "/new",
+      prefix: false,
+    }]);
+  });
+
+  it("emits no deletes for a move", () => {
+    const root = "/tmp/spandrel-test";
+    const edits = buildEditList(root, "/old", "/new", leafGraph(root), "move");
+    expect(edits.deletes).toEqual([]);
+  });
+});
+
 import { findDanglingMentions } from "../src/server/mutations.js";
 
 describe("findDanglingMentions", () => {

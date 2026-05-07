@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { SpandrelGraph, SpandrelNode } from "../compiler/types.js";
 
 export interface FrontmatterRewrite {
@@ -143,6 +144,85 @@ export function findDanglingMentions(
     }
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Filesystem path helpers — derived from graph nodeType, not filesystem state.
+// This keeps buildEditList pure (no I/O) and testable against in-memory graphs.
+// ---------------------------------------------------------------------------
+
+function graphPathToLeafFile(rootDir: string, graphPath: string): string {
+  const segments = graphPath.split("/").filter(Boolean);
+  if (segments.length === 0) {
+    return path.join(rootDir, "index.md");
+  }
+  const parentSegments = segments.slice(0, -1);
+  const name = segments[segments.length - 1];
+  const parentDir = parentSegments.length > 0
+    ? path.join(rootDir, ...parentSegments)
+    : rootDir;
+  return path.join(parentDir, name + ".md");
+}
+
+function graphPathToCompositeDir(rootDir: string, graphPath: string): string {
+  const segments = graphPath.split("/").filter(Boolean);
+  if (segments.length === 0) return rootDir;
+  return path.join(rootDir, ...segments);
+}
+
+function graphPathToFile(rootDir: string, graphPath: string, isComposite: boolean): string {
+  return isComposite
+    ? graphPathToCompositeDir(rootDir, graphPath)
+    : graphPathToLeafFile(rootDir, graphPath);
+}
+
+// ---------------------------------------------------------------------------
+
+export type Operation = "move" | "delete";
+
+export function buildEditList(
+  rootDir: string,
+  from: string,
+  to: string | null, // null for delete
+  graph: SpandrelGraph,
+  op: Operation,
+): EditList {
+  const fromNode = graph.nodes.get(from);
+  if (!fromNode) {
+    throw new Error(`Source path does not exist in graph: ${from}`);
+  }
+
+  const isComposite = fromNode.nodeType === "composite";
+  const fromFile = graphPathToFile(rootDir, from, isComposite);
+
+  const moves: FileMove[] = [];
+  const deletes: FileDelete[] = [];
+
+  if (op === "move") {
+    if (to === null) throw new Error("move requires a target path");
+    const toFile = graphPathToFile(rootDir, to, isComposite);
+    moves.push({ fromFile, toFile, isDirectory: isComposite });
+  } else {
+    deletes.push({ file: fromFile, isDirectory: isComposite });
+  }
+
+  // Find referrers — exact + descendants for composite, exact-only for leaf.
+  const referrers = findReferrers(graph, from, { prefix: isComposite });
+  const rewrites: FrontmatterRewrite[] = [];
+  for (const ref of referrers) {
+    const refIsComposite = ref.node.nodeType === "composite";
+    const refFile = graphPathToFile(rootDir, ref.node.path, refIsComposite);
+    rewrites.push({
+      file: refFile,
+      fromPath: from,
+      toPath: to ?? "", // delete: removed entirely; signaled by op=delete in applyEdits
+      prefix: isComposite,
+    });
+  }
+
+  const danglingMentions = findDanglingMentions(graph, from, { prefix: isComposite });
+
+  return { moves, deletes, rewrites, danglingMentions };
 }
 
 // Public API stubs — implemented in subsequent tasks.
