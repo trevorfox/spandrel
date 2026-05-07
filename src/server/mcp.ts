@@ -19,7 +19,6 @@ import {
 import {
   createThing,
   updateThing,
-  deleteThing,
   resolveSourcePath,
 } from "./writer.js";
 import { recompileNode } from "../compiler/compiler.js";

@@ -68,6 +68,42 @@ The writer in `writer.ts` handles file operations for mutations: creating markdo
 
 This keeps the markdown files as the source of truth. The storage layer is always a derived artifact, and the AccessPolicy gates only wire writes — local edits via an editor or `git pull` are unconstrained.
 
+## Mutations primitive
+
+`src/server/mutations.ts` provides graph-aware mutations: `moveThing` (rename / relocate a node, cascading frontmatter rewrites across all referrers) and `deleteThingWithReferrers` (delete with explicit cascade-or-refuse policy on inbound declared links). Both are consumed by every write surface — CLI (`spandrel mv`, `spandrel rm`), MCP (`move_thing`, `delete_thing`), REST (`POST /node/{path}/move`, `DELETE /node/{path}?cascade=remove-link`), and by extension any host (Cannon) that consumes the same code.
+
+### Contract
+
+- Inputs: `rootDir`, source/target paths, a current `SpandrelGraph` snapshot. Caller is responsible for snapshot freshness; the primitive does not recompile.
+- The primitive is *single-writer*. Hosts that admit concurrent writers (e.g. multi-user deployments) wrap the call in their own write lock.
+- Two-phase: precompute and validate the full edit list (file moves + per-referrer frontmatter rewrites), then apply. Validation catches root mutations, missing sources, target collisions, and circular composite moves.
+- Apply order: rewrite referrers first, then move/delete the source. Referrers stay valid through the transition.
+- No rollback. If apply crashes mid-sequence, the filesystem is in a partial state; the watcher recompiles, broken-link warnings surface, the author resolves manually.
+
+### Path resolution and `nodeType` ambiguity
+
+Filesystem paths for nodes are derived from the graph node's `nodeType`. The compiler assigns `nodeType: "leaf" | "composite"` based on whether the node has children (`children.length > 0`), not on the underlying source file's shape — so a directory-backed node (`dir/index.md`) with no children gets `nodeType: "leaf"`. To disambiguate, `buildEditList` does a targeted `fs.existsSync(<dir>/index.md)` check on the leaf-typed source. This is the one I/O concession in an otherwise pure compute step. A future improvement would be to add a `sourceIsDir: boolean` field to `SpandrelNode` populated by the compiler, eliminating the need for the FS check at mutation time.
+
+### Frontmatter normalization on write
+
+The primitive uses `gray-matter` round-trip (parse → mutate `links` array → serialize) to rewrite each referrer. **This reformats the entire frontmatter block of every touched file** — key ordering, quoting style, and YAML comments are not preserved. Spandrel treats frontmatter as machine-edited; authors who want stylistic stability shouldn't hand-format it. This applies to every write surface.
+
+Note: gray-matter caches parsed `data` objects when called with no options, and the cached object is mutable. Since both `writer.ts` and `mutations.ts` mutate `parsed.data` before writing back, both call sites pass `matter(raw, {})` to opt out of the cache.
+
+### Inline mentions are not auto-rewritten
+
+The compiler emits two link kinds: declared frontmatter `links` (the canonical edge surface) and inline markdown `[text](/path)` mentions in body content (compiler.ts:573-574, edge type `mentions`). The mutations primitive **only rewrites declared links**. Inline mentions are detected during precompute via a regex pass that strips fenced code blocks first (matching the 0.7.1 compiler honesty pass), surfaced as `danglingMentions: { in, to }[]` in the result, and left alone in the body content. After a move, those mentions become `broken_link` warnings on the next compile — the author resolves them by hand.
+
+### `delete` cascade policy
+
+`deleteThingWithReferrers` refuses by default when inbound declared-link referrers exist. Callers must pass `cascade: "remove-link"` explicitly to remove the dead link entries from every referrer as part of the deletion. This is intentional — silent cascade-on-delete loses semantic content carried in `links[].description` strings, which often reflects intent that shouldn't auto-disappear.
+
+### Wire-surface integration notes
+
+- **CLI**: `spandrel mv` / `spandrel rm` always print an edit preview to stderr before applying. `--yes` is required to actually mutate (CI-safe default). `--dry-run` previews and exits 0.
+- **MCP**: `move_thing` is a new tool (separate from `update_thing`). `delete_thing` was modified in place to accept the optional `cascade` parameter — *behavior change* for callers who previously deleted nodes with referrers (they now get a refusal instead of silent dangling-link side effects).
+- **REST**: `POST /node/{path}/move` is a new endpoint; `DELETE /node/{path}` was modified to accept `?cascade=remove-link`. Same behavior change as MCP. Access policy gates writes via `canWrite` on both source and target paths for moves, source path for deletes.
+
 ## Deployment
 
 For local development, the MCP server runs over stdio (piped from Claude Desktop or Claude Code) and the REST surface runs over an HTTP server on a local port.
