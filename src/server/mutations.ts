@@ -275,7 +275,11 @@ export function applyEdits(edits: EditList, op: Operation): ApplyResult {
   // Phase 1: Rewrite referrers first. They keep working through the move.
   for (const r of edits.rewrites) {
     const raw = fs.readFileSync(r.file, "utf-8");
-    const parsed = matter(raw);
+    // Pass an options object to bypass gray-matter's cache. The cache is
+    // keyed by raw string content; without this, a later compile() call that
+    // reads the same original raw string (e.g. in a dry-run→apply sequence)
+    // would receive the stale mutated data object from the cache.
+    const parsed = matter(raw, {});
     const links = parsed.data.links;
     if (Array.isArray(links)) {
       const next: typeof links = [];
