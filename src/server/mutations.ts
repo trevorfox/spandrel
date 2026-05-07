@@ -6,6 +6,8 @@ import type { SpandrelGraph, SpandrelNode } from "../compiler/types.js";
 export interface FrontmatterRewrite {
   /** Absolute filesystem path of the referrer file. */
   file: string;
+  /** Graph path of the referrer node (for error messages and result surfaces). */
+  referrerPath: string;
   /** Path in the referrer's `links[].to` to replace. */
   fromPath: string;
   /** New value for `links[].to`. */
@@ -255,6 +257,7 @@ export function buildEditList(
     const { file: refFile } = resolveNodeFile(rootDir, ref.node.path, ref.node.nodeType);
     rewrites.push({
       file: refFile,
+      referrerPath: ref.node.path,
       fromPath: from,
       toPath: to ?? "", // delete: removed entirely; signaled by op=delete in applyEdits
       prefix: sourceIsDir,
@@ -404,7 +407,7 @@ export function deleteThingWithReferrers(
   const cascade = options.cascade ?? "refuse";
 
   if (edits.rewrites.length > 0 && cascade === "refuse") {
-    const referrerPaths = edits.rewrites.map(r => r.file).join(", ");
+    const referrerPaths = edits.rewrites.map(r => r.referrerPath).join(", ");
     throw new Error(
       `Cannot delete ${thingPath}: ${edits.rewrites.length} referrers exist (${referrerPaths}). ` +
       `Pass cascade: "remove-link" to remove the dead link entries.`,

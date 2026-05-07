@@ -147,6 +147,7 @@ describe("buildEditList — leaf moves", () => {
     const edits = buildEditList(root, "/old", "/new", leafGraph(root), "move");
     expect(edits.rewrites).toEqual([{
       file: path.join(root, "ref.md"),
+      referrerPath: "/ref",
       fromPath: "/old",
       toPath: "/new",
       prefix: false,
@@ -287,6 +288,7 @@ describe("applyEdits", () => {
       deletes: [],
       rewrites: [{
         file: path.join(root, "ref.md"),
+        referrerPath: "/ref",
         fromPath: "/old",
         toPath: "/new",
         prefix: false,
@@ -317,6 +319,7 @@ describe("applyEdits", () => {
       deletes: [{ file: path.join(root, "old.md"), isDirectory: false }],
       rewrites: [{
         file: path.join(root, "ref.md"),
+        referrerPath: "/ref",
         fromPath: "/old",
         toPath: "",
         prefix: false,
