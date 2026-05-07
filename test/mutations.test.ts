@@ -207,3 +207,56 @@ describe("findDanglingMentions", () => {
     expect(findDanglingMentions(graph, "/clients/acme", { prefix: true })).toEqual([]);
   });
 });
+
+function compositeGraph(): SpandrelGraph {
+  return {
+    nodes: new Map([
+      ["/", {
+        path: "/", name: "Root", description: "", nodeType: "composite",
+        depth: 0, parent: null, children: ["/old", "/ref"], content: "",
+        frontmatter: {}, created: null, updated: null, author: null,
+      }],
+      ["/old", {
+        path: "/old", name: "Old", description: "", nodeType: "composite",
+        depth: 1, parent: "/", children: ["/old/child"], content: "",
+        frontmatter: {}, created: null, updated: null, author: null,
+      }],
+      ["/old/child", {
+        path: "/old/child", name: "Child", description: "", nodeType: "leaf",
+        depth: 2, parent: "/old", children: [], content: "",
+        frontmatter: {}, created: null, updated: null, author: null,
+      }],
+      ["/ref", {
+        path: "/ref", name: "Ref", description: "", nodeType: "leaf",
+        depth: 1, parent: "/", children: [], content: "",
+        frontmatter: { links: [{ to: "/old/child" }, { to: "/old" }] },
+        created: null, updated: null, author: null,
+      }],
+    ]),
+    edges: [], warnings: [], linkTypes: new Map(),
+  };
+}
+
+describe("buildEditList — composite moves", () => {
+  it("emits a single directory move for a composite source", () => {
+    const root = "/tmp/spandrel-test";
+    const edits = buildEditList(root, "/old", "/new", compositeGraph(), "move");
+    expect(edits.moves).toEqual([{
+      fromFile: path.join(root, "old"),
+      toFile: path.join(root, "new"),
+      isDirectory: true,
+    }]);
+  });
+
+  it("rewrites referrers to descendants too (prefix=true)", () => {
+    const root = "/tmp/spandrel-test";
+    const edits = buildEditList(root, "/old", "/new", compositeGraph(), "move");
+    expect(edits.rewrites.length).toBe(1);
+    expect(edits.rewrites[0]).toMatchObject({
+      file: path.join(root, "ref.md"),
+      fromPath: "/old",
+      toPath: "/new",
+      prefix: true,
+    });
+  });
+});
