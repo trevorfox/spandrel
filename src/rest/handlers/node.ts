@@ -3,6 +3,8 @@ import { shapeNodeAsJson } from "../shape.js";
 import { jsonResponse, errorResponse, readJsonBody } from "../router.js";
 import { createThing, updateThing, deleteThing, resolveSourcePath } from "../../server/writer.js";
 import { recompileNode } from "../../compiler/compiler.js";
+import { storeToGraph } from "../../storage/store-to-graph.js";
+import { moveThing } from "../../server/mutations.js";
 
 const DEFAULT_DEPTH = 0;
 const MAX_DEPTH = 10;
@@ -110,8 +112,70 @@ export const handleDeleteNode: RestHandler = async (_req, url, ctx) => {
   return jsonResponse(200, { success: true, path: nodePath });
 };
 
+/**
+ * POST /node/{...path}/move — rename/move a node to a new path.
+ *
+ * Body: `{ to: string }` — the destination graph path.
+ * Both source and target paths are gated by `canWrite`.
+ */
+export const handleMoveNode: RestHandler = async (req, url, ctx) => {
+  if (!ctx.rootDir) return errorResponse(405, "writes not enabled");
+
+  // Strip /node prefix and /move suffix to get the source graph path.
+  const fromPath = stripSuffix(stripPrefix(url.pathname, "/node"), "/move");
+
+  let body: Record<string, unknown>;
+  try {
+    body = await readJsonBody(req);
+  } catch (err) {
+    return errorResponse(400, `invalid JSON body: ${(err as Error).message}`);
+  }
+
+  if (typeof body.to !== "string" || !body.to) {
+    return errorResponse(400, "missing or invalid 'to' in body");
+  }
+  const toPath = body.to as string;
+
+  if (!ctx.policy.canWrite(ctx.actor, fromPath)) {
+    return errorResponse(403, "write denied");
+  }
+  if (!ctx.policy.canWrite(ctx.actor, toPath)) {
+    return errorResponse(403, "write denied");
+  }
+
+  try {
+    // Resolve old source path before the move so we can recompile it away.
+    const { sourcePath: oldSourcePath } = resolveSourcePath(ctx.rootDir, fromPath);
+
+    const graph = await storeToGraph(ctx.store);
+    const moveResult = moveThing(ctx.rootDir, fromPath, toPath, graph);
+
+    // Recompile: old path (remove), new path (add), rewritten referrers.
+    await recompileNode(ctx.store, ctx.rootDir, oldSourcePath);
+    const { sourcePath: newSourcePath } = resolveSourcePath(ctx.rootDir, toPath);
+    await recompileNode(ctx.store, ctx.rootDir, newSourcePath);
+    for (const fsPath of moveResult.written) {
+      await recompileNode(ctx.store, ctx.rootDir, fsPath);
+    }
+
+    const warnings = (await ctx.store.getWarnings()).filter(
+      (w) => w.path === toPath || w.path.startsWith(toPath + "/")
+    );
+    return jsonResponse(200, { success: true, from: fromPath, to: toPath, moveResult, warnings });
+  } catch (err) {
+    return errorResponse(400, (err as Error).message);
+  }
+};
+
 function stripPrefix(pathname: string, prefix: string): string {
   if (pathname === prefix) return "/";
   const stripped = pathname.slice(prefix.length);
   return stripped.startsWith("/") ? stripped : "/" + stripped;
+}
+
+function stripSuffix(pathname: string, suffix: string): string {
+  if (pathname.endsWith(suffix)) {
+    return pathname.slice(0, -suffix.length) || "/";
+  }
+  return pathname;
 }

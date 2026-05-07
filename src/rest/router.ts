@@ -3,7 +3,7 @@ import type { GraphStore } from "../storage/graph-store.js";
 import type { AccessPolicy } from "../access/policy.js";
 import { actorFromRequest } from "./actor.js";
 import { handleContent } from "./handlers/content.js";
-import { handleGetNode, handlePutNode, handleDeleteNode } from "./handlers/node.js";
+import { handleGetNode, handlePutNode, handleDeleteNode, handleMoveNode } from "./handlers/node.js";
 import { handleGraph } from "./handlers/graph.js";
 import { handleSearch } from "./handlers/search.js";
 import { handleLinkTypes } from "./handlers/linkTypes.js";
@@ -55,6 +55,9 @@ function matchRoute(method: string, pathname: string): RestHandler | null {
     if (pathname === "/content" || pathname.startsWith("/content/")) return handleContent;
     if (pathname === "/node" || pathname.startsWith("/node/")) return handleGetNode;
     return null;
+  }
+  if (method === "POST" && pathname.startsWith("/node/") && pathname.endsWith("/move")) {
+    return handleMoveNode;
   }
   if (method === "PUT" && (pathname === "/node" || pathname.startsWith("/node/"))) {
     return handlePutNode;

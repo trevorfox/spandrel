@@ -326,6 +326,96 @@ describe("REST — wire surface", () => {
       expect(get.status).toBe(404);
     });
   });
+
+  describe("POST /node/{...path}/move", () => {
+    it("moves a node to a new path", async () => {
+      // Create a node to move.
+      await fetch(`${harness.baseUrl}/node/moveable`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Moveable", description: "Will be moved" }),
+      });
+
+      const r = await fetch(`${harness.baseUrl}/node/moveable/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: "/moved-destination" }),
+      });
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      expect(body.success).toBe(true);
+      expect(body.from).toBe("/moveable");
+      expect(body.to).toBe("/moved-destination");
+
+      // Old path is gone, new path is reachable.
+      const oldGet = await fetch(`${harness.baseUrl}/node/moveable`);
+      expect(oldGet.status).toBe(404);
+      const newGet = await fetch(`${harness.baseUrl}/node/moved-destination`);
+      expect(newGet.status).toBe(200);
+      const newNode = await newGet.json();
+      expect(newNode.name).toBe("Moveable");
+    });
+
+    it("rewrites referrers and surfaces dangling mentions", async () => {
+      // Create source and a referrer that links to it.
+      await fetch(`${harness.baseUrl}/node/ref-source`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Ref Source", description: "Will be moved" }),
+      });
+      await fetch(`${harness.baseUrl}/node/ref-referrer`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Referrer",
+          description: "Links to ref-source",
+          links: [{ to: "/ref-source", type: "related" }],
+        }),
+      });
+
+      const r = await fetch(`${harness.baseUrl}/node/ref-source/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: "/ref-source-moved" }),
+      });
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      expect(body.success).toBe(true);
+      // referrersRewritten should contain at least the referrer file.
+      expect(body.moveResult.referrersRewritten.length).toBeGreaterThan(0);
+    });
+
+    it("returns 400 when 'to' is missing from body", async () => {
+      const r = await fetch(`${harness.baseUrl}/node/projects/alpha/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(r.status).toBe(400);
+      const body = await r.json();
+      expect(body.error).toMatch(/to/);
+    });
+
+    it("returns 400 when source does not exist", async () => {
+      const r = await fetch(`${harness.baseUrl}/node/nonexistent-node/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: "/somewhere" }),
+      });
+      expect(r.status).toBe(400);
+    });
+
+    it("returns 400 when target already exists", async () => {
+      const r = await fetch(`${harness.baseUrl}/node/clients/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: "/projects" }),
+      });
+      expect(r.status).toBe(400);
+      const body = await r.json();
+      expect(body.error).toMatch(/exists/i);
+    });
+  });
 });
 
 // --- Three-tier actor extraction ----------------------------------------
