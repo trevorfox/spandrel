@@ -323,13 +323,31 @@ export function applyEdits(edits: EditList, op: Operation): ApplyResult {
 
 // Public API stubs — implemented in subsequent tasks.
 export function moveThing(
-  _rootDir: string,
-  _from: string,
-  _to: string,
-  _graph: SpandrelGraph,
-  _options?: MutationOptions,
+  rootDir: string,
+  from: string,
+  to: string,
+  graph: SpandrelGraph,
+  options: MutationOptions = {},
 ): MoveResult {
-  throw new Error("moveThing: not yet implemented");
+  validateMove(from, to, graph);
+  const edits = buildEditList(rootDir, from, to, graph, "move");
+
+  if (options.dryRun) {
+    return {
+      written: [],
+      deleted: [],
+      referrersRewritten: edits.rewrites.map(r => r.file),
+      danglingMentions: edits.danglingMentions,
+    };
+  }
+
+  const applied = applyEdits(edits, "move");
+  return {
+    written: applied.written,
+    deleted: applied.deleted,
+    referrersRewritten: applied.written,
+    danglingMentions: edits.danglingMentions,
+  };
 }
 
 export function deleteThingWithReferrers(

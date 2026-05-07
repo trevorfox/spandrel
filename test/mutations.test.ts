@@ -361,3 +361,73 @@ describe("validateMove", () => {
     expect(() => validateMove("/old", "/new", leafGraph("/tmp/x"))).not.toThrow();
   });
 });
+
+import { moveThing } from "../src/server/mutations.js";
+
+describe("moveThing", () => {
+  it("validates, builds edit list, and applies", () => {
+    const root = tmpDir();
+    fs.writeFileSync(path.join(root, "old.md"), "---\nname: Old\ndescription: o\n---\n");
+    fs.writeFileSync(
+      path.join(root, "ref.md"),
+      "---\nname: Ref\ndescription: r\nlinks:\n  - to: /old\n---\n",
+    );
+
+    const graph: SpandrelGraph = {
+      nodes: new Map([
+        ["/", {
+          path: "/", name: "Root", description: "", nodeType: "composite",
+          depth: 0, parent: null, children: ["/old", "/ref"], content: "",
+          frontmatter: {}, created: null, updated: null, author: null,
+        }],
+        ["/old", {
+          path: "/old", name: "Old", description: "", nodeType: "leaf",
+          depth: 1, parent: "/", children: [], content: "",
+          frontmatter: {}, created: null, updated: null, author: null,
+        }],
+        ["/ref", {
+          path: "/ref", name: "Ref", description: "", nodeType: "leaf",
+          depth: 1, parent: "/", children: [], content: "",
+          frontmatter: { links: [{ to: "/old" }] },
+          created: null, updated: null, author: null,
+        }],
+      ]),
+      edges: [], warnings: [], linkTypes: new Map(),
+    };
+
+    const result = moveThing(root, "/old", "/new", graph);
+    expect(result.referrersRewritten).toEqual([path.join(root, "ref.md")]);
+    expect(fs.existsSync(path.join(root, "new.md"))).toBe(true);
+    expect(fs.existsSync(path.join(root, "old.md"))).toBe(false);
+
+    fs.rmSync(root, { recursive: true });
+  });
+
+  it("dryRun returns the edit list without touching disk", () => {
+    const root = tmpDir();
+    fs.writeFileSync(path.join(root, "old.md"), "---\nname: Old\ndescription: o\n---\n");
+
+    const graph: SpandrelGraph = {
+      nodes: new Map([
+        ["/", {
+          path: "/", name: "R", description: "", nodeType: "composite",
+          depth: 0, parent: null, children: ["/old"], content: "",
+          frontmatter: {}, created: null, updated: null, author: null,
+        }],
+        ["/old", {
+          path: "/old", name: "Old", description: "", nodeType: "leaf",
+          depth: 1, parent: "/", children: [], content: "",
+          frontmatter: {}, created: null, updated: null, author: null,
+        }],
+      ]),
+      edges: [], warnings: [], linkTypes: new Map(),
+    };
+
+    const result = moveThing(root, "/old", "/new", graph, { dryRun: true });
+    expect(result.written).toEqual([]);
+    expect(result.deleted).toEqual([]);
+    expect(fs.existsSync(path.join(root, "old.md"))).toBe(true);
+
+    fs.rmSync(root, { recursive: true });
+  });
+});
