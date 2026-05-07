@@ -105,6 +105,14 @@ The compiler emits two link kinds: declared frontmatter `links` (the canonical e
 - **MCP**: `move_thing` is a new tool (separate from `update_thing`). `delete_thing` was modified in place to accept the optional `cascade` parameter — *behavior change* for callers who previously deleted nodes with referrers (they now get a refusal instead of silent dangling-link side effects).
 - **REST**: `POST /node/{path}/move` is a new endpoint; `DELETE /node/{path}` was modified to accept `?cascade=remove-link`. Same behavior change as MCP. Access policy gates writes via `canWrite` on both source and target paths for moves, source path for deletes.
 
+### Known limitation — single-policy subtree assumption
+
+Composite move and cascade-delete operate on the entire subtree rooted at the source path. The current implementation gates writes via `AccessPolicy.canWrite` on the source and target paths only, not on every descendant. Hosts with subtree-level differentiated policies (e.g. write access to `/clients/foo` but not `/clients/foo/private`) must enforce per-descendant checks at the request layer before delegating to the primitive. The reference implementation is correct for single-policy deployments; multi-tenant hosts (Cannon) wrap with their own descendant-iterating check.
+
+### Known limitation — composite recompile is not subtree-aware
+
+Wire surfaces (MCP, REST) recompile the source path, target path, and rewritten referrers individually after a mutation. For composite moves, descendants of the moved subtree are not explicitly recompiled — they appear under the new path on disk but the in-process store retains the old paths until the next watcher event (in `mcp` / `dev` modes) or until the next full compile. The CLI is unaffected (compile-then-mutate-then-exit). A `recompileSubtree(rootDir, fsDir)` helper in `src/compiler/compiler.ts` would close this; tracked as backlog. The existing `it.skip` test in `test/mcp.test.ts` documents the gap.
+
 ## Deployment
 
 For local development, the MCP server runs over stdio (piped from Claude Desktop or Claude Code) and the REST surface runs over an HTTP server on a local port.
