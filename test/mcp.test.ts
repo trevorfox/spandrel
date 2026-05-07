@@ -279,10 +279,17 @@ describe("MCP Server", () => {
     expect(node.name).toBe("Acme Corp"); // unchanged
   });
 
-  it("delete_thing removes a node", async () => {
+  it("delete_thing removes a node with no referrers", async () => {
+    // Create an isolated node that no other node links to, then delete it.
+    // This verifies the no-cascade happy path without triggering the referrer guard.
+    await client.callTool({
+      name: "create_thing",
+      arguments: { path: "/standalone", name: "Standalone", description: "Isolated node" },
+    });
+
     const result = await client.callTool({
       name: "delete_thing",
-      arguments: { path: "/projects/alpha" },
+      arguments: { path: "/standalone" },
     });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const data = JSON.parse(text);
@@ -291,10 +298,61 @@ describe("MCP Server", () => {
     // Verify it's gone
     const nodeResult = await client.callTool({
       name: "get_node",
-      arguments: { path: "/projects/alpha" },
+      arguments: { path: "/standalone" },
     });
     const nodeText = (nodeResult.content as Array<{ type: string; text: string }>)[0].text;
     expect(JSON.parse(nodeText)).toBeNull();
+  });
+
+  it("delete_thing refuses when referrers exist and no cascade is passed", async () => {
+    // /projects/alpha is referenced by /clients/acme via a declared frontmatter
+    // link.  Without cascade the tool must refuse and leave the file on disk.
+    const result = await client.callTool({
+      name: "delete_thing",
+      arguments: { path: "/projects/alpha" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const data = JSON.parse(text);
+    expect(data.success).toBe(false);
+    expect(data.message).toMatch(/referrer/i);
+
+    // File must still exist — not deleted
+    const nodeResult = await client.callTool({
+      name: "get_node",
+      arguments: { path: "/projects/alpha" },
+    });
+    const nodeText = (nodeResult.content as Array<{ type: string; text: string }>)[0].text;
+    expect(JSON.parse(nodeText)).not.toBeNull();
+  });
+
+  it("delete_thing with cascade='remove-link' deletes the node and rewrites referrers", async () => {
+    // /projects/alpha is referenced by /clients/acme.  cascade='remove-link'
+    // must delete /projects/alpha AND strip that link from /clients/acme's
+    // frontmatter so no dangling edge remains.
+    const result = await client.callTool({
+      name: "delete_thing",
+      arguments: { path: "/projects/alpha", cascade: "remove-link" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const data = JSON.parse(text);
+    expect(data.success).toBe(true);
+
+    // Deleted node is gone
+    const alphaResult = await client.callTool({
+      name: "get_node",
+      arguments: { path: "/projects/alpha" },
+    });
+    const alphaText = (alphaResult.content as Array<{ type: string; text: string }>)[0].text;
+    expect(JSON.parse(alphaText)).toBeNull();
+
+    // Referrer no longer carries the dead link
+    const acmeResult = await client.callTool({
+      name: "get_node",
+      arguments: { path: "/clients/acme" },
+    });
+    const acmeText = (acmeResult.content as Array<{ type: string; text: string }>)[0].text;
+    const acme = JSON.parse(acmeText);
+    expect(acme.links.some((l: { to: string }) => l.to === "/projects/alpha")).toBe(false);
   });
 
   it("move_thing renames a Thing and rewrites declared referrers", async () => {
