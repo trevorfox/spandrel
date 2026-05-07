@@ -118,6 +118,13 @@ import type {
 } from "spandrel";
 ```
 
+**MCP write tools** (registered when `rootDir` is supplied):
+
+- **`create_thing`** — create a new node with frontmatter and optional links.
+- **`update_thing`** — update fields on an existing node (partial update; unspecified fields are preserved).
+- **`delete_thing`** — delete a node and its entire subtree. Refuses by default when inbound declared-link referrers exist; pass `cascade: "remove-link"` to remove dead link entries from every referrer's frontmatter before deleting. Returns `danglingMentions` listing inline prose mentions that were not auto-rewritten.
+- **`move_thing`** — rename or move a node to a new path, cascading frontmatter rewrites across all declared-link referrers. Returns `danglingMentions` listing inline prose mentions that were not auto-rewritten.
+
 ### Markdown serialization
 
 ```ts
