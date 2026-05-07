@@ -105,6 +105,46 @@ export function rewriteLinkTarget(
   return null;
 }
 
+/**
+ * Strips fenced code blocks and inline code spans from markdown content,
+ * returning the prose surface for link extraction. Mirrors the compiler's
+ * 0.7.1 honesty pass behavior so we don't flag mentions in code examples.
+ */
+function stripCodeBlocks(content: string): string {
+  let out = content;
+  // Fenced code blocks: ```...``` and ~~~...~~~
+  out = out.replace(/```[\s\S]*?```/g, "");
+  out = out.replace(/~~~[\s\S]*?~~~/g, "");
+  // Inline code spans: `...`
+  out = out.replace(/`[^`\n]*`/g, "");
+  return out;
+}
+
+const INLINE_LINK_RE = /\[[^\]]*\]\((\/[^)\s#]*)(?:#[^)]*)?\)/g;
+
+export function findDanglingMentions(
+  graph: SpandrelGraph,
+  targetPath: string,
+  options: { prefix?: boolean } = {},
+): DanglingMention[] {
+  const includeDescendants = options.prefix ?? false;
+  const prefix = targetPath.endsWith("/") ? targetPath : targetPath + "/";
+  const out: DanglingMention[] = [];
+  for (const node of graph.nodes.values()) {
+    if (!node.content) continue;
+    const stripped = stripCodeBlocks(node.content);
+    INLINE_LINK_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = INLINE_LINK_RE.exec(stripped)) !== null) {
+      const to = m[1];
+      if (to === targetPath || (includeDescendants && to.startsWith(prefix))) {
+        out.push({ in: node.path, to });
+      }
+    }
+  }
+  return out;
+}
+
 // Public API stubs — implemented in subsequent tasks.
 export function moveThing(
   _rootDir: string,

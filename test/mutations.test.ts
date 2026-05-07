@@ -103,3 +103,51 @@ describe("rewriteLinkTarget", () => {
     expect(rewriteLinkTarget("/oldname", "/old", "/new")).toBe(null);
   });
 });
+
+import { findDanglingMentions } from "../src/server/mutations.js";
+
+describe("findDanglingMentions", () => {
+  it("finds inline markdown links to the target path", () => {
+    const graph: SpandrelGraph = {
+      nodes: new Map([
+        ["/a", {
+          path: "/a", name: "A", description: "", nodeType: "leaf",
+          depth: 1, parent: "/", children: [], content: "see [acme](/clients/acme) for more",
+          frontmatter: {}, created: null, updated: null, author: null,
+        }],
+      ]),
+      edges: [], warnings: [], linkTypes: new Map(),
+    };
+    expect(findDanglingMentions(graph, "/clients/acme", { prefix: true }))
+      .toEqual([{ in: "/a", to: "/clients/acme" }]);
+  });
+
+  it("finds prefix matches (descendant paths) when prefix=true", () => {
+    const graph: SpandrelGraph = {
+      nodes: new Map([
+        ["/a", {
+          path: "/a", name: "A", description: "", nodeType: "leaf",
+          depth: 1, parent: "/", children: [], content: "see [team](/clients/acme/team)",
+          frontmatter: {}, created: null, updated: null, author: null,
+        }],
+      ]),
+      edges: [], warnings: [], linkTypes: new Map(),
+    };
+    expect(findDanglingMentions(graph, "/clients/acme", { prefix: true }))
+      .toEqual([{ in: "/a", to: "/clients/acme/team" }]);
+  });
+
+  it("does not flag mentions inside fenced code blocks", () => {
+    const graph: SpandrelGraph = {
+      nodes: new Map([
+        ["/a", {
+          path: "/a", name: "A", description: "", nodeType: "leaf",
+          depth: 1, parent: "/", children: [], content: "```\n[example](/clients/acme)\n```",
+          frontmatter: {}, created: null, updated: null, author: null,
+        }],
+      ]),
+      edges: [], warnings: [], linkTypes: new Map(),
+    };
+    expect(findDanglingMentions(graph, "/clients/acme", { prefix: true })).toEqual([]);
+  });
+});
