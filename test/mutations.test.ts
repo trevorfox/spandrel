@@ -362,7 +362,7 @@ describe("validateMove", () => {
   });
 });
 
-import { moveThing } from "../src/server/mutations.js";
+import { moveThing, deleteThingWithReferrers } from "../src/server/mutations.js";
 
 describe("moveThing", () => {
   it("validates, builds edit list, and applies", () => {
@@ -427,6 +427,110 @@ describe("moveThing", () => {
     expect(result.written).toEqual([]);
     expect(result.deleted).toEqual([]);
     expect(fs.existsSync(path.join(root, "old.md"))).toBe(true);
+
+    fs.rmSync(root, { recursive: true });
+  });
+});
+
+describe("deleteThingWithReferrers", () => {
+  it("refuses by default when referrers exist", () => {
+    const root = tmpDir();
+    fs.writeFileSync(path.join(root, "old.md"), "---\nname: Old\ndescription: o\n---\n");
+    fs.writeFileSync(
+      path.join(root, "ref.md"),
+      "---\nname: Ref\ndescription: r\nlinks:\n  - to: /old\n---\n",
+    );
+
+    const graph: SpandrelGraph = {
+      nodes: new Map([
+        ["/", {
+          path: "/", name: "R", description: "", nodeType: "composite",
+          depth: 0, parent: null, children: ["/old", "/ref"], content: "",
+          frontmatter: {}, created: null, updated: null, author: null,
+        }],
+        ["/old", {
+          path: "/old", name: "Old", description: "", nodeType: "leaf",
+          depth: 1, parent: "/", children: [], content: "",
+          frontmatter: {}, created: null, updated: null, author: null,
+        }],
+        ["/ref", {
+          path: "/ref", name: "Ref", description: "", nodeType: "leaf",
+          depth: 1, parent: "/", children: [], content: "",
+          frontmatter: { links: [{ to: "/old" }] },
+          created: null, updated: null, author: null,
+        }],
+      ]),
+      edges: [], warnings: [], linkTypes: new Map(),
+    };
+
+    expect(() => deleteThingWithReferrers(root, "/old", graph)).toThrow(/referrers/i);
+    expect(fs.existsSync(path.join(root, "old.md"))).toBe(true);
+
+    fs.rmSync(root, { recursive: true });
+  });
+
+  it("cascade=remove-link removes link entries from referrers and deletes the file", () => {
+    const root = tmpDir();
+    fs.writeFileSync(path.join(root, "old.md"), "---\nname: Old\ndescription: o\n---\n");
+    fs.writeFileSync(
+      path.join(root, "ref.md"),
+      "---\nname: Ref\ndescription: r\nlinks:\n  - to: /old\n  - to: /keep\n---\n",
+    );
+
+    const graph: SpandrelGraph = {
+      nodes: new Map([
+        ["/", {
+          path: "/", name: "R", description: "", nodeType: "composite",
+          depth: 0, parent: null, children: ["/old", "/ref"], content: "",
+          frontmatter: {}, created: null, updated: null, author: null,
+        }],
+        ["/old", {
+          path: "/old", name: "Old", description: "", nodeType: "leaf",
+          depth: 1, parent: "/", children: [], content: "",
+          frontmatter: {}, created: null, updated: null, author: null,
+        }],
+        ["/ref", {
+          path: "/ref", name: "Ref", description: "", nodeType: "leaf",
+          depth: 1, parent: "/", children: [], content: "",
+          frontmatter: { links: [{ to: "/old" }, { to: "/keep" }] },
+          created: null, updated: null, author: null,
+        }],
+      ]),
+      edges: [], warnings: [], linkTypes: new Map(),
+    };
+
+    const result = deleteThingWithReferrers(root, "/old", graph, { cascade: "remove-link" });
+    expect(result.referrersRewritten).toEqual([path.join(root, "ref.md")]);
+    expect(fs.existsSync(path.join(root, "old.md"))).toBe(false);
+    const ref = fs.readFileSync(path.join(root, "ref.md"), "utf-8");
+    expect(ref).not.toContain("/old");
+    expect(ref).toContain("/keep");
+
+    fs.rmSync(root, { recursive: true });
+  });
+
+  it("deletes without referrer check when no referrers exist", () => {
+    const root = tmpDir();
+    fs.writeFileSync(path.join(root, "old.md"), "---\nname: Old\ndescription: o\n---\n");
+
+    const graph: SpandrelGraph = {
+      nodes: new Map([
+        ["/", {
+          path: "/", name: "R", description: "", nodeType: "composite",
+          depth: 0, parent: null, children: ["/old"], content: "",
+          frontmatter: {}, created: null, updated: null, author: null,
+        }],
+        ["/old", {
+          path: "/old", name: "Old", description: "", nodeType: "leaf",
+          depth: 1, parent: "/", children: [], content: "",
+          frontmatter: {}, created: null, updated: null, author: null,
+        }],
+      ]),
+      edges: [], warnings: [], linkTypes: new Map(),
+    };
+
+    deleteThingWithReferrers(root, "/old", graph);
+    expect(fs.existsSync(path.join(root, "old.md"))).toBe(false);
 
     fs.rmSync(root, { recursive: true });
   });

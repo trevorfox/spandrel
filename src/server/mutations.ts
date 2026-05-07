@@ -44,6 +44,11 @@ export interface EditList {
   danglingMentions: DanglingMention[];
 }
 
+export interface DeleteResult {
+  deleted: string[];
+  referrersRewritten: string[];
+}
+
 export interface MoveResult {
   written: string[];
   deleted: string[];
@@ -351,10 +356,27 @@ export function moveThing(
 }
 
 export function deleteThingWithReferrers(
-  _rootDir: string,
-  _path: string,
-  _graph: SpandrelGraph,
-  _options?: DeleteOptions,
-): { deleted: string[]; referrersRewritten: string[] } {
-  throw new Error("deleteThingWithReferrers: not yet implemented");
+  rootDir: string,
+  thingPath: string,
+  graph: SpandrelGraph,
+  options: DeleteOptions = {},
+): DeleteResult {
+  validateDelete(thingPath, graph);
+  const edits = buildEditList(rootDir, thingPath, null, graph, "delete");
+  const cascade = options.cascade ?? "refuse";
+
+  if (edits.rewrites.length > 0 && cascade === "refuse") {
+    const referrerPaths = edits.rewrites.map(r => r.file).join(", ");
+    throw new Error(
+      `Cannot delete ${thingPath}: ${edits.rewrites.length} referrers exist (${referrerPaths}). ` +
+      `Pass cascade: "remove-link" to remove the dead link entries.`,
+    );
+  }
+
+  if (options.dryRun) {
+    return { deleted: [], referrersRewritten: edits.rewrites.map(r => r.file) };
+  }
+
+  const applied = applyEdits(edits, "delete");
+  return { deleted: applied.deleted, referrersRewritten: applied.written };
 }
