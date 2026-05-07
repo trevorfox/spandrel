@@ -1,6 +1,6 @@
 import { compile } from "./compiler/compiler.js";
-import type { SpandrelGraph } from "./compiler/types.js";
 import { moveThing } from "./server/mutations.js";
+import { storeToGraph } from "./storage/store-to-graph.js";
 
 export interface MvOptions {
   rootDir: string;
@@ -8,31 +8,6 @@ export interface MvOptions {
   to: string;
   dryRun?: boolean;
   yes?: boolean;
-}
-
-/**
- * Build a SpandrelGraph from a compiled GraphStore.
- *
- * moveThing expects a Map-keyed SpandrelGraph (the in-process graph type),
- * but compile() returns a GraphStore (the async storage interface). This
- * helper bridges the two without introducing a new public export or touching
- * the compiler.
- */
-async function storeToGraph(
-  store: Awaited<ReturnType<typeof compile>>,
-): Promise<SpandrelGraph> {
-  const [nodes, edges, warnings, linkTypes] = await Promise.all([
-    store.getAllNodes(),
-    store.getEdges(),
-    store.getWarnings(),
-    store.getLinkTypes(),
-  ]);
-  return {
-    nodes: new Map(nodes.map((n) => [n.path, n])),
-    edges,
-    warnings,
-    linkTypes,
-  };
 }
 
 export async function runMv(options: MvOptions): Promise<number> {

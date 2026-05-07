@@ -139,7 +139,8 @@ export function updateThing(
   }
 
   const raw = fs.readFileSync(sourcePath, "utf-8");
-  const { data, content } = matter(raw);
+  // {} disables gray-matter's internal cache — we mutate parsed.data below
+  const { data, content } = matter(raw, {});
 
   // Merge frontmatter updates (undefined means "not provided" by the caller)
   if (updates.name != null) data.name = updates.name;
