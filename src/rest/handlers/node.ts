@@ -1,10 +1,10 @@
 import type { RestHandler } from "../types.js";
 import { shapeNodeAsJson } from "../shape.js";
 import { jsonResponse, errorResponse, readJsonBody } from "../router.js";
-import { createThing, updateThing, deleteThing, resolveSourcePath } from "../../server/writer.js";
+import { createThing, updateThing, resolveSourcePath } from "../../server/writer.js";
 import { recompileNode } from "../../compiler/compiler.js";
 import { storeToGraph } from "../../storage/store-to-graph.js";
-import { moveThing } from "../../server/mutations.js";
+import { moveThing, deleteThingWithReferrers } from "../../server/mutations.js";
 
 const DEFAULT_DEPTH = 0;
 const MAX_DEPTH = 10;
@@ -91,6 +91,10 @@ export const handlePutNode: RestHandler = async (req, url, ctx) => {
 
 /**
  * DELETE /node/{...path} — remove a node and its subtree.
+ *
+ * Query params:
+ *   cascade — how to handle inbound referrers. Accepted value: `remove-link`.
+ *             Omit (or any other value) to refuse when referrers exist.
  */
 export const handleDeleteNode: RestHandler = async (_req, url, ctx) => {
   if (!ctx.rootDir) return errorResponse(405, "writes not enabled");
@@ -101,15 +105,26 @@ export const handleDeleteNode: RestHandler = async (_req, url, ctx) => {
     return errorResponse(403, "write denied");
   }
 
+  const cascadeParam = url.searchParams.get("cascade");
+  const cascade = cascadeParam === "remove-link" ? "remove-link" : "refuse";
+
   try {
-    deleteThing(ctx.rootDir, nodePath);
-    const { sourcePath } = resolveSourcePath(ctx.rootDir, nodePath);
-    await recompileNode(ctx.store, ctx.rootDir, sourcePath);
+    // Resolve old source path BEFORE the delete so we can recompile it away.
+    const { sourcePath: oldSourcePath } = resolveSourcePath(ctx.rootDir, nodePath);
+
+    const graph = await storeToGraph(ctx.store);
+    const deleteResult = deleteThingWithReferrers(ctx.rootDir, nodePath, graph, { cascade });
+
+    // Recompile: deleted node (removes it from the store), then each rewritten referrer.
+    await recompileNode(ctx.store, ctx.rootDir, oldSourcePath);
+    for (const fsPath of deleteResult.referrersRewritten) {
+      await recompileNode(ctx.store, ctx.rootDir, fsPath);
+    }
+
+    return jsonResponse(200, { success: true, path: nodePath, deleteResult });
   } catch (err) {
     return errorResponse(400, (err as Error).message);
   }
-
-  return jsonResponse(200, { success: true, path: nodePath });
 };
 
 /**

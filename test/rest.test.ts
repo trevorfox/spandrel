@@ -325,6 +325,68 @@ describe("REST — wire surface", () => {
       const get = await fetch(`${harness.baseUrl}/node/transient`);
       expect(get.status).toBe(404);
     });
+
+    it("returns 400 when referrers exist and no cascade param", async () => {
+      // Create target and a referrer that links to it.
+      await fetch(`${harness.baseUrl}/node/del-target`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Del Target", description: "Will be refused" }),
+      });
+      await fetch(`${harness.baseUrl}/node/del-referrer`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Del Referrer",
+          description: "Links to del-target",
+          links: [{ to: "/del-target", type: "related" }],
+        }),
+      });
+
+      const r = await fetch(`${harness.baseUrl}/node/del-target`, { method: "DELETE" });
+      expect(r.status).toBeGreaterThanOrEqual(400);
+      const body = await r.json();
+      expect(body.error).toMatch(/referr/i);
+
+      // File must still exist.
+      const get = await fetch(`${harness.baseUrl}/node/del-target`);
+      expect(get.status).toBe(200);
+    });
+
+    it("deletes with cascade=remove-link and removes referrer link entries", async () => {
+      // Create target and a referrer that links to it.
+      await fetch(`${harness.baseUrl}/node/del-cascade-target`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Del Cascade Target", description: "Will be deleted" }),
+      });
+      await fetch(`${harness.baseUrl}/node/del-cascade-referrer`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Del Cascade Referrer",
+          description: "Links to del-cascade-target",
+          links: [{ to: "/del-cascade-target", type: "related" }],
+        }),
+      });
+
+      const r = await fetch(
+        `${harness.baseUrl}/node/del-cascade-target?cascade=remove-link`,
+        { method: "DELETE" },
+      );
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      expect(body.success).toBe(true);
+      expect(body.deleteResult.referrersRewritten.length).toBeGreaterThan(0);
+
+      // Target node must be gone.
+      const get = await fetch(`${harness.baseUrl}/node/del-cascade-target`);
+      expect(get.status).toBe(404);
+
+      // Referrer should still exist but its link to the target should be removed.
+      const refGet = await fetch(`${harness.baseUrl}/node/del-cascade-referrer`);
+      expect(refGet.status).toBe(200);
+    });
   });
 
   describe("POST /node/{...path}/move", () => {
