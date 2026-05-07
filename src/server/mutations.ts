@@ -47,6 +47,7 @@ export interface EditList {
 export interface DeleteResult {
   deleted: string[];
   referrersRewritten: string[];
+  danglingMentions: DanglingMention[];
 }
 
 export interface MoveResult {
@@ -411,9 +412,9 @@ export function deleteThingWithReferrers(
   }
 
   if (options.dryRun) {
-    return { deleted: [], referrersRewritten: edits.rewrites.map(r => r.file) };
+    return { deleted: [], referrersRewritten: edits.rewrites.map(r => r.file), danglingMentions: edits.danglingMentions };
   }
 
   const applied = applyEdits(edits, "delete");
-  return { deleted: applied.deleted, referrersRewritten: applied.written };
+  return { deleted: applied.deleted, referrersRewritten: applied.written, danglingMentions: edits.danglingMentions };
 }

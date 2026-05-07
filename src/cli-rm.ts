@@ -14,7 +14,7 @@ export async function runRm(options: RmOptions): Promise<number> {
   const store = await compile(options.rootDir);
   const graph = await storeToGraph(store);
 
-  let preview: { deleted: string[]; referrersRewritten: string[] };
+  let preview: { deleted: string[]; referrersRewritten: string[]; danglingMentions: Array<{ in: string; to: string }> };
   try {
     preview = deleteThingWithReferrers(options.rootDir, options.path, graph, {
       dryRun: true,
@@ -28,6 +28,14 @@ export async function runRm(options: RmOptions): Promise<number> {
   console.error(`Delete ${options.path}`);
   console.error(`  Referrers affected: ${preview.referrersRewritten.length}`);
   for (const r of preview.referrersRewritten) console.error(`    - ${r}`);
+  if (preview.danglingMentions.length > 0) {
+    console.error(
+      `  Inline mentions (not auto-rewritten): ${preview.danglingMentions.length}`,
+    );
+    for (const m of preview.danglingMentions) {
+      console.error(`    - ${m.in} → ${m.to}`);
+    }
+  }
 
   if (options.dryRun) return 0;
 

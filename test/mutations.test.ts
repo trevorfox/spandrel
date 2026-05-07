@@ -501,6 +501,7 @@ describe("deleteThingWithReferrers", () => {
 
     const result = deleteThingWithReferrers(root, "/old", graph, { cascade: "remove-link" });
     expect(result.referrersRewritten).toEqual([path.join(root, "ref.md")]);
+    expect(result.danglingMentions).toEqual([]);
     expect(fs.existsSync(path.join(root, "old.md"))).toBe(false);
     const ref = fs.readFileSync(path.join(root, "ref.md"), "utf-8");
     expect(ref).not.toContain("/old");

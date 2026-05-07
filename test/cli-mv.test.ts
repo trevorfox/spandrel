@@ -83,6 +83,42 @@ describe("runMv — --dry-run leaves files unchanged", () => {
   });
 });
 
+describe("runMv — danglingMentions printed to stderr when inline prose mentions exist", () => {
+  let root: string;
+  let stderrLines: string[];
+
+  beforeEach(() => {
+    root = tmpRepo();
+    // Add a node whose body contains an inline prose mention of /old.
+    fs.writeFileSync(
+      path.join(root, "prose.md"),
+      "---\nname: Prose\ndescription: p\n---\nSee [old](/old) for context.\n",
+    );
+    stderrLines = [];
+    const orig = console.error;
+    // Capture stderr output lines during runMv.
+    (console as unknown as { _origError: typeof console.error })._origError = orig;
+    (console.error as unknown) = (...args: unknown[]) => {
+      stderrLines.push(args.map(String).join(" "));
+    };
+  });
+
+  afterEach(() => {
+    rmrf(root);
+    const orig = (console as unknown as { _origError: typeof console.error })._origError;
+    if (orig) console.error = orig;
+  });
+
+  it("prints inline-mention warning lines when --dry-run", async () => {
+    const code = await runMv({ rootDir: root, from: "/old", to: "/new", dryRun: true });
+
+    expect(code).toBe(0);
+    const output = stderrLines.join("\n");
+    expect(output).toContain("Inline mentions (not auto-rewritten):");
+    expect(output).toContain("/prose");
+  });
+});
+
 describe("runMv — no --yes and no --dry-run requires confirmation", () => {
   let root: string;
 

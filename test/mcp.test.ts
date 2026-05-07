@@ -410,6 +410,65 @@ describe("MCP Server", () => {
     expect(data.message).toContain("Target exists");
   });
 
+  it("move_thing surfaces danglingMentions for inline prose links", async () => {
+    // Create /mention-source (target of the move).
+    await client.callTool({
+      name: "create_thing",
+      arguments: { path: "/mention-source", name: "Mention Source", description: "Will be moved" },
+    });
+
+    // Create a node whose body contains an inline [text](/mention-source) mention.
+    await client.callTool({
+      name: "create_thing",
+      arguments: {
+        path: "/mention-host",
+        name: "Mention Host",
+        description: "Contains a prose mention",
+        content: "See [this node](/mention-source) for context.",
+      },
+    });
+
+    const result = await client.callTool({
+      name: "move_thing",
+      arguments: { from: "/mention-source", to: "/mention-renamed" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const data = JSON.parse(text);
+    expect(data.success).toBe(true);
+    expect(data.moveResult.danglingMentions).toHaveLength(1);
+    expect(data.moveResult.danglingMentions[0].in).toBe("/mention-host");
+    expect(data.moveResult.danglingMentions[0].to).toBe("/mention-source");
+  });
+
+  it("delete_thing with cascade='remove-link' includes danglingMentions in result", async () => {
+    // Create /dm-target and a node with an inline prose mention.
+    await client.callTool({
+      name: "create_thing",
+      arguments: { path: "/dm-target", name: "DM Target", description: "Will be cascade-deleted" },
+    });
+    await client.callTool({
+      name: "create_thing",
+      arguments: {
+        path: "/dm-host",
+        name: "DM Host",
+        description: "Contains a prose mention",
+        content: "See [dm-target](/dm-target) for more.",
+      },
+    });
+
+    const result = await client.callTool({
+      name: "delete_thing",
+      arguments: { path: "/dm-target", cascade: "remove-link" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const data = JSON.parse(text);
+    expect(data.success).toBe(true);
+    expect(Array.isArray(data.deleteResult.danglingMentions)).toBe(true);
+    expect(data.deleteResult.danglingMentions).toHaveLength(1);
+    expect(data.deleteResult.danglingMentions[0].in).toBe("/dm-host");
+    expect(data.deleteResult.danglingMentions[0].to).toBe("/dm-target");
+  });
+
   // SKIP: known gap — composite move doesn't recompile descendants in the
   // in-process store. Watcher will catch up on next event in mcp/dev mode,
   // but for one-shot CLI this is fine. Follow-up: recompileSubtree helper.

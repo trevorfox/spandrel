@@ -387,6 +387,36 @@ describe("REST — wire surface", () => {
       const refGet = await fetch(`${harness.baseUrl}/node/del-cascade-referrer`);
       expect(refGet.status).toBe(200);
     });
+
+    it("delete with cascade=remove-link includes danglingMentions in response", async () => {
+      // Create target and a node with an inline prose mention.
+      await fetch(`${harness.baseUrl}/node/del-dm-target`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Del DM Target", description: "Will be deleted" }),
+      });
+      await fetch(`${harness.baseUrl}/node/del-dm-host`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Del DM Host",
+          description: "Mentions del-dm-target inline",
+          content: "See [del-dm-target](/del-dm-target) for info.",
+        }),
+      });
+
+      const r = await fetch(
+        `${harness.baseUrl}/node/del-dm-target?cascade=remove-link`,
+        { method: "DELETE" },
+      );
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      expect(body.success).toBe(true);
+      expect(Array.isArray(body.deleteResult.danglingMentions)).toBe(true);
+      expect(body.deleteResult.danglingMentions).toHaveLength(1);
+      expect(body.deleteResult.danglingMentions[0].in).toBe("/del-dm-host");
+      expect(body.deleteResult.danglingMentions[0].to).toBe("/del-dm-target");
+    });
   });
 
   describe("POST /node/{...path}/move", () => {
@@ -419,7 +449,7 @@ describe("REST — wire surface", () => {
     });
 
     it("rewrites referrers and surfaces dangling mentions", async () => {
-      // Create source and a referrer that links to it.
+      // Create source, a frontmatter-referrer, and a prose-mention host.
       await fetch(`${harness.baseUrl}/node/ref-source`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -434,6 +464,15 @@ describe("REST — wire surface", () => {
           links: [{ to: "/ref-source", type: "related" }],
         }),
       });
+      await fetch(`${harness.baseUrl}/node/ref-prose-host`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Prose Host",
+          description: "Mentions ref-source inline",
+          content: "See [ref-source](/ref-source) for details.",
+        }),
+      });
 
       const r = await fetch(`${harness.baseUrl}/node/ref-source/move`, {
         method: "POST",
@@ -445,6 +484,11 @@ describe("REST — wire surface", () => {
       expect(body.success).toBe(true);
       // referrersRewritten should contain at least the referrer file.
       expect(body.moveResult.referrersRewritten.length).toBeGreaterThan(0);
+      // danglingMentions should surface the inline prose mention.
+      expect(Array.isArray(body.moveResult.danglingMentions)).toBe(true);
+      expect(body.moveResult.danglingMentions).toHaveLength(1);
+      expect(body.moveResult.danglingMentions[0].in).toBe("/ref-prose-host");
+      expect(body.moveResult.danglingMentions[0].to).toBe("/ref-source");
     });
 
     it("returns 400 when 'to' is missing from body", async () => {
