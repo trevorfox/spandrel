@@ -33,8 +33,9 @@ Write (registered only when `rootDir` is supplied):
 - **create_thing** — create a new node
 - **update_thing** — update an existing node
 - **delete_thing** — delete a node and its subtree
+- **move_thing** — rename or move a node, cascading frontmatter rewrites
 
-That is twelve tools — nine read, three write. Hosts that want to layer their own search (e.g. vector search on a paid tier) can pass `{ skipSearch: true }` when registering and supply their own `search` tool, falling back to `runKeywordSearch` for free-tier callers.
+That is thirteen tools — nine read, four write. Hosts that want to layer their own search (e.g. vector search on a paid tier) can pass `{ skipSearch: true }` when registering and supply their own `search` tool, falling back to `runKeywordSearch` for free-tier callers.
 
 ### Tool description principles
 

@@ -570,6 +570,9 @@ export function registerWriteTools(
       if (!ctx.policy.canWrite(ctx.actor, from)) {
         return asTextResult({ success: false, from, to, message: "Write access denied", warnings: [] });
       }
+      if (!ctx.policy.canWrite(ctx.actor, to)) {
+        return asTextResult({ success: false, from, to, message: "Write access denied on target path", warnings: [] });
+      }
       try {
         // Resolve the old source path before the move so we can remove it from
         // the store after the filesystem rename completes. resolveSourcePath
