@@ -1,4 +1,4 @@
-import type { SpandrelGraph } from "../compiler/types.js";
+import type { SpandrelGraph, SpandrelNode } from "../compiler/types.js";
 
 export interface FrontmatterRewrite {
   /** Absolute filesystem path of the referrer file. */
@@ -54,6 +54,38 @@ export interface MutationOptions {
 
 export interface DeleteOptions extends MutationOptions {
   cascade?: "remove-link" | "refuse";
+}
+
+export interface Referrer {
+  node: SpandrelNode;
+  matchedLinks: Array<{ to: string; type?: string; description?: string }>;
+}
+
+export function findReferrers(
+  graph: SpandrelGraph,
+  targetPath: string,
+  options: { prefix?: boolean } = {},
+): Referrer[] {
+  const includeDescendants = options.prefix ?? false;
+  const prefix = targetPath.endsWith("/") ? targetPath : targetPath + "/";
+  const out: Referrer[] = [];
+  for (const node of graph.nodes.values()) {
+    const links = node.frontmatter.links;
+    if (!Array.isArray(links)) continue;
+    const matched: Referrer["matchedLinks"] = [];
+    for (const link of links) {
+      if (typeof link !== "object" || link == null) continue;
+      const to = (link as { to?: unknown }).to;
+      if (typeof to !== "string") continue;
+      if (to === targetPath) {
+        matched.push(link as Referrer["matchedLinks"][number]);
+      } else if (includeDescendants && to.startsWith(prefix)) {
+        matched.push(link as Referrer["matchedLinks"][number]);
+      }
+    }
+    if (matched.length > 0) out.push({ node, matchedLinks: matched });
+  }
+  return out;
 }
 
 // Public API stubs — implemented in subsequent tasks.
