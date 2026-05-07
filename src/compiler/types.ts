@@ -45,6 +45,7 @@ export interface ValidationWarning {
     | "unlisted_child"
     | "file_too_large"
     | "compile_timeout"
+    | "invalid_frontmatter"
     | "undeclared_link_type"
     | "companion_file_lowercase";
   message: string;

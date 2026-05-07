@@ -42,6 +42,36 @@ export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 export const COMPILE_TIMEOUT_MS = 30_000; // 30 seconds
 
 /**
+ * Parse markdown frontmatter, surfacing YAML errors as warnings rather than
+ * crashing the whole compile. A single malformed file (e.g. an unquoted
+ * colon in a value) must not poison the rest of the graph.
+ *
+ * Returns `null` when the frontmatter fails to parse; the caller treats this
+ * the same as the file_too_large / compile_timeout cases — skip the node,
+ * record a warning, continue walking.
+ */
+function safeParseMatter(
+  filePath: string,
+  raw: string,
+  nodePath: string,
+  warnings?: ValidationWarning[],
+): { data: Record<string, unknown>; content: string } | null {
+  try {
+    const parsed = matter(raw);
+    return { data: parsed.data, content: parsed.content };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    const msg = `Skipping ${filePath}: malformed YAML frontmatter — ${reason}`;
+    if (warnings) {
+      warnings.push({ path: nodePath, type: "invalid_frontmatter", message: msg });
+    } else {
+      console.warn(`[spandrel] ${msg}`);
+    }
+    return null;
+  }
+}
+
+/**
  * Legacy export retained for backwards compatibility with any external code
  * that imported the skip list directly. Companion files now compile as
  * document nodes (see `./companion-files.ts`); the set still represents the
@@ -313,7 +343,9 @@ function parseCompanionNode(
 
   const startTime = Date.now();
   const raw = fs.readFileSync(filePath, "utf-8");
-  const { data, content } = matter(raw);
+  const parsed = safeParseMatter(filePath, raw, nodePath, warnings);
+  if (!parsed) return null;
+  const { data, content } = parsed;
   const elapsed = Date.now() - startTime;
 
   if (elapsed > COMPILE_TIMEOUT_MS) {
@@ -450,7 +482,9 @@ function parseLeafNode(
 
   const startTime = Date.now();
   const raw = fs.readFileSync(filePath, "utf-8");
-  const { data, content } = matter(raw);
+  const parsed = safeParseMatter(filePath, raw, nodePath, warnings);
+  if (!parsed) return null;
+  const { data, content } = parsed;
   const elapsed = Date.now() - startTime;
 
   if (elapsed > COMPILE_TIMEOUT_MS) {
@@ -514,7 +548,9 @@ function parseNode(
 
   const startTime = Date.now();
   const raw = fs.readFileSync(indexPath, "utf-8");
-  const { data, content } = matter(raw);
+  const parsed = safeParseMatter(indexPath, raw, nodePath, warnings);
+  if (!parsed) return null;
+  const { data, content } = parsed;
   const elapsed = Date.now() - startTime;
 
   if (elapsed > COMPILE_TIMEOUT_MS) {

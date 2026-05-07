@@ -997,4 +997,62 @@ describe("Compiler — Safety Limits", () => {
       (fs as unknown as Record<string, unknown>).statSync = origStatSync;
     }
   });
+
+  it("skips leaf files with malformed YAML frontmatter and emits an invalid_frontmatter warning", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+
+    // Unquoted colon in the value — a real-world trap. YAML reads
+    // "2026: Matched..." as a nested mapping and throws.
+    fs.writeFileSync(
+      path.join(root, "tableau.md"),
+      `---\ntitle: Best Tableau Alternatives in 2026: Matched to Why You're Leaving\n---\n\nBody.\n`,
+    );
+    // A sibling file with valid frontmatter — must still compile.
+    fs.writeFileSync(
+      path.join(root, "neighbor.md"),
+      `---\nname: Neighbor\ndescription: Sibling\n---\n\nBody.\n`,
+    );
+
+    const store = await compile(root);
+
+    expect(await store.hasNode("/tableau")).toBe(false);
+    expect(await store.hasNode("/neighbor")).toBe(true);
+
+    const warnings = (await store.getWarnings()).filter((w) => w.type === "invalid_frontmatter");
+    expect(warnings.length).toBe(1);
+    expect(warnings[0].path).toBe("/tableau");
+    // Message must mention the file path so the author can find it.
+    expect(warnings[0].message).toContain("tableau.md");
+  });
+
+  it("skips index.md files with malformed YAML frontmatter and emits an invalid_frontmatter warning", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    fs.mkdirSync(path.join(root, "broken"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "broken", "index.md"),
+      `---\ntitle: A title with a stray: colon\n---\n\nBody.\n`,
+    );
+
+    const store = await compile(root);
+
+    expect(await store.hasNode("/broken")).toBe(false);
+    const warnings = (await store.getWarnings()).filter((w) => w.type === "invalid_frontmatter");
+    expect(warnings.length).toBe(1);
+    expect(warnings[0].path).toBe("/broken");
+  });
+
+  it("skips companion files with malformed YAML frontmatter and emits an invalid_frontmatter warning", async () => {
+    writeIndex(root, { name: "Root", description: "Root" });
+    fs.writeFileSync(
+      path.join(root, "DESIGN.md"),
+      `---\nsummary: A design note: with a colon\n---\n\nBody.\n`,
+    );
+
+    const store = await compile(root);
+
+    expect(await store.hasNode("/DESIGN")).toBe(false);
+    const warnings = (await store.getWarnings()).filter((w) => w.type === "invalid_frontmatter");
+    expect(warnings.length).toBe(1);
+    expect(warnings[0].path).toBe("/DESIGN");
+  });
 });
