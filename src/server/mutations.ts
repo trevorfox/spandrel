@@ -88,6 +88,23 @@ export function findReferrers(
   return out;
 }
 
+/**
+ * Returns the rewritten link target if `link` is `from` or a descendant of
+ * `from`. Returns null otherwise.
+ */
+export function rewriteLinkTarget(
+  link: string,
+  from: string,
+  to: string,
+): string | null {
+  if (link === from) return to;
+  const prefix = from.endsWith("/") ? from : from + "/";
+  if (link.startsWith(prefix)) {
+    return to + link.slice(from.length);
+  }
+  return null;
+}
+
 // Public API stubs — implemented in subsequent tasks.
 export function moveThing(
   _rootDir: string,

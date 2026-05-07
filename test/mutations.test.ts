@@ -78,3 +78,28 @@ describe("findReferrers", () => {
     expect(b?.matchedLinks).toEqual([{ to: "/target/child" }]);
   });
 });
+
+import { rewriteLinkTarget } from "../src/server/mutations.js";
+
+describe("rewriteLinkTarget", () => {
+  it("rewrites exact match", () => {
+    expect(rewriteLinkTarget("/old", "/old", "/new")).toBe("/new");
+  });
+
+  it("rewrites prefix match (descendant)", () => {
+    expect(rewriteLinkTarget("/old/child", "/old", "/new")).toBe("/new/child");
+  });
+
+  it("preserves trailing path segments on prefix rewrite", () => {
+    expect(rewriteLinkTarget("/old/a/b", "/old", "/new")).toBe("/new/a/b");
+  });
+
+  it("returns null when neither exact nor prefix match", () => {
+    expect(rewriteLinkTarget("/elsewhere", "/old", "/new")).toBe(null);
+  });
+
+  it("does not match a sibling that shares a path prefix string", () => {
+    // /oldname is not a descendant of /old
+    expect(rewriteLinkTarget("/oldname", "/old", "/new")).toBe(null);
+  });
+});
