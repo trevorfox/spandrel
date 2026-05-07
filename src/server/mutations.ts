@@ -154,8 +154,7 @@ export function findDanglingMentions(
 }
 
 // ---------------------------------------------------------------------------
-// Filesystem path helpers — derived from graph nodeType, not filesystem state.
-// This keeps buildEditList pure (no I/O) and testable against in-memory graphs.
+// Filesystem path helpers.
 // ---------------------------------------------------------------------------
 
 function graphPathToLeafFile(rootDir: string, graphPath: string): string {
@@ -171,16 +170,52 @@ function graphPathToLeafFile(rootDir: string, graphPath: string): string {
   return path.join(parentDir, name + ".md");
 }
 
-function graphPathToCompositeDir(rootDir: string, graphPath: string): string {
+function graphPathToCompositeIndex(rootDir: string, graphPath: string): string {
   const segments = graphPath.split("/").filter(Boolean);
-  if (segments.length === 0) return rootDir;
-  return path.join(rootDir, ...segments);
+  if (segments.length === 0) return path.join(rootDir, "index.md");
+  return path.join(rootDir, ...segments, "index.md");
 }
 
-function graphPathToFile(rootDir: string, graphPath: string, isComposite: boolean): string {
-  return isComposite
-    ? graphPathToCompositeDir(rootDir, graphPath)
-    : graphPathToLeafFile(rootDir, graphPath);
+/**
+ * Detect whether a node's source lives in a directory (index.md form) or as a
+ * plain leaf .md file.
+ *
+ * `nodeType` is the primary signal — when `"composite"`, the source is always
+ * `dir/index.md`. When `"leaf"`, we do a filesystem check: a directory node
+ * with no child nodes (e.g. a childless index.md) is classified as `"leaf"` by
+ * the compiler but physically lives at `dir/index.md`. The filesystem check
+ * disambiguates. When no files exist on disk (unit-test graphs), `nodeType` is
+ * the sole signal.
+ */
+function resolveNodeFile(
+  rootDir: string,
+  graphPath: string,
+  nodeType: "leaf" | "composite",
+): { file: string; isDir: boolean } {
+  if (nodeType === "composite") {
+    return { file: graphPathToCompositeIndex(rootDir, graphPath), isDir: true };
+  }
+  // nodeType === "leaf": check if the node is actually stored as a directory
+  const compositeCandidate = graphPathToCompositeIndex(rootDir, graphPath);
+  if (fs.existsSync(compositeCandidate)) {
+    return { file: compositeCandidate, isDir: true };
+  }
+  return { file: graphPathToLeafFile(rootDir, graphPath), isDir: false };
+}
+
+/**
+ * Resolve the destination filesystem path for a move, given knowledge of
+ * whether the source is a directory-based node.
+ */
+function resolveDestFile(rootDir: string, graphPath: string, isDir: boolean): string {
+  if (isDir) {
+    // The destination directory doesn't exist yet — return the directory path
+    // (the parent of index.md) so renameSync moves the whole directory.
+    const segments = graphPath.split("/").filter(Boolean);
+    if (segments.length === 0) return rootDir;
+    return path.join(rootDir, ...segments);
+  }
+  return graphPathToLeafFile(rootDir, graphPath);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,35 +234,33 @@ export function buildEditList(
     throw new Error(`Source path does not exist in graph: ${from}`);
   }
 
-  const isComposite = fromNode.nodeType === "composite";
-  const fromFile = graphPathToFile(rootDir, from, isComposite);
+  const { file: fromFile, isDir: sourceIsDir } = resolveNodeFile(rootDir, from, fromNode.nodeType);
 
   const moves: FileMove[] = [];
   const deletes: FileDelete[] = [];
 
   if (op === "move") {
     if (to === null) throw new Error("move requires a target path");
-    const toFile = graphPathToFile(rootDir, to, isComposite);
-    moves.push({ fromFile, toFile, isDirectory: isComposite });
+    const toFile = resolveDestFile(rootDir, to, sourceIsDir);
+    moves.push({ fromFile: sourceIsDir ? path.dirname(fromFile) : fromFile, toFile, isDirectory: sourceIsDir });
   } else {
-    deletes.push({ file: fromFile, isDirectory: isComposite });
+    deletes.push({ file: sourceIsDir ? path.dirname(fromFile) : fromFile, isDirectory: sourceIsDir });
   }
 
-  // Find referrers — exact + descendants for composite, exact-only for leaf.
-  const referrers = findReferrers(graph, from, { prefix: isComposite });
+  // Find referrers — exact + descendants for directory-based nodes, exact-only for leaf.
+  const referrers = findReferrers(graph, from, { prefix: sourceIsDir });
   const rewrites: FrontmatterRewrite[] = [];
   for (const ref of referrers) {
-    const refIsComposite = ref.node.nodeType === "composite";
-    const refFile = graphPathToFile(rootDir, ref.node.path, refIsComposite);
+    const { file: refFile } = resolveNodeFile(rootDir, ref.node.path, ref.node.nodeType);
     rewrites.push({
       file: refFile,
       fromPath: from,
       toPath: to ?? "", // delete: removed entirely; signaled by op=delete in applyEdits
-      prefix: isComposite,
+      prefix: sourceIsDir,
     });
   }
 
-  const danglingMentions = findDanglingMentions(graph, from, { prefix: isComposite });
+  const danglingMentions = findDanglingMentions(graph, from, { prefix: sourceIsDir });
 
   return { moves, deletes, rewrites, danglingMentions };
 }

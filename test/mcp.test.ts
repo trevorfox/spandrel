@@ -60,9 +60,9 @@ describe("MCP Server", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("exposes exactly 12 tools", async () => {
+  it("exposes exactly 13 tools", async () => {
     const result = await client.listTools();
-    expect(result.tools.length).toBe(12);
+    expect(result.tools.length).toBe(13);
     const names = result.tools.map((t) => t.name).sort();
     expect(names).toEqual([
       "context",
@@ -73,6 +73,7 @@ describe("MCP Server", () => {
       "get_history",
       "get_node",
       "get_references",
+      "move_thing",
       "navigate",
       "search",
       "update_thing",
@@ -294,6 +295,61 @@ describe("MCP Server", () => {
     });
     const nodeText = (nodeResult.content as Array<{ type: string; text: string }>)[0].text;
     expect(JSON.parse(nodeText)).toBeNull();
+  });
+
+  it("move_thing renames a Thing and rewrites declared referrers", async () => {
+    // /clients/acme has a link to /projects/alpha; /projects/alpha links back to /clients/acme
+    // Move /clients/acme to /clients/acme-corp — referrer /projects/alpha should be rewritten
+    const result = await client.callTool({
+      name: "move_thing",
+      arguments: { from: "/clients/acme", to: "/clients/acme-corp" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const data = JSON.parse(text);
+    expect(data.success).toBe(true);
+    expect(data.from).toBe("/clients/acme");
+    expect(data.to).toBe("/clients/acme-corp");
+
+    // Old path is gone
+    const oldNode = await client.callTool({ name: "get_node", arguments: { path: "/clients/acme" } });
+    const oldText = (oldNode.content as Array<{ type: string; text: string }>)[0].text;
+    expect(JSON.parse(oldText)).toBeNull();
+
+    // New path exists with the same name
+    const newNode = await client.callTool({ name: "get_node", arguments: { path: "/clients/acme-corp" } });
+    const newText = (newNode.content as Array<{ type: string; text: string }>)[0].text;
+    const node = JSON.parse(newText);
+    expect(node).not.toBeNull();
+    expect(node.name).toBe("Acme Corp");
+
+    // The referrer (/projects/alpha) should now point to /clients/acme-corp
+    const alphaNode = await client.callTool({ name: "get_node", arguments: { path: "/projects/alpha" } });
+    const alphaText = (alphaNode.content as Array<{ type: string; text: string }>)[0].text;
+    const alpha = JSON.parse(alphaText);
+    expect(alpha.links.some((l: { to: string }) => l.to === "/clients/acme-corp")).toBe(true);
+    expect(alpha.links.some((l: { to: string }) => l.to === "/clients/acme")).toBe(false);
+  });
+
+  it("move_thing fails when source does not exist", async () => {
+    const result = await client.callTool({
+      name: "move_thing",
+      arguments: { from: "/does-not-exist", to: "/somewhere-else" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const data = JSON.parse(text);
+    expect(data.success).toBe(false);
+    expect(data.message).toBeTruthy();
+  });
+
+  it("move_thing fails when target already exists", async () => {
+    const result = await client.callTool({
+      name: "move_thing",
+      arguments: { from: "/clients/acme", to: "/projects/alpha" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const data = JSON.parse(text);
+    expect(data.success).toBe(false);
+    expect(data.message).toContain("Target exists");
   });
 
   it("create_thing fails for duplicate path", async () => {

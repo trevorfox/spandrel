@@ -23,6 +23,8 @@ import {
   resolveSourcePath,
 } from "./writer.js";
 import { recompileNode } from "../compiler/compiler.js";
+import { moveThing } from "./mutations.js";
+import { storeToGraph } from "../storage/store-to-graph.js";
 import type { HistoryEntry } from "../compiler/types.js";
 
 export interface McpServerOptions {
@@ -520,6 +522,55 @@ export function registerWriteTools(
         deleteThing(rootDir, thingPath);
       });
       return asTextResult(result);
+    }
+  );
+
+  server.tool(
+    "move_thing",
+    "Renames or moves a Thing to a new path. Rewrites every referrer's declared frontmatter links. Inline markdown mentions are surfaced as warnings, not auto-rewritten.",
+    {
+      from: z.string().describe("Current path of the Thing"),
+      to: z.string().describe("New path"),
+    },
+    async ({ from, to }) => {
+      if (!ctx.policy.canWrite(ctx.actor, from)) {
+        return asTextResult({ success: false, from, to, message: "Write access denied", warnings: [] });
+      }
+      try {
+        // Resolve the old source path before the move so we can remove it from
+        // the store after the filesystem rename completes. resolveSourcePath
+        // checks disk — this must run before moveThing renames it.
+        const { sourcePath: oldSourcePath } = resolveSourcePath(rootDir, from);
+
+        const graph = await storeToGraph(ctx.store);
+        const moveResult = moveThing(rootDir, from, to, graph);
+
+        // Recompile in order:
+        // 1. Old source path (now gone) — removes the old node from the store.
+        // 2. New destination — adds the moved node under its new path.
+        // 3. Rewritten referrers — updates their link edges.
+        await recompileNode(ctx.store, rootDir, oldSourcePath);
+        const { sourcePath: newSourcePath } = resolveSourcePath(rootDir, to);
+        await recompileNode(ctx.store, rootDir, newSourcePath);
+        for (const fsPath of moveResult.written) {
+          await recompileNode(ctx.store, rootDir, fsPath);
+        }
+
+        const warnings = (await ctx.store.getWarnings()).filter(
+          (w) => w.path === to || w.path.startsWith(to + "/")
+        );
+        return asTextResult({
+          success: true,
+          from,
+          to,
+          message: null,
+          moveResult,
+          warnings,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return asTextResult({ success: false, from, to, message, warnings: [] });
+      }
     }
   );
 }
