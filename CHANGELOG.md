@@ -19,6 +19,11 @@ Graph mutations — move, delete, and cascade-rewrite across the full author-fac
 - **`delete_thing` MCP tool now refuses by default when inbound declared-link referrers exist.** Previously deleted unconditionally, leaving dangling `links` entries in every referrer. Now throws and returns `{ success: false }` unless the caller passes `cascade: "remove-link"`, which strips the dead link entries from every referrer's frontmatter as part of the deletion. Callers that previously relied on unconditional delete must add `cascade: "remove-link"` to preserve the old behavior (minus the silent data loss).
 - **`DELETE /node/{path}` REST endpoint now refuses by default when referrers exist.** Same change as the MCP tool. Pass `?cascade=remove-link` to opt into removing dead link entries. Returns HTTP 400 when refused.
 
+### Fixed
+
+- **Compiler skips files with malformed YAML frontmatter instead of crashing.** A single bad frontmatter (e.g. an unquoted colon in a value) previously threw a `YAMLException` out of gray-matter and killed the entire compile — taking down `dev` mode and `spandrel publish` with a stack trace that didn't even name the offending file. Each `matter()` call is now wrapped; YAML failures emit a `yaml_parse_error` warning naming the file and the parser's reason, the node is skipped, and the walk continues — same pattern as `file_too_large` and `compile_timeout`.
+- **Watcher serializes change events to prevent stale edges.** `recompileNode` did a read-filter-write on the store's edge list, so two concurrent unlinks (e.g. deleting two siblings together) raced — each filtered from the same snapshot and the later write clobbered the earlier deletion, leaving a hierarchy edge to a node that no longer existed. Watcher events are now chained behind a single-slot promise so they observe in order but execute one at a time.
+
 ---
 
 ## [0.7.1] — 2026-05-04
