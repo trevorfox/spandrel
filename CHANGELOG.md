@@ -2,6 +2,30 @@
 
 All notable changes to Spandrel are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The stable surface for consumers is documented in [PUBLIC-API.md](./PUBLIC-API.md).
 
+## Unreleased
+
+Graph mutations — move, delete, and cascade-rewrite across the full author-facing surface (CLI, MCP, REST).
+
+### Added
+
+- **`move_thing` MCP tool** — rename or move a Thing to a new path. Rewrites every referrer's declared frontmatter links automatically; surfaces inline markdown `[text](/path)` mentions that point at the moved node as `danglingMentions` so authors can fix prose by hand.
+- **`POST /node/{path}/move` REST endpoint** — same semantics as `move_thing`. Body: `{ "to": "/new/path" }`. Returns `{ success, from, to, moveResult, warnings }`.
+- **`spandrel mv <from> <to>` CLI subcommand** — previews the edit plan to stderr, then applies on `--yes`. `--dry-run` previews and exits 0. `--cascade` flag is not applicable (use `spandrel rm` with `--cascade` for deletes).
+- **`spandrel rm <path> [--cascade] [--dry-run] [--yes]` CLI subcommand** — previews the delete edit plan to stderr. Without `--cascade`, refuses when inbound declared-link referrers exist. With `--cascade`, strips dead link entries from every referrer's frontmatter before deleting.
+- **`danglingMentions` field on `MoveResult` and `DeleteResult`** — an array of `{ in: string, to: string }` entries naming every node whose markdown body contains an inline `[text](/path)` mention pointing at the moved/deleted node. These are surfaced for author attention; they are not auto-rewritten. Surfaced in MCP tool results, REST response bodies, and CLI stderr output.
+
+### Changed (potentially breaking)
+
+- **`delete_thing` MCP tool now refuses by default when inbound declared-link referrers exist.** Previously deleted unconditionally, leaving dangling `links` entries in every referrer. Now throws and returns `{ success: false }` unless the caller passes `cascade: "remove-link"`, which strips the dead link entries from every referrer's frontmatter as part of the deletion. Callers that previously relied on unconditional delete must add `cascade: "remove-link"` to preserve the old behavior (minus the silent data loss).
+- **`DELETE /node/{path}` REST endpoint now refuses by default when referrers exist.** Same change as the MCP tool. Pass `?cascade=remove-link` to opt into removing dead link entries. Returns HTTP 400 when refused.
+
+### Fixed
+
+- **Compiler skips files with malformed YAML frontmatter instead of crashing.** A single bad frontmatter (e.g. an unquoted colon in a value) previously threw a `YAMLException` out of gray-matter and killed the entire compile — taking down `dev` mode and `spandrel publish` with a stack trace that didn't even name the offending file. Each `matter()` call is now wrapped; YAML failures emit a `yaml_parse_error` warning naming the file and the parser's reason, the node is skipped, and the walk continues — same pattern as `file_too_large` and `compile_timeout`.
+- **Watcher serializes change events to prevent stale edges.** `recompileNode` did a read-filter-write on the store's edge list, so two concurrent unlinks (e.g. deleting two siblings together) raced — each filtered from the same snapshot and the later write clobbered the earlier deletion, leaving a hierarchy edge to a node that no longer existed. Watcher events are now chained behind a single-slot promise so they observe in order but execute one at a time.
+
+---
+
 ## [0.7.1] — 2026-05-04
 
 Compiler honesty pass. Three small fixes that turn the validation output from "mostly false-positive noise" into actual signal. Audited against the framework's own `docs/` KG: 15 warnings → 0 warnings (three compiler fixes resolved 13; two real content gaps fixed in `docs/content-model/index.md`).

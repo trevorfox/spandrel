@@ -325,6 +325,202 @@ describe("REST — wire surface", () => {
       const get = await fetch(`${harness.baseUrl}/node/transient`);
       expect(get.status).toBe(404);
     });
+
+    it("returns 400 when referrers exist and no cascade param", async () => {
+      // Create target and a referrer that links to it.
+      await fetch(`${harness.baseUrl}/node/del-target`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Del Target", description: "Will be refused" }),
+      });
+      await fetch(`${harness.baseUrl}/node/del-referrer`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Del Referrer",
+          description: "Links to del-target",
+          links: [{ to: "/del-target", type: "related" }],
+        }),
+      });
+
+      const r = await fetch(`${harness.baseUrl}/node/del-target`, { method: "DELETE" });
+      expect(r.status).toBeGreaterThanOrEqual(400);
+      const body = await r.json();
+      expect(body.error).toMatch(/referr/i);
+
+      // File must still exist.
+      const get = await fetch(`${harness.baseUrl}/node/del-target`);
+      expect(get.status).toBe(200);
+    });
+
+    it("deletes with cascade=remove-link and removes referrer link entries", async () => {
+      // Create target and a referrer that links to it.
+      await fetch(`${harness.baseUrl}/node/del-cascade-target`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Del Cascade Target", description: "Will be deleted" }),
+      });
+      await fetch(`${harness.baseUrl}/node/del-cascade-referrer`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Del Cascade Referrer",
+          description: "Links to del-cascade-target",
+          links: [{ to: "/del-cascade-target", type: "related" }],
+        }),
+      });
+
+      const r = await fetch(
+        `${harness.baseUrl}/node/del-cascade-target?cascade=remove-link`,
+        { method: "DELETE" },
+      );
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      expect(body.success).toBe(true);
+      expect(body.deleteResult.referrersRewritten.length).toBeGreaterThan(0);
+
+      // Target node must be gone.
+      const get = await fetch(`${harness.baseUrl}/node/del-cascade-target`);
+      expect(get.status).toBe(404);
+
+      // Referrer should still exist but its link to the target should be removed.
+      const refGet = await fetch(`${harness.baseUrl}/node/del-cascade-referrer`);
+      expect(refGet.status).toBe(200);
+    });
+
+    it("delete with cascade=remove-link includes danglingMentions in response", async () => {
+      // Create target and a node with an inline prose mention.
+      await fetch(`${harness.baseUrl}/node/del-dm-target`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Del DM Target", description: "Will be deleted" }),
+      });
+      await fetch(`${harness.baseUrl}/node/del-dm-host`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Del DM Host",
+          description: "Mentions del-dm-target inline",
+          content: "See [del-dm-target](/del-dm-target) for info.",
+        }),
+      });
+
+      const r = await fetch(
+        `${harness.baseUrl}/node/del-dm-target?cascade=remove-link`,
+        { method: "DELETE" },
+      );
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      expect(body.success).toBe(true);
+      expect(Array.isArray(body.deleteResult.danglingMentions)).toBe(true);
+      expect(body.deleteResult.danglingMentions).toHaveLength(1);
+      expect(body.deleteResult.danglingMentions[0].in).toBe("/del-dm-host");
+      expect(body.deleteResult.danglingMentions[0].to).toBe("/del-dm-target");
+    });
+  });
+
+  describe("POST /node/{...path}/move", () => {
+    it("moves a node to a new path", async () => {
+      // Create a node to move.
+      await fetch(`${harness.baseUrl}/node/moveable`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Moveable", description: "Will be moved" }),
+      });
+
+      const r = await fetch(`${harness.baseUrl}/node/moveable/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: "/moved-destination" }),
+      });
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      expect(body.success).toBe(true);
+      expect(body.from).toBe("/moveable");
+      expect(body.to).toBe("/moved-destination");
+
+      // Old path is gone, new path is reachable.
+      const oldGet = await fetch(`${harness.baseUrl}/node/moveable`);
+      expect(oldGet.status).toBe(404);
+      const newGet = await fetch(`${harness.baseUrl}/node/moved-destination`);
+      expect(newGet.status).toBe(200);
+      const newNode = await newGet.json();
+      expect(newNode.name).toBe("Moveable");
+    });
+
+    it("rewrites referrers and surfaces dangling mentions", async () => {
+      // Create source, a frontmatter-referrer, and a prose-mention host.
+      await fetch(`${harness.baseUrl}/node/ref-source`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Ref Source", description: "Will be moved" }),
+      });
+      await fetch(`${harness.baseUrl}/node/ref-referrer`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Referrer",
+          description: "Links to ref-source",
+          links: [{ to: "/ref-source", type: "related" }],
+        }),
+      });
+      await fetch(`${harness.baseUrl}/node/ref-prose-host`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Prose Host",
+          description: "Mentions ref-source inline",
+          content: "See [ref-source](/ref-source) for details.",
+        }),
+      });
+
+      const r = await fetch(`${harness.baseUrl}/node/ref-source/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: "/ref-source-moved" }),
+      });
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      expect(body.success).toBe(true);
+      // referrersRewritten should contain at least the referrer file.
+      expect(body.moveResult.referrersRewritten.length).toBeGreaterThan(0);
+      // danglingMentions should surface the inline prose mention.
+      expect(Array.isArray(body.moveResult.danglingMentions)).toBe(true);
+      expect(body.moveResult.danglingMentions).toHaveLength(1);
+      expect(body.moveResult.danglingMentions[0].in).toBe("/ref-prose-host");
+      expect(body.moveResult.danglingMentions[0].to).toBe("/ref-source");
+    });
+
+    it("returns 400 when 'to' is missing from body", async () => {
+      const r = await fetch(`${harness.baseUrl}/node/projects/alpha/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(r.status).toBe(400);
+      const body = await r.json();
+      expect(body.error).toMatch(/to/);
+    });
+
+    it("returns 400 when source does not exist", async () => {
+      const r = await fetch(`${harness.baseUrl}/node/nonexistent-node/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: "/somewhere" }),
+      });
+      expect(r.status).toBe(400);
+    });
+
+    it("returns 400 when target already exists", async () => {
+      const r = await fetch(`${harness.baseUrl}/node/clients/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: "/projects" }),
+      });
+      expect(r.status).toBe(400);
+      const body = await r.json();
+      expect(body.error).toMatch(/exists/i);
+    });
   });
 });
 

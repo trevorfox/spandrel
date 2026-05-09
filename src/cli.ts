@@ -15,6 +15,8 @@ import { createRestRouter } from "./rest/router.js";
 import { createNodeAdapter } from "./rest/node-adapter.js";
 import { scaffoldInit, type InitOptions } from "./cli-init.js";
 import { publish, parsePublishArgs, resolveBundleDir } from "./cli-publish.js";
+import { runMv, parseMvArgs } from "./cli-mv.js";
+import { runRm, parseRmArgs } from "./cli-rm.js";
 import { emitGraph } from "./compiler/emit-graph.js";
 import { renderNodeAsMarkdown } from "./web/render-node.js";
 import { extensionToNodePath } from "./cli-routing.js";
@@ -38,6 +40,10 @@ if (command === "--version" || command === "-v" || command === "version") {
   initMcp(parsePositional(args));
 } else if (command === "publish") {
   publishCmd(args.slice(1));
+} else if (command === "mv") {
+  mvCmd(args.slice(1));
+} else if (command === "rm") {
+  rmCmd(args.slice(1));
 } else {
   console.log(`spandrel ${readPackageVersion()}
 
@@ -50,6 +56,8 @@ Commands:
   dev       Start REST + viewer + file watcher (HTTP at :4000); MCP runs separately via stdio
   mcp       Start the MCP server (stdio) — connect agents via 'spandrel init-mcp' config
   publish   Emit a static bundle (graph.json + SPA) to --out
+  mv        Rename a node and cascade frontmatter rewrites
+  rm        Delete a node; use --cascade to strip dead links from referrers
 
 Flags:
   --version, -v       Print the installed version and exit
@@ -474,6 +482,32 @@ function initMcp(rootDir: string) {
   console.log(JSON.stringify(config, null, 2));
   console.log(`\nOr for Claude Code, run:\n`);
   console.log(`  claude mcp add spandrel -- ${command} ${args.join(" ")}`);
+}
+
+async function mvCmd(argv: string[]) {
+  let parsed: ReturnType<typeof parseMvArgs>;
+  try {
+    parsed = parseMvArgs(argv);
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(2);
+  }
+  const { rootDir, from, to, dryRun, yes } = parsed;
+  const code = await runMv({ rootDir: path.resolve(rootDir), from, to, dryRun, yes });
+  process.exit(code);
+}
+
+async function rmCmd(argv: string[]) {
+  let parsed: ReturnType<typeof parseRmArgs>;
+  try {
+    parsed = parseRmArgs(argv);
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(2);
+  }
+  const { rootDir, path: nodePath, cascade, dryRun, yes } = parsed;
+  const code = await runRm({ rootDir: path.resolve(rootDir), path: nodePath, cascade, dryRun, yes });
+  process.exit(code);
 }
 
 async function compileOnly(argv: string[]) {

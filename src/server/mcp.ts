@@ -19,10 +19,11 @@ import {
 import {
   createThing,
   updateThing,
-  deleteThing,
   resolveSourcePath,
 } from "./writer.js";
 import { recompileNode } from "../compiler/compiler.js";
+import { moveThing, deleteThingWithReferrers } from "./mutations.js";
+import { storeToGraph } from "../storage/store-to-graph.js";
 import type { HistoryEntry } from "../compiler/types.js";
 
 export interface McpServerOptions {
@@ -511,15 +512,102 @@ export function registerWriteTools(
 
   server.tool(
     "delete_thing",
-    "Deletes a node and its entire subtree. Cannot delete root.",
+    "Deletes a node and its entire subtree. Refuses by default when inbound declared-link referrers exist; pass cascade='remove-link' to remove the dead link entries.",
     {
       path: z.string().describe("Path to the Thing to delete"),
+      cascade: z.enum(["remove-link"]).optional().describe(
+        "If set to 'remove-link', removes link entries pointing at this Thing from every referrer's frontmatter, then deletes.",
+      ),
     },
-    async ({ path: thingPath }) => {
-      const result = await executeMutation(thingPath, () => {
-        deleteThing(rootDir, thingPath);
-      });
-      return asTextResult(result);
+    async ({ path: thingPath, cascade }) => {
+      if (!ctx.policy.canWrite(ctx.actor, thingPath)) {
+        return asTextResult({ success: false, path: thingPath, message: "Write access denied", warnings: [] });
+      }
+      try {
+        // Resolve the source path before deletion so we can remove it from
+        // the store after the filesystem operation completes. resolveSourcePath
+        // checks disk — this must run before deleteThingWithReferrers removes it.
+        const { sourcePath: deletedSourcePath } = resolveSourcePath(rootDir, thingPath);
+
+        const graph = await storeToGraph(ctx.store);
+        const deleteResult = deleteThingWithReferrers(rootDir, thingPath, graph, {
+          cascade: cascade ?? "refuse",
+        });
+
+        // Recompile in order:
+        // 1. Deleted node's source path — removes it from the store.
+        // 2. Rewritten referrers — updates their link edges to remove the dead entry.
+        await recompileNode(ctx.store, rootDir, deletedSourcePath);
+        for (const fsPath of deleteResult.referrersRewritten) {
+          await recompileNode(ctx.store, rootDir, fsPath);
+        }
+
+        const warnings = (await ctx.store.getWarnings()).filter(
+          (w) => w.path === thingPath || w.path.startsWith(thingPath + "/")
+        );
+        return asTextResult({
+          success: true,
+          path: thingPath,
+          message: null,
+          deleteResult,
+          warnings,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return asTextResult({ success: false, path: thingPath, message, warnings: [] });
+      }
+    }
+  );
+
+  server.tool(
+    "move_thing",
+    "Renames or moves a Thing to a new path. Rewrites every referrer's declared frontmatter links. Inline markdown mentions are surfaced as warnings, not auto-rewritten.",
+    {
+      from: z.string().describe("Current path of the Thing"),
+      to: z.string().describe("New path"),
+    },
+    async ({ from, to }) => {
+      if (!ctx.policy.canWrite(ctx.actor, from)) {
+        return asTextResult({ success: false, from, to, message: "Write access denied", warnings: [] });
+      }
+      if (!ctx.policy.canWrite(ctx.actor, to)) {
+        return asTextResult({ success: false, from, to, message: "Write access denied on target path", warnings: [] });
+      }
+      try {
+        // Resolve the old source path before the move so we can remove it from
+        // the store after the filesystem rename completes. resolveSourcePath
+        // checks disk — this must run before moveThing renames it.
+        const { sourcePath: oldSourcePath } = resolveSourcePath(rootDir, from);
+
+        const graph = await storeToGraph(ctx.store);
+        const moveResult = moveThing(rootDir, from, to, graph);
+
+        // Recompile in order:
+        // 1. Old source path (now gone) — removes the old node from the store.
+        // 2. New destination — adds the moved node under its new path.
+        // 3. Rewritten referrers — updates their link edges.
+        await recompileNode(ctx.store, rootDir, oldSourcePath);
+        const { sourcePath: newSourcePath } = resolveSourcePath(rootDir, to);
+        await recompileNode(ctx.store, rootDir, newSourcePath);
+        for (const fsPath of moveResult.written) {
+          await recompileNode(ctx.store, rootDir, fsPath);
+        }
+
+        const warnings = (await ctx.store.getWarnings()).filter(
+          (w) => w.path === to || w.path.startsWith(to + "/")
+        );
+        return asTextResult({
+          success: true,
+          from,
+          to,
+          message: null,
+          moveResult,
+          warnings,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return asTextResult({ success: false, from, to, message, warnings: [] });
+      }
     }
   );
 }
