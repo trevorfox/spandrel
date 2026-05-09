@@ -21,7 +21,7 @@ A graph consisting of:
     - Declared in frontmatter `links` array — explicit relationships, `linkType` set by the author (e.g. `depends-on`, `relates-to`)
     - Extracted from inline markdown links in content (`[text](/path)`) whose target resolves to an internal path — implicit prose references, emitted with `linkType: "mentions"`
   - `authored_by` — from git metadata
-- **Warnings** — validation issues: missing index files, missing name/description, broken links, unlisted children.
+- **Warnings** — validation issues (missing index, missing name/description, broken links, unlisted children, undeclared link types) and per-node compile failures (file too large, compile timeout, malformed YAML frontmatter). See "Resilient parsing" below.
 
 ## Exclusions
 
@@ -41,6 +41,14 @@ The compiler skips:
 The compiler supports incremental recompilation: given a changed file path, it can recompile just that node and update the graph in place without a full rebuild.
 
 `recompileNode` is not safe to invoke concurrently for different paths — it does a read-filter-write on the store's edge list, so two interleaved calls clobber each other's deletions. The watcher serializes events behind a chained promise; any other caller that drives recompilation must do the same.
+
+## Resilient parsing
+
+A single malformed file must not crash the compile. Failures the compiler can localize to one node — file too large, compile timeout, malformed YAML frontmatter — are recorded as `ValidationWarning`s and the offending node is skipped. The walk continues; sibling nodes still compile.
+
+The contract: every per-node failure is reported with a path and an actionable message that names the file. Authors should be able to find and fix the bad file from the warning alone, not from a stack trace.
+
+Warning types in the per-node skip set: `file_too_large`, `compile_timeout`, `invalid_frontmatter`. Any new failure mode that the compiler can scope to a single node should join this set rather than propagate as an exception.
 
 ## Git metadata
 
