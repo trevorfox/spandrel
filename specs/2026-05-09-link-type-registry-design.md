@@ -112,11 +112,11 @@ Stops scaffolding `/linkTypes/*.md` files. Instead writes a single `_links/confi
 
 - The compiler ignores `/linkTypes/` for type-decoration purposes. If the directory exists, files compile as ordinary Things (they're just markdown), but their content no longer decorates edges.
 - If `/linkTypes/{stem}.md` files are detected and `_links/config.yaml` is absent, the compiler logs a one-line info note:
-  > `Note: /linkTypes/ Things found, but link-type declarations now live in _links/config.yaml (see CHANGELOG for 0.8.0).`
+  > `Note: /linkTypes/ Things found, but link-type declarations now live in _links/config.yaml (see CHANGELOG for 0.9.0).`
   Non-blocking, no warning code.
 - A throwaway, gitignored `scripts/migrate-link-types.ts` may be used by the maintainer to convert their own existing graphs (ea-os, others) and is then deleted. Not part of the shipped framework.
 
-**Version: `0.8.0`.** Justifies a minor bump per the existing pre-1.0 cadence on the basis of:
+**Version: `0.9.0`.** Justifies a minor bump per the existing pre-1.0 cadence on the basis of:
 
 - Wire-shape change: `linkTypeDescription` removed from `ShapedEdge`.
 - Authoring-shape change: `_links/config.yaml` is the new path of record.
@@ -124,7 +124,7 @@ Stops scaffolding `/linkTypes/*.md` files. Instead writes a single `_links/confi
 
 ## Removed: Schema.org projection
 
-The current implementation supports a per-link-type `schemaOrg:` frontmatter field that maps types to a whitelisted set of Schema.org types for JSON-LD output (documented in `src/web/design.md:168`). This is removed in 0.8 with no replacement in the new registry. Reasons:
+The current implementation supports a per-link-type `schemaOrg:` frontmatter field that maps types to a whitelisted set of Schema.org types for JSON-LD output (documented in `src/web/design.md:168`). This is removed in 0.9 with no replacement in the new registry. Reasons:
 
 - **Mixed concerns.** SEO/JSON-LD output is a publishing concern, not a graph traversal concern. Bundling it with the link-type registry meant the registry served two audiences (agents, search engines) and ended up serving neither cleanly.
 - **Duplicative.** A type called `realized-by` mapping to `knowsAbout` doesn't add information — the type name already carries the meaning.
@@ -171,7 +171,7 @@ New tests to add:
 - **Per-type examples.** YAGNI. Belongs in `description` prose if useful.
 - **Stale-registry-entry warnings** (declared types with zero uses). YAGNI; can be added later as a third governance knob.
 - **A migration CLI command.** One-shot for a handful of graphs the maintainer owns; not worth permanent surface area.
-- **Schema.org JSON-LD projection.** Removed from the framework in 0.8 (see "Removed" section above). Restore in a separate spec if a consumer demands it.
+- **Schema.org JSON-LD projection.** Removed from the framework in 0.9 (see "Removed" section above). Restore in a separate spec if a consumer demands it.
 - **Surfacing the registry to agents.** Explicit non-goal. The registry is for authoring; agents see edge-level prose only.
 
 ## Open questions
