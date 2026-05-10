@@ -10,6 +10,8 @@ import type {
 import type { GraphStore } from "../storage/graph-store.js";
 import { InMemoryGraphStore } from "../storage/in-memory-graph-store.js";
 import { matchCompanionFile, isCompanionFile } from "./companion-files.js";
+import { loadLinksConfig } from "../links/config.js";
+import type { LinkRegistry } from "../links/types.js";
 
 const INLINE_LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/g;
 
@@ -91,9 +93,10 @@ export async function compile(rootDir: string): Promise<GraphStore> {
   const nodes = new Map<string, SpandrelNode>();
   const edges: SpandrelEdge[] = [];
   const warnings: ValidationWarning[] = [];
+  const linkRegistry = loadLinksConfig(rootDir);
 
   walkTree(rootDir, rootDir, nodes, edges, warnings);
-  validate(nodes, edges, warnings);
+  validate(nodes, edges, linkRegistry, warnings);
 
   const store = new InMemoryGraphStore();
   for (const node of nodes.values()) await store.setNode(node);
@@ -157,7 +160,8 @@ export async function recompileNode(
   const warnings: ValidationWarning[] = [...compileWarnings];
   const allNodes = new Map<string, SpandrelNode>();
   for (const node of await store.getAllNodes()) allNodes.set(node.path, node);
-  validate(allNodes, await store.getEdges(), warnings);
+  const linkRegistry = loadLinksConfig(rootDir);
+  validate(allNodes, await store.getEdges(), linkRegistry, warnings);
   await store.replaceWarnings(warnings);
 }
 
@@ -692,6 +696,7 @@ function getLinkTypeEnforcement(
 function validate(
   nodes: Map<string, SpandrelNode>,
   edges: SpandrelEdge[],
+  registry: LinkRegistry,
   warnings: ValidationWarning[]
 ): void {
   for (const node of nodes.values()) {
