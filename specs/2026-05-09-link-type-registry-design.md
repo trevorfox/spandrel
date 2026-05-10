@@ -9,7 +9,9 @@ status: draft
 
 ## Summary
 
-Spandrel currently declares link-type vocabulary as one markdown file per type under `/linkTypes/{stem}.md`. Every edge of a declared type is decorated at query time with that type's generic description (`linkTypeDescription`). This proposal replaces the per-type files with a single `_links/config.yaml` registry, removes per-edge `linkTypeDescription` from the wire, surfaces the registry once-per-session via MCP server instructions and `GET /linkTypes`, and adds opt-in `min_uses` governance to enforce vocabulary reuse.
+Spandrel currently declares link-type vocabulary as one markdown file per type under `/linkTypes/{stem}.md`. Every edge of a declared type is decorated at query time with that type's generic description (`linkTypeDescription`), and the MCP server's instructions block renders the full vocabulary at connect time. This proposal replaces the per-type files with a single `_links/config.yaml` registry, removes per-edge `linkTypeDescription` from the wire, removes the link-type vocabulary block from MCP server instructions, drops the Schema.org projection, and adds opt-in `min_uses` governance.
+
+The registry is recast as an **authoring artifact, not an agent artifact**. Type-level prose lives in the YAML for human authors and authoring tools to consult. It is not pushed into agent context. The two fields an agent sees on every edge — `type` (a self-explanatory label) and `description` (per-edge prose) — are the entire semantic surface.
 
 ## Motivation
 
@@ -19,19 +21,20 @@ Research into agent-facing knowledge graphs (Microsoft GraphRAG, LightRAG, Graph
 
 1. **Per-edge prose is what LLM agents rely on at the moment of traversal.** Bare type labels alone don't carry enough signal. Every winning system makes per-edge description a first-class field.
 2. **Type labels earn their keep when the vocabulary is small (5–15) and reused.** The GraphRAG anti-pattern — 966 unique relation types across 981 edges — actively hurts retrieval. Specificity of meaning is what matters, and prose is a better channel for specificity than labels.
-3. **Per-type generic descriptions add tokens without adding entropy after the first edge of that type.** A one-shot registry surface gives the same information at zero per-traversal cost.
+3. **Per-type generic descriptions add tokens without adding entropy.** A type-level blurb attached to every edge of that type, or rendered into the MCP server's instructions block, restates information the agent can already infer from the type name and per-edge description. Agents do not need this layer to traverse well.
 4. **No production agent-facing system uses one-file-per-type.** Registries are universally YAML, JSON, code-defined, or absent. The per-type-files pattern is unique to Spandrel and has no demonstrated agent-side benefit.
 
 The current scaffolding over-formalizes a concern that should be lighter touch (one-file-per-type for a 10-entry vocabulary), under-emphasizes the discipline that actually matters (reuse), and adds wire redundancy that costs tokens without adding meaning.
 
 ## Theory of the case
 
-Distilled from the research:
+Distilled from the research and the design conversation:
 
 - **Per-edge `description:` is primary.** Already in doctrine; this design reinforces it by removing the competing per-edge channel (`linkTypeDescription`).
+- **Type names should be self-explanatory.** Plain-English type names (`depends-on`, `relates-to`, `account-lead`, `realized-by`) carry their own meaning. Type-level prose is *offered* to authors who want it, not *required* of consumers who don't.
 - **Hybrid types + descriptions beat either alone.** Keep typed labels as a closed-or-semi-closed vocabulary; keep descriptions as the open prose channel. Both, not one or the other.
 - **Vocabulary discipline > vocabulary size.** Reuse is the actual quality lever; declaration is the easier-to-enforce proxy.
-- **Surface the registry once per session, not once per edge.** MCP server instructions are an "say it once" channel that already loads at connect time; REST consumers can cache `GET /linkTypes` indefinitely.
+- **The registry is an authoring artifact, not an agent artifact.** It governs how content is shaped — the same role `_access/config.yaml` plays for access policy. Agents see the *effects* (constrained, well-named types on edges; load-bearing per-edge descriptions), not the registry itself. This is a sharper position than the research recommended (which suggested surfacing the registry once per session); the conviction here is that even session-level type-prose surfacing is unnecessary if type names and per-edge descriptions are doing their jobs.
 
 ## Design
 
@@ -73,13 +76,13 @@ types:
 }
 ```
 
-Registry surfaced through:
+Registry exposure to consumers is intentionally limited:
 
-1. **REST `GET /linkTypes`** — returns `{ [stem]: { description } }` from `_links/config.yaml`. Cacheable, idempotent. Existing endpoint; what changes is its source.
-2. **MCP server instructions** — registry rendered into the MCP server's instructions block at connect time. The agent has the full vocabulary in context for free.
-3. **MCP resource (optional, future)** — `linkTypes://` resource for explicit re-fetch. Not required for v1.
+1. **REST `GET /linkTypes`** — kept for tooling and web-viewer introspection. Returns `{ [stem]: { description } }` from `_links/config.yaml`. Existing endpoint; what changes is its source. Not pitched as part of agent traversal — agents have everything they need on the edges themselves.
+2. **MCP server instructions** — **the link-type vocabulary block is removed.** Current behavior in `mcp.ts:88-99` (which renders "Link types declared in this graph: …" into the instructions) is dropped. The MCP server still describes the graph's purpose and collections; it just doesn't promote the link-type vocabulary as an agent-facing resource.
+3. **`Graph.linkTypes` on the prerendered manifest** — kept as a viewer dependency (`web/app/state.ts:210-213` consumes it for type legends and tooltips). Same shape, sourced from YAML instead of compiled Things.
 
-The wire change removes per-edge redundancy: the only edge-level prose is now the per-edge `description`, which makes its load-bearing role visible to authors and to consumers.
+The wire change removes per-edge and session-level redundancy. The only edge-level prose is the per-edge `description`, which makes its load-bearing role visible to authors and to consumers — and reinforces the doctrine that type-level prose is for authoring, not consumption.
 
 ### Compile-time governance
 
@@ -119,16 +122,44 @@ Stops scaffolding `/linkTypes/*.md` files. Instead writes a single `_links/confi
 - Authoring-shape change: `_links/config.yaml` is the new path of record.
 - Compile-time semantic change: `/linkTypes/` is no longer compiler-special.
 
+## Removed: Schema.org projection
+
+The current implementation supports a per-link-type `schemaOrg:` frontmatter field that maps types to a whitelisted set of Schema.org types for JSON-LD output (documented in `src/web/design.md:168`). This is removed in 0.8 with no replacement in the new registry. Reasons:
+
+- **Mixed concerns.** SEO/JSON-LD output is a publishing concern, not a graph traversal concern. Bundling it with the link-type registry meant the registry served two audiences (agents, search engines) and ended up serving neither cleanly.
+- **Duplicative.** A type called `realized-by` mapping to `knowsAbout` doesn't add information — the type name already carries the meaning.
+- **No demonstrated dependence.** Documented but not actively consumed by anything load-bearing in the current shipped surfaces.
+
+If a real consumer surfaces, the feature can be restored as a separate spec — possibly attached to a publishing-side projection layer rather than to the link-type registry.
+
 ## Doctrine update
 
 `docs/patterns/linking.md` and `docs/content-model/links.md` need to be updated to reflect the new surface:
 
 - Remove references to `/linkTypes/` as a Things collection.
-- Replace with `_links/config.yaml` description.
-- Reaffirm the per-edge-description-primary stance more strongly now that the competing channel is gone.
+- Replace with `_links/config.yaml` description, framed as an authoring artifact.
+- Reaffirm the per-edge-description-primary stance more strongly now that the competing channels (`linkTypeDescription` per edge, MCP vocabulary block) are gone.
 - Drop references to the list-mode `enforce` semantic.
+- Note the new principle: **type names should be self-explanatory; type-level prose is offered to authors, not exposed to consumers.**
 
 These doc edits are part of the implementation plan, not a follow-up.
+
+## Test fallout
+
+The change touches several existing test files. The implementation plan needs to address each:
+
+- **`test/access.test.ts:232,240`** — verifies `linkTypeDescription` decoration on `ShapedEdge`. Will break by design. Replace with assertions that `linkTypeDescription` is *absent* on shaped edges, plus a test that the edge keeps `linkType` and `description` intact.
+- **`test/cli-init.test.ts`** — expects `linkTypes/index.md` and 10 leaf files; expects 12 nodes after init. Rewrite: expects `_links/config.yaml` containing 10 baselines; expects 1 node after init (the root index).
+- **`test/compiler.test.ts` `describe("Compiler — /linkTypes/ collection")`** (line 841+) — tests `/linkTypes/*.md` indexing by stem. Replace with tests that `getLinkTypes()` reads from `_links/config.yaml`.
+- **`test/compiler.test.ts`** `enforce` tests (lines 367–600 region) — tests for `enforce: strict`, `enforce: [list]`. Rewrite for the new YAML-sourced semantic. **Drop list-mode tests entirely** — that semantic is gone.
+- **`test/mcp.test.ts`** — likely covers the link-types-in-instructions block. Rewrite to assert the block is *absent* in the new shape.
+- **`test/rest.test.ts`** — covers `GET /linkTypes`. Update to verify it reads from YAML.
+
+New tests to add:
+- `_links/config.yaml` parsing, including the malformed-YAML case (warns rather than crashes, per existing precedent in commit 8585d25).
+- `min_uses` warning emission with offending edge paths.
+- `unknown_link_type` warning under `enforce: true`.
+- `Graph.linkTypes` field is correctly populated from YAML in the prerendered manifest.
 
 ## What's not in scope
 
@@ -140,12 +171,14 @@ These doc edits are part of the implementation plan, not a follow-up.
 - **Per-type examples.** YAGNI. Belongs in `description` prose if useful.
 - **Stale-registry-entry warnings** (declared types with zero uses). YAGNI; can be added later as a third governance knob.
 - **A migration CLI command.** One-shot for a handful of graphs the maintainer owns; not worth permanent surface area.
+- **Schema.org JSON-LD projection.** Removed from the framework in 0.8 (see "Removed" section above). Restore in a separate spec if a consumer demands it.
+- **Surfacing the registry to agents.** Explicit non-goal. The registry is for authoring; agents see edge-level prose only.
 
 ## Open questions
 
 - **Behavior when `_links/config.yaml` has invalid YAML.** Following the precedent set in commit 8585d25 ("skip files with malformed YAML frontmatter instead of crashing"): malformed YAML should warn, not crash. Same posture here — registry empty if unparseable, with a clear warning.
-- **MCP instructions block size.** With 10 baseline types plus per-graph extensions, the instructions block grows. Worth measuring; if it gets large, consider rendering only the types actually used in the graph.
-- **Web viewer treatment.** With `/linkTypes/` no longer a Things collection, the web viewer's special-case rendering for it (if any) should be removed. Behavior on legacy graphs that still have the directory: render as ordinary Things.
+- **Web viewer treatment.** With `/linkTypes/` no longer a special collection, the web viewer's special-case rendering for it (if any) should be audited and removed. Behavior on legacy graphs that still have the directory: render as ordinary Things.
+- **Whether `LinkTypeInfo.path` survives.** Today it carries `path: "/linkTypes/owns"` (the Thing's path). With types no longer Things, this field is either synthetic or removed. The implementation plan should pick: drop it, or synthesize it for backward compatibility with `Graph.linkTypes` consumers.
 
 ## References
 
