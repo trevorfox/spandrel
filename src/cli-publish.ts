@@ -11,7 +11,6 @@ import { InMemoryGraphStore } from "./storage/in-memory-graph-store.js";
 import type { GraphStore } from "./storage/graph-store.js";
 import { renderNodeAsMarkdown } from "./web/render-node.js";
 import {
-  buildLinkTypePredicateMap,
   createStaticMarkdownRenderer,
   extractShellHead,
   nodeOutputRelPath,
@@ -420,7 +419,6 @@ async function prerenderStaticPages(
   // Skeleton graph for relationship emission (JSON-LD, banner context).
   // Prerender needs full nodes for the body, which still live on the store.
   const graph = await emitGraph(store);
-  const predicateMap = buildLinkTypePredicateMap(graph);
   const renderBody = createStaticMarkdownRenderer(options.base);
   const rootNode = graph.nodes.find((n) => n.path === "/");
   const siteName = rootNode?.name ?? "";
@@ -433,7 +431,6 @@ async function prerenderStaticPages(
     const html = renderPage({
       node,
       graph,
-      predicateMap,
       base: options.base,
       siteUrl: options.siteUrl,
       shellHead,

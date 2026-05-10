@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -425,21 +425,9 @@ describe("spandrel publish — --static prerender", () => {
     expect(rootHtml).not.toContain('id="prerender-content"');
   });
 
-  it("projects typed link edges through the schemaOrg predicate whitelist", async () => {
-    // Seed a linkType node with a legal schemaOrg mapping.
-    fs.mkdirSync(path.join(root, "linkTypes"), { recursive: true });
-    fs.writeFileSync(
-      path.join(root, "linkTypes/equivalent-to.md"),
-      [
-        "---",
-        "name: equivalent-to",
-        "description: External canonical equivalents",
-        "schemaOrg: sameAs",
-        "---",
-        "",
-      ].join("\n")
-    );
-    // Target node under a new collection.
+  it("maps all typed link edges to schema:mentions in JSON-LD regardless of linkType", async () => {
+    // Every edge now maps to mentions unconditionally — the schemaOrg: field
+    // on linkType nodes is no longer read by the prerender layer.
     createThing(root, "/people", {
       name: "People",
       description: "People collection",
@@ -450,7 +438,7 @@ describe("spandrel publish — --static prerender", () => {
       description: "Person",
       content: "",
     });
-    // Rewrite acme-corp as a leaf .md with a typed frontmatter link using our linkType.
+    // Rewrite acme-corp as a leaf .md with a typed frontmatter link.
     fs.rmSync(path.join(root, "clients/acme-corp"), { recursive: true, force: true });
     fs.writeFileSync(
       path.join(root, "clients/acme-corp.md"),
@@ -477,22 +465,12 @@ describe("spandrel publish — --static prerender", () => {
     const ld = JSON.parse(
       html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]
     );
-    expect(ld.sameAs).toEqual([{ "@id": "/people/alice/" }]);
+    // All link edges emit as mentions — no type-aware projection.
+    expect(ld.mentions).toEqual([{ "@id": "/people/alice/" }]);
+    expect(ld.sameAs).toBeUndefined();
   });
 
-  it("falls back to mentions and warns when a linkType's schemaOrg is not in the whitelist", async () => {
-    fs.mkdirSync(path.join(root, "linkTypes"), { recursive: true });
-    fs.writeFileSync(
-      path.join(root, "linkTypes/bogus.md"),
-      [
-        "---",
-        "name: bogus",
-        "description: Has a bad mapping",
-        "schemaOrg: notARealThing",
-        "---",
-        "",
-      ].join("\n")
-    );
+  it("maps link edges with any linkType to mentions (no schemaOrg whitelist)", async () => {
     createThing(root, "/targets", {
       name: "Targets",
       description: "Targets collection",
@@ -512,34 +490,23 @@ describe("spandrel publish — --static prerender", () => {
         "description: Flagship client account",
         "links:",
         "  - to: /targets/t1",
-        "    type: bogus",
+        "    type: any-link-type",
         "---",
         "body",
         "",
       ].join("\n")
     );
 
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      await publish(root, { out, static: true });
-      const html = fs.readFileSync(
-        path.join(out, "clients/acme-corp/index.html"),
-        "utf-8"
-      );
-      const ld = JSON.parse(
-        html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]
-      );
-      // Bad predicate falls back to "mentions".
-      expect(ld.mentions).toEqual([{ "@id": "/targets/t1/" }]);
-      expect(ld.sameAs).toBeUndefined();
-      // The warning surfaced.
-      const warnCalls = warnSpy.mock.calls.map((c) => String(c[0]));
-      expect(
-        warnCalls.some((m) => /notARealThing/.test(m) && /mentions/.test(m))
-      ).toBe(true);
-    } finally {
-      warnSpy.mockRestore();
-    }
+    await publish(root, { out, static: true });
+    const html = fs.readFileSync(
+      path.join(out, "clients/acme-corp/index.html"),
+      "utf-8"
+    );
+    const ld = JSON.parse(
+      html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1]
+    );
+    expect(ld.mentions).toEqual([{ "@id": "/targets/t1/" }]);
+    expect(ld.sameAs).toBeUndefined();
   });
 
   it("injects <meta robots=noindex> into the SPA shell and every prerender when --noindex", async () => {
