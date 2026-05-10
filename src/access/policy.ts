@@ -162,14 +162,13 @@ export class AccessPolicy {
   }
 
   /**
-   * Decorate an edge with its link-type description and gate by endpoint
-   * visibility. Returns null when either endpoint is invisible to the actor.
+   * Gate an edge by endpoint visibility. Returns null when either endpoint
+   * is invisible to the actor.
    */
   shapeEdge(
     edge: SpandrelEdge,
     fromLevel: AccessLevel,
-    toLevel: AccessLevel,
-    linkTypeDescription: string | null = null
+    toLevel: AccessLevel
   ): ShapedEdge | null {
     if (!accessLevelAtLeast(fromLevel, "exists")) return null;
     if (!accessLevelAtLeast(toLevel, "exists")) return null;
@@ -179,7 +178,6 @@ export class AccessPolicy {
       type: edge.type,
       linkType: edge.linkType,
       description: edge.description,
-      linkTypeDescription,
     };
   }
 }

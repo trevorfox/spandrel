@@ -41,8 +41,8 @@ export interface AccessConfig {
 export type ShapedNode = Partial<SpandrelNode>;
 
 /**
- * An edge decorated with the link-type description from `/linkTypes/{stem}.md`,
- * trimmed by visibility of its endpoints. Returned by AccessPolicy.shapeEdge.
+ * An edge trimmed by visibility of its endpoints. Returned by
+ * AccessPolicy.shapeEdge.
  */
 export interface ShapedEdge {
   from: string;
@@ -50,5 +50,4 @@ export interface ShapedEdge {
   type: SpandrelEdge["type"];
   linkType?: string;
   description?: string;
-  linkTypeDescription: string | null;
 }
