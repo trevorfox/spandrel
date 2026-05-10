@@ -44,54 +44,45 @@ Link types are arbitrary strings. Use whatever describes the relationship. Commo
 
 The compiler doesn't enforce or validate link types. They're metadata for consumers.
 
-### Declaring a typed vocabulary with `/linkTypes/`
+### Declaring a typed vocabulary with `_links/config.yaml`
 
-`/linkTypes/` is opt-in scaffolding for **graph-local vocabulary** — relationship classes whose meaning isn't self-evident from the type name and which recur often enough across the graph that a shared definition is worth maintaining. It is not a substitute for per-edge `description:`. The shared linkType description has to apply to *every* edge of that type, which means it's necessarily generic; per-edge `description:` is where the specific relationship between *this source* and *this target* gets expressed. Treat `/linkTypes/` as scaffolding, treat `description:` as the load-bearing layer.
+`_links/config.yaml` is opt-in scaffolding for **graph-local vocabulary** — relationship classes whose meaning isn't self-evident from the type name and which recur often enough across the graph that a shared definition is worth maintaining. It is the same role `_access/config.yaml` plays for access policy: a system-level config under an underscore-prefixed system directory.
 
-When a graph defines a custom relationship class — `realized-by`, `affects`, `informs`, `derived-from`, anything domain-specific — declare it as a Thing under a top-level `/linkTypes/` [collection](/patterns/collections). Each file names and describes one relationship class:
-
-```
-docs/linkTypes/
-├── index.md          # collection front page
-├── realized-by.md    # one file per declared linkType
-├── affects.md
-└── informs.md
-```
-
-Each linkType file carries a short frontmatter entry:
+When a graph defines a custom relationship class — `realized-by`, `affects`, `informs`, `derived-from`, anything domain-specific — declare it as an entry in `_links/config.yaml`:
 
 ```yaml
----
-name: realized-by
-description: The target is the concrete implementation of the abstract spec at the source.
----
+# _links/config.yaml
+enforce: false        # default: registry is descriptive, not prescriptive
+min_uses: 0           # default: no reuse warnings
+
+types:
+  realized-by:
+    description: Target is the concrete implementation of the abstract spec at the source.
+  affects:
+    description: Source's behavior depends on or is materially altered by target.
+  informs:
+    description: Target shapes the design of source without being a hard dependency.
 ```
 
-The compiler indexes `/linkTypes/*` by filename stem (`realized-by.md` → `realized-by`). The stem is the canonical key — it's what frontmatter `links[].type` values reference, and it stays stable across display-name renames. Hierarchical subfolders under `/linkTypes/` are out of scope for now; keep the namespace flat.
+The YAML key is the canonical stem — it's what frontmatter `links[].type` values reference. Each entry has a single optional field, `description`. Type names should be self-explanatory; descriptions are an offering to authors, not a requirement.
 
-When a linkType is declared, every edge using that type picks up a `linkTypeDescription` on the wire — agents and clients see the type's general meaning inline alongside the per-edge `description`. The full declared vocabulary is queryable through any wire surface ([MCP](/architecture/mcp), [REST](/architecture/rest)) — the surface exposes a list-link-types operation that returns name, description, and path for each declared type.
+**The registry is an authoring artifact.** Its purposes: compile-time governance (`enforce`, `min_uses`), author-side discoverability (one place to scan the graph's vocabulary), and definitions for graph-local jargon. **It is not pushed into agent context** — agents see edge-level `type` (the label) and `description` (per-edge prose) only, and that is the entire semantic surface they need.
 
-Undeclared linkTypes keep working; `linkTypeDescription` is simply `null` on those edges. **Plain-English types whose meaning is self-evident — `owns`, `depends-on`, `relates-to`, `mentions`, `supersedes` — don't need declaration.** A reader (human or agent) can read those without a glossary. Declare the ones whose meaning is specific to your graph and not obvious from the type name; everything else carries its weight through per-edge `description:`.
+Plain-English types whose meaning is self-evident — `owns`, `depends-on`, `relates-to`, `mentions`, `supersedes` — don't need declaration. Declare the ones whose meaning is specific to your graph.
 
-### Opting into governance with `enforce`
+### Opting into governance with `enforce` and `min_uses`
 
-`undeclared_link_type` warnings are off by default. Declaring a linkType file does not, by itself, make the compiler enforce anything — declarations and warnings are separate concerns. Opt into enforcement on `/linkTypes/index.md`:
+Two opt-in knobs at the top of `_links/config.yaml`:
 
-```yaml
----
-name: Link Types
-description: Declared vocabulary
-enforce: strict           # warn on every undeclared linkType used in the graph
-# or:
-# enforce: [affects, realized-by]   # warn only when these specific types are used without a /linkTypes/{stem}.md
----
-```
+- **`enforce: true`** — the closed-vocabulary mode. The compiler emits an `unknown_link_type` warning for any type used on an edge but absent from `types:`.
+- **`min_uses: N`** — reuse discipline. Emits an `underused_link_type` warning for any type that appears in the graph fewer than N times. The actual quality lever — vocabulary sprawl (using each type once) hurts retrieval more than vocabulary absence.
 
-- **Absent or empty** — no warnings. The default. Plain-English types fly without complaint; `linkTypeDescription` decoration on edges still works wherever you've declared the type.
-- **`strict`** — every undeclared linkType used in the graph triggers a warning. The closed-vocabulary mode: useful when the graph is mature and any new type should be intentional.
-- **List** — only the listed types trigger warnings when used without a corresponding `/linkTypes/{stem}.md`. The graph-local mode: governs your custom-domain vocabulary (`affects`, `realized-by`, `informs`) without forcing every plain-English ad-hoc type into a file.
+Both default off. Knobs compose:
+- `enforce: true` + `min_uses: 2` — strictest authoring posture.
+- `enforce: false` + `min_uses: 2` — denoising posture; reuse matters, declaration doesn't.
+- `enforce: true` + `min_uses: 0` — schema discipline without prose discipline.
 
-The list mode is the usual choice once a graph has a small set of load-bearing types whose meaning matters. Declare those types, list them in `enforce:`, leave everything else free.
+Warnings are advisory; they don't block compile.
 
 ## Backlinks
 
@@ -102,7 +93,7 @@ The compiler generates backlinks automatically. If `/clients/acme` links to `/pe
 See [authorship](/patterns/authorship) for the broader authorship discipline that covers names, descriptions, and link descriptions together; the guidelines below cover what's specific to edges.
 
 - **Link, don't nest.** If a relationship is encoded as directory hierarchy, you probably want a link instead.
-- **Per-edge `description:` is the primary semantic carrier.** It's where the specific relationship between *this source* and *this target* lives. The `/linkTypes/` description, when it exists, only says what's true across all uses of the type — strictly less specific. Author edges as if `description:` is required.
+- **Per-edge `description:` is the primary semantic carrier.** It's where the specific relationship between *this source* and *this target* lives. Type-level prose in `_links/config.yaml` is for authoring discoverability; the per-edge `description:` is the entire semantic surface seen at traversal time. Author edges as if `description:` is required.
 - **Prefer timeless structural claims over implementation specifics.** Edge descriptions like *"verifies `STRIPE_WEBHOOK_SECRET` via `constructEventAsync`"* drift on refactor. *"Verifies signed inbound webhooks before any processing"* survives. Implementation specifics belong in the node body, where they're versioned alongside the code they describe; edge descriptions should describe *roles* and *intent*.
 
 ## Inline markdown links
