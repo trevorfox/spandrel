@@ -46,21 +46,24 @@ export interface ValidationWarning {
     | "file_too_large"
     | "compile_timeout"
     | "invalid_frontmatter"
-    | "undeclared_link_type"
+    | "unknown_link_type"      // replaces undeclared_link_type
+    | "underused_link_type"    // new: min_uses governance
     | "companion_file_lowercase";
   message: string;
 }
 
 /**
- * Metadata about a link type declared as a Thing under `/linkTypes/`.
- * The canonical key for a link type is its filename stem (e.g. `owns.md`
- * → `"owns"`), not the `name` frontmatter field — the stem stays stable
- * across display-name renames.
+ * The wire-shape of a link-type entry, exposed via REST `GET /linkTypes`,
+ * `Graph.linkTypes` in the prerendered manifest, and consumed by the web
+ * viewer's drawer for type-grouped edge rendering.
+ *
+ * Sourced from `_links/config.yaml` (NOT from `/linkTypes/{stem}.md` Things
+ * — that pattern was removed in 0.9.0). The canonical key is `stem`; there
+ * is no separate display name. Description is optional.
  */
 export interface LinkTypeInfo {
-  name: string;
-  description: string;
-  path: string;
+  stem: string;
+  description?: string;
 }
 
 export interface SpandrelGraph {
