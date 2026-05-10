@@ -647,50 +647,33 @@ async function rebuildChildren(store: GraphStore): Promise<void> {
   }
 }
 
-const LINK_TYPE_PATH_PREFIX = "/linkTypes/";
-const LINK_TYPES_INDEX_PATH = "/linkTypes";
-
-function collectDeclaredLinkTypes(nodes: Map<string, SpandrelNode>): Set<string> {
-  const result = new Set<string>();
-  for (const node of nodes.values()) {
-    if (!node.path.startsWith(LINK_TYPE_PATH_PREFIX)) continue;
-    const rest = node.path.slice(LINK_TYPE_PATH_PREFIX.length);
-    if (rest.length === 0 || rest.includes("/")) continue;
-    result.add(rest);
-  }
-  return result;
-}
-
 /**
- * Per-type opt-in for the `undeclared_link_type` warning. Read from the
- * `/linkTypes/index.md` frontmatter `enforce` field:
+ * Emit `unknown_link_type` warnings for any linkType used on an edge but
+ * absent from the registry's `types:` map, ONLY when `enforce: true`.
  *
- *   enforce: strict             — warn on every undeclared linkType used
- *   enforce: [affects, owns]    — warn only when the listed types are used
- *                                 without a corresponding /linkTypes/{stem}.md
- *   (absent)                    — no warnings
- *
- * Default off; authors opt into governance for the types that warrant it.
- * The old "any declaration triggers all undeclared warnings" behavior is
- * available as `enforce: strict`.
+ * Replaces the previous `/linkTypes/index.md` `enforce: strict | [list]`
+ * mechanism. The list-mode is dropped — in a single-registry world a type
+ * is either declared or it isn't.
  */
-type LinkTypeEnforcement =
-  | { mode: "off" }
-  | { mode: "strict" }
-  | { mode: "list"; types: Set<string> };
-
-function getLinkTypeEnforcement(
-  nodes: Map<string, SpandrelNode>
-): LinkTypeEnforcement {
-  const indexNode = nodes.get(LINK_TYPES_INDEX_PATH);
-  if (!indexNode) return { mode: "off" };
-  const enforce = indexNode.frontmatter.enforce;
-  if (enforce === "strict") return { mode: "strict" };
-  if (Array.isArray(enforce) && enforce.length > 0) {
-    const types = new Set(enforce.map((t) => String(t)));
-    return { mode: "list", types };
+function emitUnknownLinkTypeWarnings(
+  edges: SpandrelEdge[],
+  registry: LinkRegistry,
+  warnings: ValidationWarning[]
+): void {
+  if (!registry.enforce) return;
+  const seen = new Set<string>();
+  for (const edge of edges) {
+    if (edge.type !== "link" || !edge.linkType) continue;
+    if (registry.types.has(edge.linkType)) continue;
+    const key = `${edge.from} ${edge.linkType}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    warnings.push({
+      path: edge.from,
+      type: "unknown_link_type",
+      message: `Link edge uses linkType "${edge.linkType}" which is not declared in _links/config.yaml. Add it to the registry, or use an existing type.`,
+    });
   }
-  return { mode: "off" };
 }
 
 function validate(
@@ -737,29 +720,7 @@ function validate(
     }
   }
 
-  // Undeclared linkType warnings — opt-in per `/linkTypes/index.md` frontmatter.
-  // Default (no `enforce` field): silent. `enforce: strict`: warn on every
-  // undeclared type used. `enforce: [list]`: warn only when the listed types
-  // are used without a matching `/linkTypes/{stem}.md`.
-  const declaredLinkTypes = collectDeclaredLinkTypes(nodes);
-  const enforcement = getLinkTypeEnforcement(nodes);
-  if (enforcement.mode !== "off") {
-    const seen = new Set<string>();
-    for (const edge of edges) {
-      if (edge.type !== "link") continue;
-      if (!edge.linkType) continue;
-      if (declaredLinkTypes.has(edge.linkType)) continue;
-      if (enforcement.mode === "list" && !enforcement.types.has(edge.linkType)) continue;
-      const key = `${edge.from}\u0000${edge.linkType}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      warnings.push({
-        path: edge.from,
-        type: "undeclared_link_type",
-        message: `Link edge uses undeclared linkType "${edge.linkType}" — add /linkTypes/${edge.linkType}.md to document the relationship.`,
-      });
-    }
-  }
+  emitUnknownLinkTypeWarnings(edges, registry, warnings);
 
   // Check for unlisted children. Skip `navigable: false` children — companion
   // documents (DESIGN, SKILL, etc.) and other intentionally non-navigable
