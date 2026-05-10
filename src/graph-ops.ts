@@ -1,4 +1,4 @@
-import type { SpandrelNode, LinkTypeInfo } from "./compiler/types.js";
+import type { SpandrelNode } from "./compiler/types.js";
 import type { GraphStore } from "./storage/graph-store.js";
 
 /**
@@ -57,35 +57,22 @@ export function paginateList<T>(
   return { items: sliced, pageInfo: { hasNextPage, endCursor } };
 }
 
-// --- Link-type decoration ------------------------------------------------
-
-export function lookupLinkTypeDescription(
-  linkTypes: Map<string, LinkTypeInfo>,
-  linkType: string | null | undefined
-): string | null {
-  if (!linkType) return null;
-  return linkTypes.get(linkType)?.description ?? null;
-}
-
 // --- Reference resolution ------------------------------------------------
 
 export interface OutgoingLink {
   to: string;
   type: string | null;
   description: string | null;
-  linkTypeDescription: string | null;
 }
 
 export async function getOutgoingLinks(
   store: GraphStore,
   nodePath: string
 ): Promise<OutgoingLink[]> {
-  const linkTypes = await store.getLinkTypes();
   return (await store.getEdges({ from: nodePath, type: "link" })).map((e) => ({
     to: e.to,
     type: e.linkType ?? null,
     description: e.description ?? null,
-    linkTypeDescription: lookupLinkTypeDescription(linkTypes, e.linkType),
   }));
 }
 
@@ -93,12 +80,10 @@ export async function getIncomingLinks(
   store: GraphStore,
   nodePath: string
 ): Promise<OutgoingLink[]> {
-  const linkTypes = await store.getLinkTypes();
   return (await store.getEdges({ to: nodePath, type: "link" })).map((e) => ({
     to: e.from,
     type: e.linkType ?? null,
     description: e.description ?? null,
-    linkTypeDescription: lookupLinkTypeDescription(linkTypes, e.linkType),
   }));
 }
 
@@ -108,7 +93,6 @@ export interface RichReference {
   description: string;
   linkType: string | null;
   linkDescription: string | null;
-  linkTypeDescription: string | null;
   direction: "outgoing" | "incoming";
 }
 
@@ -117,7 +101,6 @@ export async function resolveReferences(
   nodePath: string,
   direction: "outgoing" | "incoming" | "both"
 ): Promise<RichReference[]> {
-  const linkTypes = await store.getLinkTypes();
   const results: RichReference[] = [];
 
   if (direction === "outgoing" || direction === "both") {
@@ -131,7 +114,6 @@ export async function resolveReferences(
         description: target?.description ?? "",
         linkType: edge.linkType ?? null,
         linkDescription: edge.description ?? null,
-        linkTypeDescription: lookupLinkTypeDescription(linkTypes, edge.linkType),
         direction: "outgoing",
       });
     }
@@ -148,7 +130,6 @@ export async function resolveReferences(
         description: source?.description ?? "",
         linkType: edge.linkType ?? null,
         linkDescription: edge.description ?? null,
-        linkTypeDescription: lookupLinkTypeDescription(linkTypes, edge.linkType),
         direction: "incoming",
       });
     }
@@ -574,7 +555,6 @@ export interface DecoratedEdge {
   type: "hierarchy" | "link" | "authored_by";
   linkType?: string;
   description?: string;
-  linkTypeDescription: string | null;
 }
 
 export interface GraphResult {
@@ -626,7 +606,6 @@ export async function resolveGraph(
     }));
 
   const edgeBatch = await store.getEdgesBatch(Array.from(collectedNodes));
-  const linkTypes = await store.getLinkTypes();
   const edges = Array.from(edgeBatch.values())
     .flat()
     .filter((e) => collectedNodes.has(e.to))
@@ -636,7 +615,6 @@ export async function resolveGraph(
       type: e.type,
       linkType: e.linkType,
       description: e.description,
-      linkTypeDescription: lookupLinkTypeDescription(linkTypes, e.linkType),
     }));
 
   return { nodes, edges };

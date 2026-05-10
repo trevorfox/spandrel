@@ -2,6 +2,35 @@
 
 All notable changes to Spandrel are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The stable surface for consumers is documented in [PUBLIC-API.md](./PUBLIC-API.md).
 
+## [0.9.0] — 2026-05-09
+
+Replaces the `/linkTypes/{stem}.md` per-type Things scaffolding with a single `_links/config.yaml` registry, recasts link types as system config (sibling of `_access/`), drops per-edge `linkTypeDescription` decoration from the wire, removes the link-types vocabulary block from MCP server instructions, drops the Schema.org type-aware JSON-LD projection, and adds opt-in `min_uses` reuse-discipline governance.
+
+The doctrinal stance: the link-type registry is an **authoring artifact, not an agent artifact**. Type-level prose lives in the YAML for human authors and authoring tools to consult; it is not pushed into agent context. The two fields an agent sees on every edge — `linkType` (a self-explanatory label) and `description` (per-edge prose) — are the entire semantic surface.
+
+### Changed (breaking)
+
+- **`/linkTypes/{stem}.md` is no longer compiler-special.** Existing files in that directory still compile as ordinary Things, but their content no longer decorates edges. Move type declarations to `_links/config.yaml`. When the legacy directory is detected without a config file, the compiler logs a one-line advisory pointing to this changelog.
+- **`ShapedEdge.linkTypeDescription` removed** from REST and MCP wire surfaces. Per-edge wire is now `{from, to, type, linkType?, description?}`.
+- **MCP server instructions no longer render the link-type vocabulary block.** Existing behavior in `mcp.ts` was removed.
+- **`enforce: [list]` semantic dropped.** Single-registry world has no clean meaning for it. The new boolean form is `enforce: true | false` in `_links/config.yaml`.
+- **`LinkTypeInfo` shape changed** from `{name, description, path}` to `{stem, description?}`. Wire consumers (web viewer, REST `GET /linkTypes`, MCP) are updated.
+- **Schema.org type-projection removed.** Per-link-type `schemaOrg:` frontmatter is no longer read. JSON-LD output emits with all edges mapped to `schema:mentions`. Restore in a separate spec if a real consumer surfaces.
+
+### Added
+
+- **`_links/config.yaml`** — single-file link-type registry. Loaded from the graph root by `loadLinksConfig(rootDir)`. Symmetric with `_access/config.yaml`.
+- **`min_uses: N`** — opt-in reuse-discipline governance. Compiler emits `underused_link_type` warnings for any type used fewer than N times across the graph. Default `0` (off). The actual quality lever per the research — denoising matters more than declaration alone.
+- **`unknown_link_type` warning code** — replaces `undeclared_link_type`. Emitted under `enforce: true` for any type used on an edge but absent from `types:` in the registry.
+- **Legacy advisory** — one-line non-blocking note when a graph has `/linkTypes/{stem}.md` but no `_links/config.yaml`.
+
+### Migration
+
+- New graphs created with `spandrel init` get `_links/config.yaml` automatically (with the 10 baseline types).
+- Existing graphs: hand-create `_links/config.yaml` from your `/linkTypes/` files, or use a one-off script. There is no migrate CLI command — this is a one-shot for a small number of graphs.
+
+---
+
 ## [0.8.1] — 2026-05-09
 
 Documentation catch-up for the 0.8.0 graph-mutations surface. No code changes; PUBLIC-API.md, CLI reference, and REST spec table now match what shipped in 0.8.0.

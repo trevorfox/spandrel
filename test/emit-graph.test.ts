@@ -25,14 +25,9 @@ describe("emitGraph", () => {
     await store.setNode(node({ path: "/", name: "Root", description: "root", nodeType: "composite", depth: 0 }));
     await store.setNode(node({ path: "/a", name: "A", description: "node a", parent: "/" }));
     await store.setNode(node({ path: "/b", name: "B", description: "node b", parent: "/" }));
-    await store.setNode(
-      node({
-        path: "/linkTypes/owns",
-        name: "Owns",
-        description: "Source owns target.",
-        parent: "/linkTypes",
-      })
-    );
+    await store.replaceLinkTypes(new Map([
+      ["owns", { stem: "owns", description: "Source owns target." }],
+    ]));
 
     const edges: SpandrelEdge[] = [
       { from: "/", to: "/a", type: "hierarchy" },
@@ -53,16 +48,15 @@ describe("emitGraph", () => {
     expect(Array.isArray(graph.linkTypes)).toBe(true);
     expect(Array.isArray(graph.warnings)).toBe(true);
 
-    expect(graph.nodes).toHaveLength(4);
-    expect(graph.nodes.map((n) => n.path).sort()).toEqual(["/", "/a", "/b", "/linkTypes/owns"]);
+    expect(graph.nodes).toHaveLength(3);
+    expect(graph.nodes.map((n) => n.path).sort()).toEqual(["/", "/a", "/b"]);
     expect(graph.edges).toEqual(edges);
     expect(graph.warnings).toEqual(warnings);
 
     expect(graph.linkTypes).toHaveLength(1);
     expect(graph.linkTypes[0]).toEqual({
-      name: "Owns",
+      stem: "owns",
       description: "Source owns target.",
-      path: "/linkTypes/owns",
     });
   });
 
@@ -106,23 +100,16 @@ describe("emitGraph", () => {
 
   it("flattens the linkTypes Map into an array preserving each entry's shape", async () => {
     const store = new InMemoryGraphStore();
-    await store.setNode(
-      node({ path: "/linkTypes/owns", name: "Owns", description: "owns desc", parent: "/linkTypes" })
-    );
-    await store.setNode(
-      node({
-        path: "/linkTypes/depends-on",
-        name: "Depends On",
-        description: "depends-on desc",
-        parent: "/linkTypes",
-      })
-    );
+    await store.replaceLinkTypes(new Map([
+      ["owns", { stem: "owns", description: "Operational control." }],
+      ["depends-on", { stem: "depends-on", description: "Runtime dependency." }],
+    ]));
 
     const graph = await emitGraph(store);
 
     expect(graph.linkTypes).toHaveLength(2);
-    const byPath = Object.fromEntries(graph.linkTypes.map((l) => [l.path, l]));
-    expect(byPath["/linkTypes/owns"].name).toBe("Owns");
-    expect(byPath["/linkTypes/depends-on"].description).toBe("depends-on desc");
+    const byStem = Object.fromEntries(graph.linkTypes.map((l) => [l.stem, l]));
+    expect(byStem.owns.description).toBe("Operational control.");
+    expect(byStem["depends-on"].description).toBe("Runtime dependency.");
   });
 });

@@ -229,18 +229,15 @@ describe("AccessPolicy.shapeEdge", () => {
     expect(policy.shapeEdge(edge, "content", "none")).toBeNull();
   });
 
-  it("returns the edge with linkTypeDescription when both endpoints are visible", () => {
-    const result = policy.shapeEdge(edge, "content", "content", "owns: source controls target");
+  it("returns the edge with linkType and description, no linkTypeDescription", () => {
+    const result = policy.shapeEdge(edge, "content", "content");
     expect(result).not.toBeNull();
-    expect(result!.linkTypeDescription).toBe("owns: source controls target");
     expect(result!.from).toBe("/a");
     expect(result!.to).toBe("/b");
-  });
-
-  it("preserves linkType and description", () => {
-    const result = policy.shapeEdge(edge, "exists", "exists");
     expect(result!.linkType).toBe("owns");
     expect(result!.description).toBe("edge desc");
+    // linkTypeDescription field no longer exists on ShapedEdge
+    expect((result as Record<string, unknown>).linkTypeDescription).toBeUndefined();
   });
 });
 

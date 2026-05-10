@@ -1,7 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
-  SCHEMA_ORG_WHITELIST,
-  buildLinkTypePredicateMap,
   predicateForEdge,
   inferSchemaType,
   nodeRelativeHref,
@@ -96,18 +94,6 @@ describe("nodeRelativeHref / nodeCanonicalUrl", () => {
 });
 
 describe("inferSchemaType", () => {
-  it("identifies linkType nodes as DefinedTerm", () => {
-    expect(
-      inferSchemaType(makeNode({ path: "/linkTypes/owns" }))
-    ).toBe("DefinedTerm");
-  });
-
-  it("does not classify /linkTypes itself (collection root) as DefinedTerm", () => {
-    expect(
-      inferSchemaType(makeNode({ path: "/linkTypes", nodeType: "composite" }))
-    ).toBe("Collection");
-  });
-
   it("classifies composite nodes as Collection", () => {
     expect(
       inferSchemaType(makeNode({ path: "/clients", nodeType: "composite" }))
@@ -117,6 +103,12 @@ describe("inferSchemaType", () => {
   it("classifies leaf nodes as CreativeWork", () => {
     expect(
       inferSchemaType(makeNode({ path: "/clients/acme", nodeType: "leaf" }))
+    ).toBe("CreativeWork");
+  });
+
+  it("classifies /linkTypes leaf nodes as CreativeWork (no special casing)", () => {
+    expect(
+      inferSchemaType(makeNode({ path: "/linkTypes/owns", nodeType: "leaf" }))
     ).toBe("CreativeWork");
   });
 
@@ -133,110 +125,15 @@ describe("inferSchemaType", () => {
   });
 });
 
-describe("buildLinkTypePredicateMap", () => {
-  it("defaults unmapped linkTypes to mentions", () => {
-    const graph = makeGraph({
-      nodes: [
-        makeNode({
-          path: "/linkTypes/depends-on",
-          name: "depends-on",
-          frontmatter: {},
-        }),
-      ],
-      linkTypes: [
-        {
-          name: "depends-on",
-          description: "",
-          path: "/linkTypes/depends-on",
-        },
-      ],
-    });
-    const warn = vi.fn();
-    const map = buildLinkTypePredicateMap(graph, warn);
-    expect(map.get("depends-on")).toBe("mentions");
-    expect(warn).not.toHaveBeenCalled();
-  });
-
-  it("honors a declared schemaOrg value when it is in the whitelist", () => {
-    const graph = makeGraph({
-      nodes: [
-        makeNode({
-          path: "/linkTypes/is-part-of",
-          name: "is-part-of",
-          frontmatter: { schemaOrg: "isPartOf" },
-        }),
-      ],
-      linkTypes: [
-        { name: "is-part-of", description: "", path: "/linkTypes/is-part-of" },
-      ],
-    });
-    const warn = vi.fn();
-    const map = buildLinkTypePredicateMap(graph, warn);
-    expect(map.get("is-part-of")).toBe("isPartOf");
-    expect(warn).not.toHaveBeenCalled();
-  });
-
-  it("falls back to mentions and warns when schemaOrg is not in the whitelist", () => {
-    const graph = makeGraph({
-      nodes: [
-        makeNode({
-          path: "/linkTypes/bogus",
-          name: "bogus",
-          frontmatter: { schemaOrg: "notARealThing" },
-        }),
-      ],
-      linkTypes: [{ name: "bogus", description: "", path: "/linkTypes/bogus" }],
-    });
-    const warn = vi.fn();
-    const map = buildLinkTypePredicateMap(graph, warn);
-    expect(map.get("bogus")).toBe("mentions");
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toMatch(/notARealThing/);
-    expect(warn.mock.calls[0][0]).toMatch(/falling back to "mentions"/);
-  });
-
-  it("falls back to mentions and warns on non-string schemaOrg", () => {
-    const graph = makeGraph({
-      nodes: [
-        makeNode({
-          path: "/linkTypes/weird",
-          name: "weird",
-          frontmatter: { schemaOrg: 42 },
-        }),
-      ],
-      linkTypes: [{ name: "weird", description: "", path: "/linkTypes/weird" }],
-    });
-    const warn = vi.fn();
-    const map = buildLinkTypePredicateMap(graph, warn);
-    expect(map.get("weird")).toBe("mentions");
-    expect(warn).toHaveBeenCalledTimes(1);
-  });
-
-  it("exposes a six-entry whitelist, no more", () => {
-    expect(SCHEMA_ORG_WHITELIST.length).toBe(6);
-    expect(new Set(SCHEMA_ORG_WHITELIST).size).toBe(6);
-  });
-});
-
 describe("predicateForEdge", () => {
-  const map = new Map<string, ReturnType<typeof predicateForEdge>>([
-    ["sameAs", "sameAs"],
-    ["owns", "mentions"],
-  ]);
-
-  it("returns the mapped predicate for known linkTypes", () => {
+  it("always returns mentions regardless of linkType", () => {
     const edge: SpandrelEdge = { from: "/a", to: "/b", type: "link", linkType: "sameAs" };
-    expect(predicateForEdge(edge, map)).toBe("sameAs");
+    expect(predicateForEdge(edge)).toBe("mentions");
   });
 
-  it("falls back to mentions for unknown linkTypes", () => {
-    const edge: SpandrelEdge = { from: "/a", to: "/b", type: "link", linkType: "unknown" };
-    expect(predicateForEdge(edge, map)).toBe("mentions");
-  });
-
-  it("falls back to mentions for edges without a linkType", () => {
+  it("returns mentions for edges without a linkType", () => {
     const edge: SpandrelEdge = { from: "/a", to: "/b", type: "link" };
-    expect(predicateForEdge(edge, map)).toBe("mentions");
+    expect(predicateForEdge(edge)).toBe("mentions");
   });
 });
 
@@ -278,10 +175,9 @@ describe("buildJsonLd", () => {
     { from: "/clients/acme", to: "/missing", type: "link", linkType: "mentions" },
   ];
   const graph = makeGraph({ nodes, edges });
-  const map = new Map<string, ReturnType<typeof predicateForEdge>>();
 
   it("includes @context, @type, name, and url", () => {
-    const ld = buildJsonLd(nodes[2], graph, map, "/", "");
+    const ld = buildJsonLd(nodes[2], graph, "/", "");
     expect(ld["@context"]).toBe("https://schema.org");
     expect(ld["@type"]).toBe("CreativeWork");
     expect(ld.name).toBe("Acme");
@@ -289,30 +185,29 @@ describe("buildJsonLd", () => {
   });
 
   it("emits isPartOf for nodes with a visible parent", () => {
-    const ld = buildJsonLd(nodes[2], graph, map, "/", "");
+    const ld = buildJsonLd(nodes[2], graph, "/", "");
     expect(ld.isPartOf).toEqual({ "@id": "/clients/" });
   });
 
   it("omits isPartOf when the parent is missing from the graph", () => {
-    const ld = buildJsonLd(nodes[3], graph, map, "/", "");
+    const ld = buildJsonLd(nodes[3], graph, "/", "");
     expect(ld.isPartOf).toBeUndefined();
   });
 
   it("emits hasPart for composites with visible children", () => {
-    const ld = buildJsonLd(nodes[1], graph, map, "/", "");
+    const ld = buildJsonLd(nodes[1], graph, "/", "");
     expect(ld.hasPart).toEqual([{ "@id": "/clients/acme/" }]);
   });
 
-  it("projects outgoing typed link edges through the predicate map, dropping broken/external targets", () => {
-    const ld = buildJsonLd(nodes[2], graph, map, "/", "");
-    // owned-by → mentions (default); sameAs target is external → dropped;
-    // /missing → dropped (not in graph)
+  it("maps every outgoing link edge to mentions, dropping broken/external targets", () => {
+    const ld = buildJsonLd(nodes[2], graph, "/", "");
+    // owned-by and sameAs-typed edges with internal targets → mentions;
+    // external target (https://acme.com) and /missing → dropped
     expect(ld.mentions).toEqual([{ "@id": "/people/alice/" }]);
-    expect(ld.sameAs).toBeUndefined();
   });
 
   it("uses absolute URLs when a site-url is provided", () => {
-    const ld = buildJsonLd(nodes[2], graph, map, "/", "https://example.com");
+    const ld = buildJsonLd(nodes[2], graph, "/", "https://example.com");
     expect(ld.url).toBe("https://example.com/clients/acme/");
     expect(ld.isPartOf).toEqual({ "@id": "https://example.com/clients/" });
   });
@@ -432,13 +327,11 @@ describe("renderPage", () => {
       node,
     ],
   });
-  const predicateMap = new Map<string, ReturnType<typeof predicateForEdge>>();
 
   it("emits a complete HTML document with title, meta, and JSON-LD", () => {
     const html = renderPage({
       node,
       graph,
-      predicateMap,
       base: "/",
       siteUrl: "",
       shellHead: '<script type="module" src="./assets/x.js"></script>',
@@ -465,7 +358,6 @@ describe("renderPage", () => {
     const html = renderPage({
       node: rootNode,
       graph,
-      predicateMap,
       base: "/",
       siteUrl: "",
       shellHead: "",
@@ -480,7 +372,6 @@ describe("renderPage", () => {
     const html = renderPage({
       node,
       graph,
-      predicateMap,
       base: "/",
       siteUrl: "",
       shellHead: "",

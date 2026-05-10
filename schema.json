@@ -51,7 +51,7 @@
           },
           "type": {
             "type": "string",
-            "description": "Link type label. Free-form by default; declared types under `/linkTypes/` carry shared descriptions."
+            "description": "Link type label. Free-form by default; declared types in _links/config.yaml carry shared descriptions for authoring tools (not surfaced to agents at traversal time)."
           },
           "description": {
             "type": "string",
@@ -74,18 +74,6 @@
     "schemaType": {
       "type": "string",
       "description": "Override for `@type` inference in static-publish JSON-LD output (e.g. `Organization`, `Person`)"
-    },
-    "schemaOrg": {
-      "type": "string",
-      "description": "Mapping from this graph's link type to a schema.org predicate. Only meaningful on `/linkTypes/<type>.md` files.",
-      "enum": [
-        "isPartOf",
-        "hasPart",
-        "about",
-        "mentions",
-        "sameAs",
-        "relatedLink"
-      ]
     }
   }
 }

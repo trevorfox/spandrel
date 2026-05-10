@@ -175,8 +175,7 @@ export class RemoteGraphStore implements GraphStore {
     const graph = await this.loadGraph();
     const out = new Map<string, LinkTypeInfo>();
     for (const lt of graph.linkTypes) {
-      const stem = lt.path.replace(/^\/linkTypes\//, "").split("/")[0];
-      out.set(stem, lt);
+      out.set(lt.stem, lt);
     }
     return out;
   }
@@ -193,6 +192,9 @@ export class RemoteGraphStore implements GraphStore {
     throw new Error(READ_ONLY_MESSAGE);
   }
   async replaceWarnings(_warnings: ValidationWarning[]): Promise<void> {
+    throw new Error(READ_ONLY_MESSAGE);
+  }
+  async replaceLinkTypes(_linkTypes: Map<string, LinkTypeInfo>): Promise<void> {
     throw new Error(READ_ONLY_MESSAGE);
   }
   async clear(): Promise<void> {

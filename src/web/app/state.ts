@@ -209,8 +209,7 @@ function buildDerived(g: Graph): DerivedMaps {
 
   const linkTypeByStem = new Map<string, LinkTypeInfo>();
   for (const lt of g.linkTypes) {
-    const stem = stemOf(lt.path);
-    linkTypeByStem.set(stem, lt);
+    linkTypeByStem.set(lt.stem, lt);
   }
 
   const outgoingLinks = new Map<string, SpandrelEdge[]>();
@@ -255,11 +254,6 @@ function buildDerived(g: Graph): DerivedMaps {
     warningsByPath,
     searchIndex,
   };
-}
-
-function stemOf(path: string): string {
-  const idx = path.lastIndexOf("/");
-  return idx >= 0 ? path.slice(idx + 1) : path;
 }
 
 /** "/clients/acme/team" → "/clients". Root stays as "/". */

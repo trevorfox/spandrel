@@ -11,8 +11,9 @@
  *
  *   1. Head extraction — pull the SPA's asset/font/theme tags out of the
  *      Vite-built `index.html` so hashed filenames aren't hardcoded here.
- *   2. JSON-LD projection — project typed link edges onto a small schema.org
- *      predicate whitelist. Six predicates, no more (see `SCHEMA_ORG_WHITELIST`).
+ *   2. JSON-LD projection — every outgoing link edge maps to `schema:mentions`.
+ *      Structural hierarchy is captured by `isPartOf` / `hasPart`. No
+ *      per-type whitelist; the full vocabulary lives in the graph via REST/MCP.
  *   3. Per-node HTML assembly — bolt SEO meta + JSON-LD + prerendered body
  *      into the shared head, emit one file per node.
  */
@@ -22,92 +23,17 @@ import type { SpandrelNode, SpandrelEdge } from "./types.js";
 import type { Graph } from "../web/types.js";
 
 /**
- * The only schema.org predicates we ever emit. Framing: JSON-LD is a public
- * projection, not a mirror of the full typed vocabulary. Search engines get
- * something they understand; agents and humans still see the real graph via
- * REST and MCP.
+ * Every outgoing link edge maps to `schema:mentions`. Structural hierarchy
+ * uses the dedicated `isPartOf` / `hasPart` predicates. The full typed
+ * vocabulary is served to consumers via REST and MCP.
  */
-export const SCHEMA_ORG_WHITELIST = [
-  "isPartOf",
-  "hasPart",
-  "about",
-  "mentions",
-  "sameAs",
-  "relatedLink",
-] as const;
-
-export type SchemaOrgPredicate = (typeof SCHEMA_ORG_WHITELIST)[number];
-
-const WHITELIST_SET: Set<string> = new Set(SCHEMA_ORG_WHITELIST);
-
-/**
- * Build a stem → schema.org predicate map from the graph's linkType nodes.
- *
- * Each `/linkTypes/<stem>.md` node may declare a `schemaOrg:` frontmatter
- * field naming one of the whitelisted predicates. When absent, the stem maps
- * to `"mentions"` (the catch-all). When present but not in the whitelist,
- * the value is ignored with a warning and the stem falls back to `"mentions"`.
- *
- * The map only contains stems whose linkType node exists. Edge linkTypes
- * referring to undeclared stems are handled at projection time.
- */
-export function buildLinkTypePredicateMap(
-  graph: Graph,
-  warn: (msg: string) => void = (m) => console.warn(`[spandrel] ${m}`)
-): Map<string, SchemaOrgPredicate> {
-  const map = new Map<string, SchemaOrgPredicate>();
-  const nodesByPath = new Map(graph.nodes.map((n) => [n.path, n]));
-
-  for (const info of graph.linkTypes) {
-    const stem = info.path.slice("/linkTypes/".length);
-    if (stem.length === 0 || stem.includes("/")) continue;
-
-    const node = nodesByPath.get(info.path);
-    const declared = node?.frontmatter?.["schemaOrg"];
-
-    if (declared === undefined || declared === null || declared === "") {
-      map.set(stem, "mentions");
-      continue;
-    }
-
-    if (typeof declared !== "string") {
-      warn(
-        `linkType /linkTypes/${stem} declares a non-string schemaOrg value; falling back to "mentions".`
-      );
-      map.set(stem, "mentions");
-      continue;
-    }
-
-    if (!WHITELIST_SET.has(declared)) {
-      warn(
-        `linkType /linkTypes/${stem} declares schemaOrg "${declared}" which is not in the whitelist (${SCHEMA_ORG_WHITELIST.join(", ")}); falling back to "mentions".`
-      );
-      map.set(stem, "mentions");
-      continue;
-    }
-
-    map.set(stem, declared as SchemaOrgPredicate);
-  }
-
-  return map;
-}
-
-/**
- * Map an edge's linkType to a schema.org predicate.
- * Unmapped or missing linkTypes fall through to `"mentions"`.
- */
-export function predicateForEdge(
-  edge: SpandrelEdge,
-  predicateMap: Map<string, SchemaOrgPredicate>
-): SchemaOrgPredicate {
-  if (!edge.linkType) return "mentions";
-  return predicateMap.get(edge.linkType) ?? "mentions";
+export function predicateForEdge(_edge: SpandrelEdge): "mentions" {
+  return "mentions";
 }
 
 /**
  * Infer a schema.org `@type` for a node.
  *
- * - Nodes under `/linkTypes/*` are `DefinedTerm` — they define vocabulary.
  * - Composite nodes (with children) are `Collection` — they hold parts.
  * - Leaf nodes default to `CreativeWork` — a generic content node.
  *
@@ -118,10 +44,6 @@ export function inferSchemaType(node: SpandrelNode): string {
   const override = node.frontmatter?.["schemaType"];
   if (typeof override === "string" && override.length > 0) return override;
 
-  if (node.path.startsWith("/linkTypes/")) {
-    const rest = node.path.slice("/linkTypes/".length);
-    if (rest.length > 0 && !rest.includes("/")) return "DefinedTerm";
-  }
   if (node.nodeType === "composite") return "Collection";
   return "CreativeWork";
 }
@@ -172,22 +94,22 @@ export interface JsonLd {
   isPartOf?: { "@id": string };
   hasPart?: Array<{ "@id": string }>;
   mentions?: Array<{ "@id": string }>;
-  about?: Array<{ "@id": string }>;
-  sameAs?: Array<{ "@id": string }>;
-  relatedLink?: Array<{ "@id": string }>;
 }
 
 /**
- * Build the JSON-LD object for one node. Only whitelist predicates ever
- * appear. Edges that would collide with the structural `isPartOf`/`hasPart`
- * predicates (hierarchy edges, which already show up as parent/children)
- * are not duplicated from link edges — we use parent/children for hierarchy
- * and link edges only for lateral relationships.
+ * Build the JSON-LD object for one node.
+ *
+ * Structural hierarchy is captured by `isPartOf` (parent) and `hasPart`
+ * (visible children). Every outgoing typed link edge maps unconditionally to
+ * `schema:mentions` — the full vocabulary is available to consumers via REST
+ * and MCP; the JSON-LD projection stays minimal and crawler-friendly.
+ *
+ * Broken targets (paths not in the graph) and external URLs are silently
+ * dropped — JSON-LD `@id` values must resolve to something meaningful.
  */
 export function buildJsonLd(
   node: SpandrelNode,
   graph: Graph,
-  predicateMap: Map<string, SchemaOrgPredicate>,
   base: string,
   siteUrl: string
 ): JsonLd {
@@ -216,33 +138,17 @@ export function buildJsonLd(
     }));
   }
 
-  // Group outgoing link edges by projected predicate. Hierarchy/authored_by
-  // edges are handled separately (or not at all — `authored_by` isn't part
-  // of the public projection).
-  const buckets: Record<SchemaOrgPredicate, Set<string>> = {
-    isPartOf: new Set(),
-    hasPart: new Set(),
-    about: new Set(),
-    mentions: new Set(),
-    sameAs: new Set(),
-    relatedLink: new Set(),
-  };
-
+  // Every outgoing link edge → schema:mentions. Broken/external targets
+  // are dropped (they wouldn't produce a resolvable @id).
+  const mentionIds: string[] = [];
   for (const edge of graph.edges) {
     if (edge.from !== node.path) continue;
     if (edge.type !== "link") continue;
-    if (!nodesByPath.has(edge.to)) continue; // skip broken/external
-    const predicate = predicateForEdge(edge, predicateMap);
-    buckets[predicate].add(nodeCanonicalUrl(edge.to, base, siteUrl));
+    if (!nodesByPath.has(edge.to)) continue;
+    mentionIds.push(nodeCanonicalUrl(edge.to, base, siteUrl));
   }
-
-  // hasPart and isPartOf get structural data already; skip populating them
-  // from link edges so hierarchy wins and we never duplicate IDs.
-  for (const predicate of ["about", "mentions", "sameAs", "relatedLink"] as const) {
-    const ids = Array.from(buckets[predicate]);
-    if (ids.length > 0) {
-      ld[predicate] = ids.map((id) => ({ "@id": id }));
-    }
+  if (mentionIds.length > 0) {
+    ld.mentions = mentionIds.map((id) => ({ "@id": id }));
   }
 
   return ld;
@@ -328,7 +234,6 @@ export function extractShellHead(shellHtml: string): string {
 export interface RenderPageInput {
   node: SpandrelNode;
   graph: Graph;
-  predicateMap: Map<string, SchemaOrgPredicate>;
   base: string;
   siteUrl: string;
   shellHead: string;
@@ -361,7 +266,6 @@ export function renderPage(input: RenderPageInput): string {
   const {
     node,
     graph,
-    predicateMap,
     base,
     siteUrl,
     shellHead,
@@ -376,7 +280,7 @@ export function renderPage(input: RenderPageInput): string {
       ? node.name || "Spandrel"
       : `${node.name} — ${siteName}`;
   const description = node.description || "";
-  const jsonLd = buildJsonLd(node, graph, predicateMap, base, siteUrl);
+  const jsonLd = buildJsonLd(node, graph, base, siteUrl);
 
   const bodyHtml = renderBody(node.content);
 

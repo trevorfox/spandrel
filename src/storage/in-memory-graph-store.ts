@@ -1,12 +1,11 @@
 import type { SpandrelNode, SpandrelEdge, ValidationWarning, LinkTypeInfo } from "../compiler/types.js";
 import type { EdgeFilter, GraphStore } from "./graph-store.js";
 
-const LINK_TYPE_PATH_PREFIX = "/linkTypes/";
-
 export class InMemoryGraphStore implements GraphStore {
   private nodes = new Map<string, SpandrelNode>();
   private edges: SpandrelEdge[] = [];
   private warnings: ValidationWarning[] = [];
+  private linkTypes: Map<string, LinkTypeInfo> = new Map();
 
   async getNode(path: string): Promise<SpandrelNode | undefined> {
     return this.nodes.get(path);
@@ -56,20 +55,11 @@ export class InMemoryGraphStore implements GraphStore {
   }
 
   async getLinkTypes(): Promise<Map<string, LinkTypeInfo>> {
-    const result = new Map<string, LinkTypeInfo>();
-    for (const node of this.nodes.values()) {
-      // Only direct children of `/linkTypes/` — flat namespace for v1.
-      // The collection landing page `/linkTypes` itself is not a linkType.
-      if (!node.path.startsWith(LINK_TYPE_PATH_PREFIX)) continue;
-      const rest = node.path.slice(LINK_TYPE_PATH_PREFIX.length);
-      if (rest.length === 0 || rest.includes("/")) continue;
-      result.set(rest, {
-        name: node.name,
-        description: node.description,
-        path: node.path,
-      });
-    }
-    return result;
+    return this.linkTypes;
+  }
+
+  async replaceLinkTypes(linkTypes: Map<string, LinkTypeInfo>): Promise<void> {
+    this.linkTypes = linkTypes;
   }
 
   async setNode(node: SpandrelNode): Promise<void> {

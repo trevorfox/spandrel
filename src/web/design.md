@@ -47,7 +47,7 @@ Nothing in the compiler or schema layer depends on the viewer. The viewer is dow
 
 Three commands, three moments in a repo's life:
 
-- **`spandrel init`** — one-time bootstrap in an empty directory. Scaffolds `_access/config.yaml`, `/linkTypes/` vocabulary, `.github/workflows/publish.yml`, and a `CNAME` placeholder. Run once; never again.
+- **`spandrel init`** — one-time bootstrap in an empty directory. Scaffolds `_access/config.yaml`, `.github/workflows/publish.yml`, and a `CNAME` placeholder. Run once; never again.
 - **`spandrel dev <path>`** — the authoring loop. Compiles the graph in memory, watches the filesystem, serves REST, MCP, SSE, and the viewer at `localhost:4000`. This is where writing happens.
 - **`spandrel publish <path> --out _site [--base /repo/] [--strip-private] [--static] [--site-url https://example.com]`** — the deploy step. Compiles once, writes `graph.json`, copies the SPA bundle into `--out`. That folder is the deployable.
 
@@ -156,18 +156,7 @@ SEO metadata, included only in `--static` output:
 - OpenGraph and Twitter card tags
 - JSON-LD schema.org block
 
-The JSON-LD uses a disciplined six-predicate whitelist, not the full internal link-type vocabulary:
-
-- `isPartOf` — node → parent collection
-- `hasPart` — collection → children
-- `about` — node → subject/topic
-- `mentions` — generic reference (catch-all)
-- `sameAs` — external canonical equivalents
-- `relatedLink` — generic "see also"
-
-Every declared link type in `/linkTypes/<type>/index.md` may optionally include a `schemaOrg:` frontmatter field mapping it to one of the six. Unmapped types default to `mentions`. Values outside the whitelist are rejected at build time with a warning and fall back to `mentions`. Framing: **JSON-LD is a projection, not a mirror.** The viewer, REST, and MCP continue to see the full typed vocabulary (`depends-on`, `supersedes`, `owned-by`). Only the public structured-data block is restricted. Search engines get something they understand; agents and humans get the real graph.
-
-The `@type` for each node is inferred from its shape: `DefinedTerm` for nodes under `/linkTypes/`, `Collection` for composites, `CreativeWork` for leaves. An individual node can override via a `schemaType:` frontmatter field when a more specific type fits (e.g. `Organization`, `Person`).
+JSON-LD output emits a `CreativeWork` per node with all link edges projected as `schema:mentions`. The previous per-link-type `schemaOrg:` projection was removed in 0.9.0; if a more typed projection becomes useful, restore as a separate spec.
 
 Canonical URL policy: `--site-url` (optional, default empty) controls whether the `<link rel="canonical">`, `og:url`, and JSON-LD `url`/`@id` fields emit absolute or relative URLs. When unset, relative URLs degrade gracefully on sub-path hosting. When set, absolute URLs land in every page — Google prefers those.
 
@@ -197,9 +186,7 @@ Canonical URL policy: `--site-url` (optional, default empty) controls whether th
 - `--static` flag: per-node prerendered HTML
 - `--site-url` flag: absolute canonical URLs when an origin is known
 - SEO meta tags (title, description, canonical, OpenGraph, Twitter)
-- JSON-LD with six-predicate whitelist
-- Optional `schemaOrg:` mapping in `/linkTypes/` frontmatter
-- Optional per-node `schemaType:` frontmatter override for `@type` inference
+- JSON-LD with all edges projected as `schema:mentions`
 
 ### Out of scope
 

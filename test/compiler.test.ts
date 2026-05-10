@@ -8,6 +8,11 @@ function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "spandrel-test-"));
 }
 
+/** Create a temp dir that callers manage manually (no beforeEach/afterEach needed). */
+function tempRoot(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "spandrel-test-"));
+}
+
 function writeIndex(dir: string, frontmatter: Record<string, unknown>, content = "") {
   fs.mkdirSync(dir, { recursive: true });
   const fm = Object.entries(frontmatter)
@@ -353,7 +358,12 @@ describe("Compiler — Validation", () => {
   });
 });
 
-describe("Compiler — undeclared_link_type warnings", () => {
+function writeLinksConfig(root: string, body: string): void {
+  fs.mkdirSync(path.join(root, "_links"), { recursive: true });
+  fs.writeFileSync(path.join(root, "_links/config.yaml"), body);
+}
+
+describe("Compiler — _links/config.yaml enforce", () => {
   let root: string;
 
   beforeEach(() => {
@@ -364,216 +374,109 @@ describe("Compiler — undeclared_link_type warnings", () => {
     rmrf(root);
   });
 
-  function writeLinkType(stem: string, name: string, description: string) {
-    fs.mkdirSync(path.join(root, "linkTypes"), { recursive: true });
+  it("emits unknown_link_type warnings under enforce: true for undeclared types", async () => {
+    writeIndex(root, { name: "Test Graph", description: "x" });
+    writeLinksConfig(
+      root,
+      `enforce: true\ntypes:\n  owns:\n    description: Operational control.\n`
+    );
     fs.writeFileSync(
-      path.join(root, "linkTypes", `${stem}.md`),
-      `---\nname: ${name}\ndescription: ${description}\n---\n`
+      path.join(root, "alpha.md"),
+      `---\nname: Alpha\ndescription: x\nlinks:\n  - to: /beta\n    type: foo\n---\n`
     );
-  }
-
-  it("warns under enforce: strict when a frontmatter link uses an undeclared type", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), {
-      name: "Link Types",
-      description: "Vocab",
-      enforce: "strict",
-    });
-    writeLinkType("owns", "owns", "Operational control.");
-    writeLinkType("depends-on", "depends-on", "Runtime dependency.");
-    writeIndex(path.join(root, "a"), {
-      name: "A",
-      description: "A",
-      links: [{ to: "/b", type: "foo" }],
-    });
-    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
+    fs.writeFileSync(
+      path.join(root, "beta.md"),
+      `---\nname: Beta\ndescription: y\n---\n`
+    );
 
     const store = await compile(root);
-    const undeclared = (await store.getWarnings()).filter(
-      (w) => w.type === "undeclared_link_type"
+    const warnings = (await store.getWarnings()).filter(
+      (w) => w.type === "unknown_link_type"
     );
-    expect(undeclared).toHaveLength(1);
-    expect(undeclared[0].path).toBe("/a");
-    expect(undeclared[0].message).toContain('"foo"');
-    expect(undeclared[0].message).toContain("/linkTypes/foo.md");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toContain('"foo"');
   });
 
-  it("emits zero undeclared_link_type warnings when the graph has no /linkTypes/ collection", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "a"), {
-      name: "A",
-      description: "A",
-      links: [{ to: "/b", type: "foo" }, { to: "/b", type: "bar" }],
-    });
-    writeIndex(path.join(root, "b"), { name: "B", description: "B" }, "See [B-prime](/b-prime).");
-    writeIndex(path.join(root, "b-prime"), { name: "B-prime", description: "B-prime" });
+  it("emits zero unknown_link_type warnings when enforce: false (default)", async () => {
+    writeIndex(root, { name: "Test Graph", description: "x" });
+    writeLinksConfig(root, `types:\n  owns: {}\n`);
+    fs.writeFileSync(
+      path.join(root, "alpha.md"),
+      `---\nname: Alpha\ndescription: x\nlinks:\n  - to: /beta\n    type: foo\n---\n`
+    );
+    fs.writeFileSync(
+      path.join(root, "beta.md"),
+      `---\nname: Beta\ndescription: y\n---\n`
+    );
 
     const store = await compile(root);
-    const undeclared = (await store.getWarnings()).filter(
-      (w) => w.type === "undeclared_link_type"
+    const warnings = (await store.getWarnings()).filter(
+      (w) => w.type === "unknown_link_type"
     );
-    expect(undeclared).toHaveLength(0);
+    expect(warnings).toHaveLength(0);
   });
 
-  it("emits zero warnings when /linkTypes/ exists but `enforce` is absent (default off)", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    // No `enforce` field — declaration alone does not trigger warnings.
-    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
-    writeLinkType("owns", "owns", "Operational control.");
-    writeIndex(path.join(root, "a"), {
-      name: "A",
-      description: "A",
-      links: [{ to: "/b", type: "foo" }],
-    });
-    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
+  it("does not emit warnings when graph has no _links/config.yaml at all", async () => {
+    writeIndex(root, { name: "Test Graph", description: "x" });
+    fs.writeFileSync(
+      path.join(root, "alpha.md"),
+      `---\nname: Alpha\ndescription: x\nlinks:\n  - to: /beta\n    type: anything\n---\n`
+    );
+    fs.writeFileSync(
+      path.join(root, "beta.md"),
+      `---\nname: Beta\ndescription: y\n---\n`
+    );
 
     const store = await compile(root);
-    const undeclared = (await store.getWarnings()).filter(
-      (w) => w.type === "undeclared_link_type"
+    const warnings = (await store.getWarnings()).filter(
+      (w) => w.type === "unknown_link_type"
     );
-    expect(undeclared).toHaveLength(0);
+    expect(warnings).toHaveLength(0);
   });
 
-  it("does not warn on inline [label](/path) mentions when /linkTypes/mentions.md is declared (under strict)", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), {
-      name: "Link Types",
-      description: "Vocab",
-      enforce: "strict",
-    });
-    writeLinkType("mentions", "mentions", "Incidental prose reference.");
-    writeIndex(
-      path.join(root, "a"),
-      { name: "A", description: "A" },
-      "See [B](/b) for details."
+  it("emits underused_link_type warnings when types appear < min_uses", async () => {
+    const root = tempRoot();
+    writeIndex(root, { name: "Test Graph", description: "x" });
+    writeLinksConfig(root, `min_uses: 2\ntypes: {}\n`);
+
+    // 'rare' is used once; 'common' is used twice
+    fs.writeFileSync(
+      path.join(root, "alpha.md"),
+      `---\nname: Alpha\ndescription: x\nlinks:\n  - to: /beta\n    type: rare\n  - to: /gamma\n    type: common\n---\n`
     );
-    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
+    fs.writeFileSync(
+      path.join(root, "beta.md"),
+      `---\nname: Beta\ndescription: y\nlinks:\n  - to: /gamma\n    type: common\n---\n`
+    );
+    fs.writeFileSync(
+      path.join(root, "gamma.md"),
+      `---\nname: Gamma\ndescription: z\n---\n`
+    );
 
     const store = await compile(root);
-    const undeclared = (await store.getWarnings()).filter(
-      (w) => w.type === "undeclared_link_type"
-    );
-    expect(undeclared).toHaveLength(0);
+    const warnings = (await store.getWarnings()).filter((w) => w.type === "underused_link_type");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toContain('"rare"');
+    expect(warnings[0].message).toContain("1 time");
   });
 
-  it("warns on implicit 'mentions' edges under strict when mentions is not declared", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), {
-      name: "Link Types",
-      description: "Vocab",
-      enforce: "strict",
-    });
-    writeLinkType("owns", "owns", "Operational control.");
-    writeIndex(
-      path.join(root, "a"),
-      { name: "A", description: "A" },
-      "See [B](/b) for details."
+  it("emits no underused warnings when min_uses: 0 (default)", async () => {
+    const root = tempRoot();
+    writeIndex(root, { name: "Test Graph", description: "x" });
+    writeLinksConfig(root, `types: {}\n`);
+    fs.writeFileSync(
+      path.join(root, "alpha.md"),
+      `---\nname: Alpha\ndescription: x\nlinks:\n  - to: /beta\n    type: rare\n---\n`
     );
-    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
+    fs.writeFileSync(
+      path.join(root, "beta.md"),
+      `---\nname: Beta\ndescription: y\n---\n`
+    );
 
     const store = await compile(root);
-    const undeclared = (await store.getWarnings()).filter(
-      (w) => w.type === "undeclared_link_type"
-    );
-    expect(undeclared).toHaveLength(1);
-    expect(undeclared[0].path).toBe("/a");
-    expect(undeclared[0].message).toContain('"mentions"');
-  });
-
-  it("dedupes multiple edges from the same source using the same undeclared type (strict)", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), {
-      name: "Link Types",
-      description: "Vocab",
-      enforce: "strict",
-    });
-    writeLinkType("owns", "owns", "Operational control.");
-    writeIndex(path.join(root, "a"), {
-      name: "A",
-      description: "A",
-      links: [
-        { to: "/b", type: "foo" },
-        { to: "/c", type: "foo" },
-      ],
-    });
-    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
-    writeIndex(path.join(root, "c"), { name: "C", description: "C" });
-
-    const store = await compile(root);
-    const undeclared = (await store.getWarnings()).filter(
-      (w) => w.type === "undeclared_link_type" && w.path === "/a"
-    );
-    expect(undeclared).toHaveLength(1);
-  });
-
-  it("under enforce: [list], warns only when a listed type is used without a declaration", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), {
-      name: "Link Types",
-      description: "Vocab",
-      // Only `affects` is governed; `extends`, `informs` etc. can fly free.
-      enforce: ["affects", "realized-by"],
-    });
-    writeIndex(path.join(root, "a"), {
-      name: "A",
-      description: "A",
-      links: [
-        { to: "/b", type: "extends" },     // not in enforce list → silent
-        { to: "/b", type: "affects" },     // in list, undeclared → warn
-        { to: "/b", type: "informs" },     // not in list → silent
-      ],
-    });
-    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
-
-    const store = await compile(root);
-    const undeclared = (await store.getWarnings()).filter(
-      (w) => w.type === "undeclared_link_type"
-    );
-    expect(undeclared).toHaveLength(1);
-    expect(undeclared[0].message).toContain('"affects"');
-  });
-
-  it("under enforce: [list], a listed type with a /linkTypes/{stem}.md does not warn", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), {
-      name: "Link Types",
-      description: "Vocab",
-      enforce: ["affects"],
-    });
-    writeLinkType("affects", "affects", "Source changes the behavior of target.");
-    writeIndex(path.join(root, "a"), {
-      name: "A",
-      description: "A",
-      links: [{ to: "/b", type: "affects" }],
-    });
-    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
-
-    const store = await compile(root);
-    const undeclared = (await store.getWarnings()).filter(
-      (w) => w.type === "undeclared_link_type"
-    );
-    expect(undeclared).toHaveLength(0);
-  });
-
-  it("treats enforce: [] (empty list) as off", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), {
-      name: "Link Types",
-      description: "Vocab",
-      enforce: [],
-    });
-    writeIndex(path.join(root, "a"), {
-      name: "A",
-      description: "A",
-      links: [{ to: "/b", type: "foo" }],
-    });
-    writeIndex(path.join(root, "b"), { name: "B", description: "B" });
-
-    const store = await compile(root);
-    const undeclared = (await store.getWarnings()).filter(
-      (w) => w.type === "undeclared_link_type"
-    );
-    expect(undeclared).toHaveLength(0);
+    expect(
+      (await store.getWarnings()).filter((w) => w.type === "underused_link_type")
+    ).toHaveLength(0);
   });
 });
 
@@ -838,94 +741,53 @@ describe("Compiler — Leaf .md Files", () => {
   });
 });
 
-describe("Compiler — /linkTypes/ collection", () => {
-  let root: string;
+describe("Compiler — /linkTypes/ legacy advisory", () => {
+  it("logs a one-line advisory when /linkTypes/ exists but _links/config.yaml is missing", async () => {
+    const root = tempRoot();
+    writeIndex(root, { name: "Test Graph", description: "x" });
+    fs.mkdirSync(path.join(root, "linkTypes"));
+    fs.writeFileSync(
+      path.join(root, "linkTypes/index.md"),
+      `---\nname: Link Types\ndescription: legacy\n---\n`
+    );
 
-  beforeEach(() => {
-    root = createTempDir();
-  });
-
-  afterEach(() => {
+    const logs: string[] = [];
+    const origLog = console.log;
+    console.log = (...a: unknown[]) => logs.push(a.map(String).join(" "));
+    try {
+      await compile(root);
+    } finally {
+      console.log = origLog;
+    }
     rmrf(root);
+
+    const advisory = logs.find((l) => l.includes("/linkTypes/ Things found"));
+    expect(advisory).toBeDefined();
+    expect(advisory).toContain("0.9.0");
   });
 
-  it("indexes /linkTypes/*.md leaf files by filename stem", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), {
-      name: "Link Types",
-      description: "Declared relationship vocabulary",
-    });
+  it("does not log the advisory when _links/config.yaml is present", async () => {
+    const root = tempRoot();
+    writeIndex(root, { name: "Test Graph", description: "x" });
+    fs.mkdirSync(path.join(root, "linkTypes"));
     fs.writeFileSync(
-      path.join(root, "linkTypes", "owns.md"),
-      "---\nname: owns\ndescription: The source entity has operational control of the target.\n---\n"
+      path.join(root, "linkTypes/index.md"),
+      `---\nname: Link Types\ndescription: legacy\n---\n`
     );
-    fs.writeFileSync(
-      path.join(root, "linkTypes", "depends-on.md"),
-      "---\nname: depends-on\ndescription: The source cannot function without the target.\n---\n"
-    );
+    writeLinksConfig(root, `types: {}\n`);
 
-    const store = await compile(root);
-    const linkTypes = await store.getLinkTypes();
+    const logs: string[] = [];
+    const origLog = console.log;
+    console.log = (...a: unknown[]) => logs.push(a.map(String).join(" "));
+    try {
+      await compile(root);
+    } finally {
+      console.log = origLog;
+    }
+    rmrf(root);
 
-    expect(linkTypes.size).toBe(2);
-    expect(linkTypes.get("owns")).toEqual({
-      name: "owns",
-      description: "The source entity has operational control of the target.",
-      path: "/linkTypes/owns",
-    });
-    expect(linkTypes.get("depends-on")).toEqual({
-      name: "depends-on",
-      description: "The source cannot function without the target.",
-      path: "/linkTypes/depends-on",
-    });
-  });
-
-  it("does not include /linkTypes/index.md itself as a linkType", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), {
-      name: "Link Types",
-      description: "Declared vocabulary",
-    });
-    fs.writeFileSync(
-      path.join(root, "linkTypes", "owns.md"),
-      "---\nname: owns\ndescription: Ownership relation.\n---\n"
-    );
-
-    const store = await compile(root);
-    const linkTypes = await store.getLinkTypes();
-
-    // /linkTypes landing page should not be treated as a linkType itself
-    expect(linkTypes.has("")).toBe(false);
-    expect(Array.from(linkTypes.keys())).toEqual(["owns"]);
-  });
-
-  it("returns an empty map when the graph has no /linkTypes/ collection", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "clients"), { name: "Clients", description: "Clients" });
-
-    const store = await compile(root);
-    const linkTypes = await store.getLinkTypes();
-
-    expect(linkTypes.size).toBe(0);
-  });
-
-  it("uses filename stem as canonical key even when frontmatter name differs", async () => {
-    // The spec is explicit: filename stem is the canonical key so link
-    // references stay stable even if the display name changes.
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
-    fs.writeFileSync(
-      path.join(root, "linkTypes", "owns.md"),
-      "---\nname: \"Ownership (legal/operational)\"\ndescription: Controls the target.\n---\n"
-    );
-
-    const store = await compile(root);
-    const linkTypes = await store.getLinkTypes();
-
-    // Keyed on the stem, not the display name
-    expect(linkTypes.has("owns")).toBe(true);
-    expect(linkTypes.has("Ownership (legal/operational)")).toBe(false);
-    expect(linkTypes.get("owns")!.name).toBe("Ownership (legal/operational)");
+    const advisory = logs.find((l) => l.includes("/linkTypes/ Things found"));
+    expect(advisory).toBeUndefined();
   });
 });
 

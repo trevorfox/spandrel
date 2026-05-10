@@ -6,10 +6,13 @@ import type {
   SpandrelEdge,
   ValidationWarning,
   HistoryEntry,
+  LinkTypeInfo,
 } from "./types.js";
 import type { GraphStore } from "../storage/graph-store.js";
 import { InMemoryGraphStore } from "../storage/in-memory-graph-store.js";
 import { matchCompanionFile, isCompanionFile } from "./companion-files.js";
+import { loadLinksConfig } from "../links/config.js";
+import type { LinkRegistry } from "../links/types.js";
 
 const INLINE_LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/g;
 
@@ -91,14 +94,31 @@ export async function compile(rootDir: string): Promise<GraphStore> {
   const nodes = new Map<string, SpandrelNode>();
   const edges: SpandrelEdge[] = [];
   const warnings: ValidationWarning[] = [];
+  const linkRegistry = loadLinksConfig(rootDir);
+
+  // Legacy advisory: graph still has /linkTypes/ Things from < 0.9.0?
+  const legacyDir = path.join(rootDir, "linkTypes");
+  const newConfig = path.join(rootDir, "_links", "config.yaml");
+  if (fs.existsSync(legacyDir) && !fs.existsSync(newConfig)) {
+    console.log(
+      `[spandrel] Note: /linkTypes/ Things found, but link-type declarations now live in _links/config.yaml (see CHANGELOG for 0.9.0).`
+    );
+  }
 
   walkTree(rootDir, rootDir, nodes, edges, warnings);
-  validate(nodes, edges, warnings);
+  validate(nodes, edges, linkRegistry, warnings);
 
   const store = new InMemoryGraphStore();
   for (const node of nodes.values()) await store.setNode(node);
   await store.replaceEdges(edges);
   await store.replaceWarnings(warnings);
+
+  const linkTypes = new Map<string, LinkTypeInfo>();
+  for (const [stem, entry] of linkRegistry.types) {
+    linkTypes.set(stem, { stem, description: entry.description });
+  }
+  await store.replaceLinkTypes(linkTypes);
+
   return store;
 }
 
@@ -157,7 +177,8 @@ export async function recompileNode(
   const warnings: ValidationWarning[] = [...compileWarnings];
   const allNodes = new Map<string, SpandrelNode>();
   for (const node of await store.getAllNodes()) allNodes.set(node.path, node);
-  validate(allNodes, await store.getEdges(), warnings);
+  const linkRegistry = loadLinksConfig(rootDir);
+  validate(allNodes, await store.getEdges(), linkRegistry, warnings);
   await store.replaceWarnings(warnings);
 }
 
@@ -643,55 +664,73 @@ async function rebuildChildren(store: GraphStore): Promise<void> {
   }
 }
 
-const LINK_TYPE_PATH_PREFIX = "/linkTypes/";
-const LINK_TYPES_INDEX_PATH = "/linkTypes";
-
-function collectDeclaredLinkTypes(nodes: Map<string, SpandrelNode>): Set<string> {
-  const result = new Set<string>();
-  for (const node of nodes.values()) {
-    if (!node.path.startsWith(LINK_TYPE_PATH_PREFIX)) continue;
-    const rest = node.path.slice(LINK_TYPE_PATH_PREFIX.length);
-    if (rest.length === 0 || rest.includes("/")) continue;
-    result.add(rest);
+/**
+ * Emit `unknown_link_type` warnings for any linkType used on an edge but
+ * absent from the registry's `types:` map, ONLY when `enforce: true`.
+ *
+ * Replaces the previous `/linkTypes/index.md` `enforce: strict | [list]`
+ * mechanism. The list-mode is dropped — in a single-registry world a type
+ * is either declared or it isn't.
+ */
+function emitUnknownLinkTypeWarnings(
+  edges: SpandrelEdge[],
+  registry: LinkRegistry,
+  warnings: ValidationWarning[]
+): void {
+  if (!registry.enforce) return;
+  const seen = new Set<string>();
+  for (const edge of edges) {
+    if (edge.type !== "link" || !edge.linkType) continue;
+    if (registry.types.has(edge.linkType)) continue;
+    const key = `${edge.from} ${edge.linkType}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    warnings.push({
+      path: edge.from,
+      type: "unknown_link_type",
+      message: `Link edge uses linkType "${edge.linkType}" which is not declared in _links/config.yaml. Add it to the registry, or use an existing type.`,
+    });
   }
-  return result;
 }
 
 /**
- * Per-type opt-in for the `undeclared_link_type` warning. Read from the
- * `/linkTypes/index.md` frontmatter `enforce` field:
+ * Emit `underused_link_type` warnings for any linkType that appears in
+ * the graph fewer than `registry.minUses` times. Reuse-discipline as a
+ * quality lever — denoising is the actual GraphRAG-anti-pattern guardrail.
  *
- *   enforce: strict             — warn on every undeclared linkType used
- *   enforce: [affects, owns]    — warn only when the listed types are used
- *                                 without a corresponding /linkTypes/{stem}.md
- *   (absent)                    — no warnings
- *
- * Default off; authors opt into governance for the types that warrant it.
- * The old "any declaration triggers all undeclared warnings" behavior is
- * available as `enforce: strict`.
+ * Counts only types that ARE used. Declared-but-unused types are out of
+ * scope (scaffolding ahead is allowed).
  */
-type LinkTypeEnforcement =
-  | { mode: "off" }
-  | { mode: "strict" }
-  | { mode: "list"; types: Set<string> };
-
-function getLinkTypeEnforcement(
-  nodes: Map<string, SpandrelNode>
-): LinkTypeEnforcement {
-  const indexNode = nodes.get(LINK_TYPES_INDEX_PATH);
-  if (!indexNode) return { mode: "off" };
-  const enforce = indexNode.frontmatter.enforce;
-  if (enforce === "strict") return { mode: "strict" };
-  if (Array.isArray(enforce) && enforce.length > 0) {
-    const types = new Set(enforce.map((t) => String(t)));
-    return { mode: "list", types };
+function emitUnderusedLinkTypeWarnings(
+  edges: SpandrelEdge[],
+  registry: LinkRegistry,
+  warnings: ValidationWarning[]
+): void {
+  if (registry.minUses <= 1) return;
+  const counts = new Map<string, { count: number; samplePath: string }>();
+  for (const edge of edges) {
+    if (edge.type !== "link" || !edge.linkType) continue;
+    const cur = counts.get(edge.linkType);
+    if (cur) {
+      cur.count++;
+    } else {
+      counts.set(edge.linkType, { count: 1, samplePath: edge.from });
+    }
   }
-  return { mode: "off" };
+  for (const [stem, { count, samplePath }] of counts) {
+    if (count >= registry.minUses) continue;
+    warnings.push({
+      path: samplePath,
+      type: "underused_link_type",
+      message: `Link type "${stem}" used ${count} time${count === 1 ? "" : "s"} across the graph (min_uses: ${registry.minUses}). Consider reusing an existing type or extending the registry.`,
+    });
+  }
 }
 
 function validate(
   nodes: Map<string, SpandrelNode>,
   edges: SpandrelEdge[],
+  registry: LinkRegistry,
   warnings: ValidationWarning[]
 ): void {
   for (const node of nodes.values()) {
@@ -732,29 +771,8 @@ function validate(
     }
   }
 
-  // Undeclared linkType warnings — opt-in per `/linkTypes/index.md` frontmatter.
-  // Default (no `enforce` field): silent. `enforce: strict`: warn on every
-  // undeclared type used. `enforce: [list]`: warn only when the listed types
-  // are used without a matching `/linkTypes/{stem}.md`.
-  const declaredLinkTypes = collectDeclaredLinkTypes(nodes);
-  const enforcement = getLinkTypeEnforcement(nodes);
-  if (enforcement.mode !== "off") {
-    const seen = new Set<string>();
-    for (const edge of edges) {
-      if (edge.type !== "link") continue;
-      if (!edge.linkType) continue;
-      if (declaredLinkTypes.has(edge.linkType)) continue;
-      if (enforcement.mode === "list" && !enforcement.types.has(edge.linkType)) continue;
-      const key = `${edge.from}\u0000${edge.linkType}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      warnings.push({
-        path: edge.from,
-        type: "undeclared_link_type",
-        message: `Link edge uses undeclared linkType "${edge.linkType}" — add /linkTypes/${edge.linkType}.md to document the relationship.`,
-      });
-    }
-  }
+  emitUnknownLinkTypeWarnings(edges, registry, warnings);
+  emitUnderusedLinkTypeWarnings(edges, registry, warnings);
 
   // Check for unlisted children. Skip `navigable: false` children — companion
   // documents (DESIGN, SKILL, etc.) and other intentionally non-navigable
