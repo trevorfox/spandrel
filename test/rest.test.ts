@@ -80,10 +80,10 @@ describe("REST — wire surface", () => {
       name: "Alpha",
       description: "The alpha project",
     }, "Alpha is ongoing.");
-    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
+    fs.mkdirSync(path.join(root, "_links"), { recursive: true });
     fs.writeFileSync(
-      path.join(root, "linkTypes", "active_project.md"),
-      "---\nname: active_project\ndescription: A live engagement.\n---\n"
+      path.join(root, "_links", "config.yaml"),
+      `types:\n  active_project:\n    description: Active client engagement.\n`
     );
 
     harness = await startHarness(root, adminPolicy);
@@ -274,8 +274,8 @@ describe("REST — wire surface", () => {
       expect(r.status).toBe(200);
       const body = await r.json();
       expect(body.linkTypes.length).toBeGreaterThan(0);
-      const names = body.linkTypes.map((lt: { name: string }) => lt.name);
-      expect(names).toContain("active_project");
+      const stems = body.linkTypes.map((lt: { stem: string }) => lt.stem);
+      expect(stems).toContain("active_project");
     });
   });
 
