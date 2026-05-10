@@ -8,6 +8,11 @@ function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "spandrel-test-"));
 }
 
+/** Create a temp dir that callers manage manually (no beforeEach/afterEach needed). */
+function tempRoot(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "spandrel-test-"));
+}
+
 function writeIndex(dir: string, frontmatter: Record<string, unknown>, content = "") {
   fs.mkdirSync(dir, { recursive: true });
   const fm = Object.entries(frontmatter)
@@ -427,6 +432,51 @@ describe("Compiler — _links/config.yaml enforce", () => {
       (w) => w.type === "unknown_link_type"
     );
     expect(warnings).toHaveLength(0);
+  });
+
+  it("emits underused_link_type warnings when types appear < min_uses", async () => {
+    const root = tempRoot();
+    writeIndex(root, { name: "Test Graph", description: "x" });
+    writeLinksConfig(root, `min_uses: 2\ntypes: {}\n`);
+
+    // 'rare' is used once; 'common' is used twice
+    fs.writeFileSync(
+      path.join(root, "alpha.md"),
+      `---\nname: Alpha\ndescription: x\nlinks:\n  - to: /beta\n    type: rare\n  - to: /gamma\n    type: common\n---\n`
+    );
+    fs.writeFileSync(
+      path.join(root, "beta.md"),
+      `---\nname: Beta\ndescription: y\nlinks:\n  - to: /gamma\n    type: common\n---\n`
+    );
+    fs.writeFileSync(
+      path.join(root, "gamma.md"),
+      `---\nname: Gamma\ndescription: z\n---\n`
+    );
+
+    const store = await compile(root);
+    const warnings = (await store.getWarnings()).filter((w) => w.type === "underused_link_type");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toContain('"rare"');
+    expect(warnings[0].message).toContain("1 time");
+  });
+
+  it("emits no underused warnings when min_uses: 0 (default)", async () => {
+    const root = tempRoot();
+    writeIndex(root, { name: "Test Graph", description: "x" });
+    writeLinksConfig(root, `types: {}\n`);
+    fs.writeFileSync(
+      path.join(root, "alpha.md"),
+      `---\nname: Alpha\ndescription: x\nlinks:\n  - to: /beta\n    type: rare\n---\n`
+    );
+    fs.writeFileSync(
+      path.join(root, "beta.md"),
+      `---\nname: Beta\ndescription: y\n---\n`
+    );
+
+    const store = await compile(root);
+    expect(
+      (await store.getWarnings()).filter((w) => w.type === "underused_link_type")
+    ).toHaveLength(0);
   });
 });
 

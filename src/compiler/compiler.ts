@@ -676,6 +676,40 @@ function emitUnknownLinkTypeWarnings(
   }
 }
 
+/**
+ * Emit `underused_link_type` warnings for any linkType that appears in
+ * the graph fewer than `registry.minUses` times. Reuse-discipline as a
+ * quality lever — denoising is the actual GraphRAG-anti-pattern guardrail.
+ *
+ * Counts only types that ARE used. Declared-but-unused types are out of
+ * scope (scaffolding ahead is allowed).
+ */
+function emitUnderusedLinkTypeWarnings(
+  edges: SpandrelEdge[],
+  registry: LinkRegistry,
+  warnings: ValidationWarning[]
+): void {
+  if (registry.minUses <= 1) return;
+  const counts = new Map<string, { count: number; samplePath: string }>();
+  for (const edge of edges) {
+    if (edge.type !== "link" || !edge.linkType) continue;
+    const cur = counts.get(edge.linkType);
+    if (cur) {
+      cur.count++;
+    } else {
+      counts.set(edge.linkType, { count: 1, samplePath: edge.from });
+    }
+  }
+  for (const [stem, { count, samplePath }] of counts) {
+    if (count >= registry.minUses) continue;
+    warnings.push({
+      path: samplePath,
+      type: "underused_link_type",
+      message: `Link type "${stem}" used ${count} time${count === 1 ? "" : "s"} across the graph (min_uses: ${registry.minUses}). Consider reusing an existing type or extending the registry.`,
+    });
+  }
+}
+
 function validate(
   nodes: Map<string, SpandrelNode>,
   edges: SpandrelEdge[],
@@ -721,6 +755,7 @@ function validate(
   }
 
   emitUnknownLinkTypeWarnings(edges, registry, warnings);
+  emitUnderusedLinkTypeWarnings(edges, registry, warnings);
 
   // Check for unlisted children. Skip `navigable: false` children — companion
   // documents (DESIGN, SKILL, etc.) and other intentionally non-navigable
