@@ -98,7 +98,7 @@ function renderEdges(
     const header =
       stem === "__untyped__"
         ? "Links"
-        : typeInfo?.name ?? stem;
+        : typeInfo?.stem ?? stem;
     const desc = typeInfo?.description ?? "";
     blocks.push(`
       <div class="group">
