@@ -14,10 +14,19 @@ A node is a Thing in the graph. Every node has a `name` and `description` in its
 
 ## Two forms
 
-- **Leaf node** — a single file like `foo.md`. Cannot have children. Good for simple Things that won't grow.
-- **Composite node** — a directory with `foo/index.md`. Can have children (other files in the directory) and companion files. Good for Things that have sub-Things or need [design docs](/content-model/design-md).
+- **Leaf node** — a single file like `foo.md`. Cannot have children. Good for Things that read better as a single coherent text than as parts.
+- **Composite node** — a directory with `foo/index.md`. Can have children (other files in the directory) and companion files. Good for Things with sub-Things, [design docs](/content-model/design-md), or content that benefits from being individually addressable.
 
 If both `foo.md` and `foo/index.md` exist, the directory wins.
+
+### Choosing leaf vs. composite
+
+The mechanical choice is shape (does it have children?). The deeper choice is consumption: **what must be understood together stays together; what's optional or related lives at one remove.**
+
+- **Leaf** when the parts are interdependent and only make sense as a continuous read. Splitting forces a bet on the reader retrieving all the parts; keeping together guarantees coherent consumption.
+- **Composite** when sub-parts are individually addressable, optional, or carry their own internal structure. Each child should stand on its own and be worth retrieving without its siblings.
+
+Three sections that argue toward a single thesis belong in one leaf. Three siblings that each describe a distinct concept belong in a composite. Section count alone doesn't decide it — the question is whether the parts read better together or separately.
 
 ## Frontmatter
 
@@ -31,6 +40,8 @@ description: One-line summary — enough to decide whether to read further
 ```
 
 Optional frontmatter includes `links`, `tags`, `author`, and any domain-specific fields.
+
+See [authorship](/patterns/authorship) for what makes a good `name` and `description`.
 
 ## Node vs. document
 

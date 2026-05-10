@@ -99,6 +99,8 @@ The compiler generates backlinks automatically. If `/clients/acme` links to `/pe
 
 ## Guidelines
 
+See [authorship](/patterns/authorship) for the broader authorship discipline that covers names, descriptions, and link descriptions together; the guidelines below cover what's specific to edges.
+
 - **Link, don't nest.** If a relationship is encoded as directory hierarchy, you probably want a link instead.
 - **Per-edge `description:` is the primary semantic carrier.** It's where the specific relationship between *this source* and *this target* lives. The `/linkTypes/` description, when it exists, only says what's true across all uses of the type — strictly less specific. Author edges as if `description:` is required.
 - **Prefer timeless structural claims over implementation specifics.** Edge descriptions like *"verifies `STRIPE_WEBHOOK_SECRET` via `constructEventAsync`"* drift on refactor. *"Verifies signed inbound webhooks before any processing"* survives. Implementation specifics belong in the node body, where they're versioned alongside the code they describe; edge descriptions should describe *roles* and *intent*.
