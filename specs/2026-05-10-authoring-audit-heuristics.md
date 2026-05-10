@@ -119,10 +119,18 @@ Add `weak_description` advisory warning to the compiler. Runs the cheap heuristi
 
 ### 3. `spandrel-author` skill (`SKILL.md` companion + activation rules)
 
-Skill activates when authoring inside a Spandrel graph (e.g., editing `*.md` files with Spandrel frontmatter). Loads `/patterns/authorship` + `/hypothesis` as context. Surfaces principles inline; suggests rewrites for descriptions the author is editing; can call out to `spandrel audit` for batch reports.
+Skill activates when authoring inside a Spandrel graph (e.g., editing `*.md` files with Spandrel frontmatter). Surfaces principles inline; suggests rewrites for descriptions the author is editing; can call out to `spandrel audit` for batch reports.
 
-**Pros:** Catches issues at write time, where it's cheapest to fix; loads principles on-demand instead of having authors memorize them.
-**Cons:** Tool-specific (Claude Code skills aren't portable); requires harness support.
+**The skill body references the knowledge — it does not hardcode it.** The skill is instruction (when to activate, which patterns to consult, how to surface findings); the actual principles, examples, and heuristics live in `/patterns/authorship`, `/hypothesis`, and this spec, loaded on demand via MCP when the skill is active. This respects instruction/knowledge separation, keeps the docs as single source of truth, and applies the recursive Spandrel reference to skills themselves: skills don't duplicate the principles, they point at where the principles live. The skill body is small and stable; the knowledge it points to evolves freely.
+
+A well-formed `spandrel-author` skill body looks like:
+
+> *When the user is editing a markdown file with Spandrel frontmatter (`name:` and `description:` fields, optional `links:` array), load `/patterns/authorship` and `/hypothesis` into context. Apply the audit heuristics from `specs/2026-05-10-authoring-audit-heuristics.md` to the file being edited. Surface findings inline; suggest rewrites that follow the improvement templates; never auto-apply.*
+
+That's instruction — short, stable, points at the canonical knowledge. Compare to the anti-pattern: a 5kb skill body that copies the patterns content verbatim, drifts as `/patterns/authorship` evolves, and forces the agent to read the same principles twice (once from the skill, once from the graph).
+
+**Pros:** Catches issues at write time, where it's cheapest to fix; loads principles on-demand from their canonical home; small skill body stays in sync with evolving docs.
+**Cons:** Tool-specific (Claude Code skills aren't portable); requires harness support; depends on graph being reachable when skill activates (acceptable since the skill targets graph-authoring sessions).
 
 ### 4. Viewer drawer affordance
 
