@@ -549,7 +549,7 @@ describe("MCP Server", () => {
   });
 });
 
-describe("MCP — buildInstructions and /linkTypes/", () => {
+describe("MCP — buildInstructions", () => {
   let root: string;
 
   beforeEach(() => {
@@ -560,30 +560,24 @@ describe("MCP — buildInstructions and /linkTypes/", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it("includes a 'Link types declared in this graph' block when /linkTypes/ exists", async () => {
+  it("does not include a link-types vocabulary block (removed in 0.9)", async () => {
     writeIndex(root, { name: "Test Graph", description: "A graph with link types" });
-    writeIndex(path.join(root, "linkTypes"), {
-      name: "Link Types",
-      description: "Declared vocabulary",
-    });
+    fs.mkdirSync(path.join(root, "_links"), { recursive: true });
     fs.writeFileSync(
-      path.join(root, "linkTypes", "owns.md"),
-      "---\nname: owns\ndescription: The source entity has operational control of the target.\n---\n"
+      path.join(root, "_links", "config.yaml"),
+      `types:\n  owns:\n    description: control.\n`
     );
     fs.writeFileSync(
-      path.join(root, "linkTypes", "depends-on.md"),
-      "---\nname: depends-on\ndescription: The source cannot function without the target.\n---\n"
+      path.join(root, "alpha.md"),
+      `---\nname: Alpha\ndescription: x\n---\n`
     );
 
     const store = await compile(root);
     const instructions = await buildInstructions(store);
-
-    expect(instructions).toContain("Link types declared in this graph:");
-    expect(instructions).toContain("- owns — The source entity has operational control of the target.");
-    expect(instructions).toContain("- depends-on — The source cannot function without the target.");
+    expect(instructions).not.toContain("Link types declared in this graph");
   });
 
-  it("omits the link-types block entirely when graph has no /linkTypes/ collection", async () => {
+  it("still renders graph name and collections without link-types block", async () => {
     writeIndex(root, { name: "Bare Graph", description: "No linkTypes" });
     writeIndex(path.join(root, "clients"), { name: "Clients", description: "Clients" });
 
@@ -591,33 +585,10 @@ describe("MCP — buildInstructions and /linkTypes/", () => {
     const instructions = await buildInstructions(store);
 
     expect(instructions).not.toContain("Link types declared in this graph:");
-    // Sanity: the rest of the instructions block still renders
     expect(instructions).toContain("Bare Graph");
   });
 
-  it("truncates the link-types list at 20 entries with an overflow marker", async () => {
-    writeIndex(root, { name: "Big Vocab", description: "Many link types" });
-    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
-    // Declare 25 link types — more than the 20-entry cap.
-    for (let i = 0; i < 25; i++) {
-      const stem = `rel-${i.toString().padStart(2, "0")}`;
-      fs.writeFileSync(
-        path.join(root, "linkTypes", `${stem}.md`),
-        `---\nname: ${stem}\ndescription: Relationship ${i} description.\n---\n`
-      );
-    }
-
-    const store = await compile(root);
-    const instructions = await buildInstructions(store);
-
-    // Only first 20 are rendered by name; the rest are folded into the overflow line.
-    expect(instructions).toContain("- rel-00");
-    expect(instructions).toContain("- rel-19");
-    expect(instructions).not.toContain("- rel-20 — Relationship 20");
-    expect(instructions).toContain("…and 5 more");
-  });
-
-  it("context tool surfaces linkTypeDescription for declared linkTypes", async () => {
+  it("context tool does NOT surface linkTypeDescription on edges (removed in 0.9)", async () => {
     writeIndex(root, { name: "Root", description: "Root" }, "Welcome.");
     writeIndex(path.join(root, "clients"), { name: "Clients", description: "Clients" });
     writeIndex(path.join(root, "clients", "acme"), {
@@ -626,10 +597,10 @@ describe("MCP — buildInstructions and /linkTypes/", () => {
       links: [{ to: "/clients/globex", type: "owns", description: "Acquired 2024" }],
     });
     writeIndex(path.join(root, "clients", "globex"), { name: "Globex", description: "Sub" });
-    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
+    fs.mkdirSync(path.join(root, "_links"), { recursive: true });
     fs.writeFileSync(
-      path.join(root, "linkTypes", "owns.md"),
-      "---\nname: owns\ndescription: The source entity has operational or legal control of the target.\n---\n"
+      path.join(root, "_links", "config.yaml"),
+      `types:\n  owns:\n    description: The source entity has operational or legal control of the target.\n`
     );
 
     const store = await compile(root);
@@ -646,27 +617,8 @@ describe("MCP — buildInstructions and /linkTypes/", () => {
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     const ctx = JSON.parse(text);
     const owns = ctx.outgoing.find((o: { linkType: string }) => o.linkType === "owns");
-    expect(owns.linkTypeDescription).toBe(
-      "The source entity has operational or legal control of the target."
-    );
-  });
-
-  it("truncates long link-type descriptions to keep the block within budget", async () => {
-    writeIndex(root, { name: "Verbose Graph", description: "Verbose linkType desc" });
-    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
-    const longDesc = "x".repeat(800);
-    fs.writeFileSync(
-      path.join(root, "linkTypes", "bloated.md"),
-      `---\nname: bloated\ndescription: "${longDesc}"\n---\n`
-    );
-
-    const store = await compile(root);
-    const instructions = await buildInstructions(store);
-
-    expect(instructions).toContain("- bloated — ");
-    // The summary should be truncated with an ellipsis, not the full 800 chars.
-    const bloatedLine = instructions.split("\n").find((l) => l.startsWith("- bloated"))!;
-    expect(bloatedLine.length).toBeLessThan(800);
-    expect(bloatedLine.endsWith("…")).toBe(true);
+    expect(owns.linkType).toBe("owns");                // type label still there
+    expect(owns.linkDescription).toBeDefined();         // per-edge description still there
+    expect(owns.linkTypeDescription).toBeUndefined();  // type-level prose is gone
   });
 });
