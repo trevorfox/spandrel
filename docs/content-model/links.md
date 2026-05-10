@@ -24,8 +24,8 @@ links:
 ```
 
 - `to` — the path of the target node (required)
-- `type` — a label for the relationship class (optional). Acts as the linkType on the resulting edge. When a matching `/linkTypes/{type}.md` exists, tools surface that type's general description alongside the edge — see `patterns/linking`.
-- `description` — the primary semantic carrier. A short note about *this specific edge*, in terms of *this source* and *this target*. Author edges as if it's required; the `type`-level description (if declared) is only a generic backstop.
+- `type` — a label for the relationship class (optional). Acts as the `linkType` on the resulting edge.
+- `description` — the primary semantic carrier. A short note about *this specific edge*, in terms of *this source* and *this target*. Author edges as if it's required; it is the entire semantic surface visible at traversal time.
 
 ## Inline markdown links
 
@@ -33,18 +33,22 @@ links:
 
 ## Link type descriptions
 
-Link types are free-form by default. `/linkTypes/` is **opt-in scaffolding for graph-local vocabulary** — relationship classes whose meaning isn't self-evident from the type name. Declare custom-domain types (`realized-by`, `affects`, `informs`, anything specific to this graph) as Things under a top-level `/linkTypes/` [collection](/patterns/collections):
+Link types are free-form by default. `_links/config.yaml` is **opt-in scaffolding for graph-local vocabulary** — relationship classes whose meaning isn't self-evident from the type name. Declare custom-domain types (`realized-by`, `affects`, `informs`, anything specific to this graph) as entries in `_links/config.yaml`:
 
+```yaml
+# _links/config.yaml
+types:
+  realized-by:
+    description: Target is the concrete implementation of the abstract spec at the source.
+  affects:
+    description: Source's behavior depends on or is materially altered by target.
+  informs:
+    description: Target shapes the design of source without being a hard dependency.
 ```
-docs/linkTypes/
-├── realized-by.md
-├── affects.md
-└── informs.md
-```
 
-Each file is indexed by filename stem; its description appears on every edge using that linkType via the wire surface's `linkTypeDescription` field and in the MCP instructions block.
+The registry is an **authoring artifact** — compile-time governance, author-side discoverability, definitions for graph-local jargon. It is not pushed into agent context. Agents see edge-level `type` (the label) and `description` (per-edge prose); that is the entire semantic surface at traversal time.
 
-Plain-English types whose meaning is self-evident — `owns`, `depends-on`, `relates-to`, `mentions`, `supersedes` — don't need declaration. The shared linkType description is necessarily generic (it applies to every edge of that type); per-edge `description:` is where load-bearing semantics live. See `patterns/linking` for the full framing.
+Plain-English types whose meaning is self-evident — `owns`, `depends-on`, `relates-to`, `mentions`, `supersedes` — don't need declaration. See [patterns/linking](/patterns/linking) for governance knobs (`enforce`, `min_uses`) and the full framing.
 
 ## Backlinks
 
