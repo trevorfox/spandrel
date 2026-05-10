@@ -741,94 +741,53 @@ describe("Compiler — Leaf .md Files", () => {
   });
 });
 
-describe("Compiler — /linkTypes/ collection", () => {
-  let root: string;
+describe("Compiler — /linkTypes/ legacy advisory", () => {
+  it("logs a one-line advisory when /linkTypes/ exists but _links/config.yaml is missing", async () => {
+    const root = tempRoot();
+    writeIndex(root, { name: "Test Graph", description: "x" });
+    fs.mkdirSync(path.join(root, "linkTypes"));
+    fs.writeFileSync(
+      path.join(root, "linkTypes/index.md"),
+      `---\nname: Link Types\ndescription: legacy\n---\n`
+    );
 
-  beforeEach(() => {
-    root = createTempDir();
-  });
-
-  afterEach(() => {
+    const logs: string[] = [];
+    const origLog = console.log;
+    console.log = (...a: unknown[]) => logs.push(a.map(String).join(" "));
+    try {
+      await compile(root);
+    } finally {
+      console.log = origLog;
+    }
     rmrf(root);
+
+    const advisory = logs.find((l) => l.includes("/linkTypes/ Things found"));
+    expect(advisory).toBeDefined();
+    expect(advisory).toContain("0.9.0");
   });
 
-  it("indexes /linkTypes/*.md leaf files by filename stem", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), {
-      name: "Link Types",
-      description: "Declared relationship vocabulary",
-    });
+  it("does not log the advisory when _links/config.yaml is present", async () => {
+    const root = tempRoot();
+    writeIndex(root, { name: "Test Graph", description: "x" });
+    fs.mkdirSync(path.join(root, "linkTypes"));
     fs.writeFileSync(
-      path.join(root, "linkTypes", "owns.md"),
-      "---\nname: owns\ndescription: The source entity has operational control of the target.\n---\n"
+      path.join(root, "linkTypes/index.md"),
+      `---\nname: Link Types\ndescription: legacy\n---\n`
     );
-    fs.writeFileSync(
-      path.join(root, "linkTypes", "depends-on.md"),
-      "---\nname: depends-on\ndescription: The source cannot function without the target.\n---\n"
-    );
+    writeLinksConfig(root, `types: {}\n`);
 
-    const store = await compile(root);
-    const linkTypes = await store.getLinkTypes();
+    const logs: string[] = [];
+    const origLog = console.log;
+    console.log = (...a: unknown[]) => logs.push(a.map(String).join(" "));
+    try {
+      await compile(root);
+    } finally {
+      console.log = origLog;
+    }
+    rmrf(root);
 
-    expect(linkTypes.size).toBe(2);
-    expect(linkTypes.get("owns")).toEqual({
-      name: "owns",
-      description: "The source entity has operational control of the target.",
-      path: "/linkTypes/owns",
-    });
-    expect(linkTypes.get("depends-on")).toEqual({
-      name: "depends-on",
-      description: "The source cannot function without the target.",
-      path: "/linkTypes/depends-on",
-    });
-  });
-
-  it("does not include /linkTypes/index.md itself as a linkType", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), {
-      name: "Link Types",
-      description: "Declared vocabulary",
-    });
-    fs.writeFileSync(
-      path.join(root, "linkTypes", "owns.md"),
-      "---\nname: owns\ndescription: Ownership relation.\n---\n"
-    );
-
-    const store = await compile(root);
-    const linkTypes = await store.getLinkTypes();
-
-    // /linkTypes landing page should not be treated as a linkType itself
-    expect(linkTypes.has("")).toBe(false);
-    expect(Array.from(linkTypes.keys())).toEqual(["owns"]);
-  });
-
-  it("returns an empty map when the graph has no /linkTypes/ collection", async () => {
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "clients"), { name: "Clients", description: "Clients" });
-
-    const store = await compile(root);
-    const linkTypes = await store.getLinkTypes();
-
-    expect(linkTypes.size).toBe(0);
-  });
-
-  it("uses filename stem as canonical key even when frontmatter name differs", async () => {
-    // The spec is explicit: filename stem is the canonical key so link
-    // references stay stable even if the display name changes.
-    writeIndex(root, { name: "Root", description: "Root" });
-    writeIndex(path.join(root, "linkTypes"), { name: "Link Types", description: "Vocab" });
-    fs.writeFileSync(
-      path.join(root, "linkTypes", "owns.md"),
-      "---\nname: \"Ownership (legal/operational)\"\ndescription: Controls the target.\n---\n"
-    );
-
-    const store = await compile(root);
-    const linkTypes = await store.getLinkTypes();
-
-    // Keyed on the stem, not the display name
-    expect(linkTypes.has("owns")).toBe(true);
-    expect(linkTypes.has("Ownership (legal/operational)")).toBe(false);
-    expect(linkTypes.get("owns")!.name).toBe("Ownership (legal/operational)");
+    const advisory = logs.find((l) => l.includes("/linkTypes/ Things found"));
+    expect(advisory).toBeUndefined();
   });
 });
 

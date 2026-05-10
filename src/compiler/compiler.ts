@@ -95,6 +95,15 @@ export async function compile(rootDir: string): Promise<GraphStore> {
   const warnings: ValidationWarning[] = [];
   const linkRegistry = loadLinksConfig(rootDir);
 
+  // Legacy advisory: graph still has /linkTypes/ Things from < 0.9.0?
+  const legacyDir = path.join(rootDir, "linkTypes");
+  const newConfig = path.join(rootDir, "_links", "config.yaml");
+  if (fs.existsSync(legacyDir) && !fs.existsSync(newConfig)) {
+    console.log(
+      `[spandrel] Note: /linkTypes/ Things found, but link-type declarations now live in _links/config.yaml (see CHANGELOG for 0.9.0).`
+    );
+  }
+
   walkTree(rootDir, rootDir, nodes, edges, warnings);
   validate(nodes, edges, linkRegistry, warnings);
 
