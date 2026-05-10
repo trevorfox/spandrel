@@ -23,7 +23,7 @@ A REST wire surface supports the same abstract operations every other surface do
 - List its children, links, and backlinks
 - Search the graph
 - Extract a subgraph rooted at a path
-- Write a node (create, update, delete) — gated by the policy's write authority
+- Write a node (create, update, move, delete) — gated by the policy's write authority. Move and delete cascade frontmatter-link rewrites across every declared-link referrer so renames and removals don't leave the graph dangling.
 
 How those operations map to URL patterns and HTTP methods is a reference-implementation choice, not a spec mandate.
 

@@ -2,6 +2,19 @@
 
 All notable changes to Spandrel are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The stable surface for consumers is documented in [PUBLIC-API.md](./PUBLIC-API.md).
 
+## [0.8.1] — 2026-05-09
+
+Documentation catch-up for the 0.8.0 graph-mutations surface. No code changes; PUBLIC-API.md, CLI reference, and REST spec table now match what shipped in 0.8.0.
+
+### Documentation
+
+- **`PUBLIC-API.md`** — added 0.8.0 entry to the versioning history covering `move_thing`, `POST /node/{path}/move`, `spandrel mv` / `rm`, and the breaking `delete_thing` / `DELETE /node/{path}` cascade default.
+- **`docs/architecture/cli.md`** — added `mv` and `rm` to the commands list with their access-policy and primitive-sharing relationship to the MCP write tools.
+- **`docs/architecture/rest.md`** — operations summary now lists `move` alongside `create`/`update`/`delete` and notes the cascade behavior.
+- **`src/rest/design.md`** — URL-pattern table now lists `POST /node/{...path}/move` and the `?cascade=remove-link` query parameter on `DELETE /node/{...path}`.
+
+---
+
 ## [0.8.0] — 2026-05-09
 
 Graph mutations — move, delete, and cascade-rewrite across the full author-facing surface (CLI, MCP, REST). Plus two compiler resilience fixes folded in: malformed YAML frontmatter no longer crashes the compile, and concurrent watcher events no longer leave stale hierarchy edges.

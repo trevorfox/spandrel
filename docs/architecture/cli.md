@@ -24,8 +24,10 @@ Commands:
 - **dev** — compile, watch for file changes, serve the [REST](/architecture/rest) wire surface and the web viewer
 - **mcp** — compile, watch, serve the [MCP server](/architecture/mcp) over stdio
 - **publish** — emit a static bundle (`graph.json` + SPA) for hosting on a CDN
+- **mv** — rename or move a node, rewriting every referrer's frontmatter links automatically. Previews the edit plan; requires `--yes` to mutate the filesystem. `--dry-run` previews and exits 0.
+- **rm** — delete a node and its subtree. Refuses by default when inbound declared-link referrers exist; `--cascade` strips dead link entries from every referrer's frontmatter before deleting. Previews the edit plan; requires `--yes` to mutate.
 
-Both `dev` and `mcp` construct the [Access Policy](/architecture/access-policy) at boot and pass it to the wire surface they serve. `publish` does not — its output is a static read-only bundle.
+Both `dev` and `mcp` construct the [Access Policy](/architecture/access-policy) at boot and pass it to the wire surface they serve. `publish` does not — its output is a static read-only bundle. `mv` and `rm` mutate the filesystem directly and are the CLI peers of the [MCP](/architecture/mcp) `move_thing` and `delete_thing` write tools — both surfaces consume the same underlying mutations primitive (cascade-rewrites declared links; surfaces inline-mention warnings as `danglingMentions`).
 
 The `dev` server exposes per-node static routes alongside the full REST surface:
 
