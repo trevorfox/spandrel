@@ -1,6 +1,6 @@
 ---
 name: Content Model
-description: How Spandrel knowledge graphs are shaped — nodes, links, paths, and companion files
+description: What Spandrel knowledge graphs are made of — markdown Things addressed by file path, organized via directory hierarchy, connected via frontmatter links, with companion files for design docs and agent instructions
 links:
   - to: /philosophy
     type: relates-to

@@ -1,6 +1,6 @@
 ---
 name: Architecture
-description: How Spandrel works — compile, store, serve through a single access policy
+description: Spandrel's three phases — compile markdown to graph, store in a pluggable backend, serve via REST and MCP through one access policy
 links:
   - to: /content-model
     type: relates-to

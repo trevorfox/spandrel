@@ -1,6 +1,6 @@
 ---
 name: Onboarding
-description: The onboarding flow as a compiled subgraph — paths, templates, guardrails, and hooks for agent-guided graph setup
+description: Agent-guided graph setup — five paths matched to user starting materials, templates for common scenarios, and guardrails for execution traps. Onboarding lives in the graph itself so agents consume it via MCP during the session that builds the graph.
 links:
   - to: /patterns/frameworks
     type: relates-to
