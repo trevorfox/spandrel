@@ -8,7 +8,6 @@ import {
 import {
   getOutgoingLinks,
   getIncomingLinks,
-  lookupLinkTypeDescription,
 } from "../graph-ops.js";
 
 export const NODE_PREFIX = "/node";
@@ -29,7 +28,6 @@ export interface NodeReference {
   description?: string;
   linkType: string | null;
   linkDescription: string | null;
-  linkTypeDescription: string | null;
 }
 
 export interface NodeJson {
@@ -176,7 +174,6 @@ async function collectVisibleReferences(
     to: string;
     type: string | null;
     description: string | null;
-    linkTypeDescription: string | null;
   }>
 ): Promise<NodeReference[]> {
   const targetMap = await store.getNodes(refs.map((r) => r.to));
@@ -192,7 +189,6 @@ async function collectVisibleReferences(
       description: accessLevelAtLeast(level, "description") ? target?.description : undefined,
       linkType: ref.type,
       linkDescription: ref.description,
-      linkTypeDescription: ref.linkTypeDescription,
     });
   }
   return out;
@@ -209,9 +205,7 @@ export async function shapeGraphEdge(
   fromLevel: AccessLevel,
   toLevel: AccessLevel
 ): Promise<(ShapedEdge & { _links: { from: { href: string }; to: { href: string } } }) | null> {
-  const linkTypes = await store.getLinkTypes();
-  const linkTypeDescription = lookupLinkTypeDescription(linkTypes, edge.linkType);
-  const shaped = policy.shapeEdge(edge, fromLevel, toLevel, linkTypeDescription);
+  const shaped = policy.shapeEdge(edge, fromLevel, toLevel);
   if (!shaped) return null;
   return {
     ...shaped,
