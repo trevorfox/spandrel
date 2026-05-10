@@ -89,6 +89,10 @@ function frontmatter(name: string, description: string): string {
   return `---\nname: ${q(name)}\ndescription: ${q(description)}\n---\n`;
 }
 
+// YAML-safe: quote if the value contains characters that trip the parser.
+const needsQuote = (s: string) => /[:#\-\[\]{}&*!|>'"%@`]/.test(s) || s.startsWith(" ") || s.endsWith(" ");
+const q = (s: string) => (needsQuote(s) ? JSON.stringify(s) : s);
+
 export function scaffoldInit(absDir: string, opts: InitOptions): InitResult {
   const rootIndex = path.join(absDir, "index.md");
   if (fs.existsSync(rootIndex)) {
@@ -109,21 +113,26 @@ export function scaffoldInit(absDir: string, opts: InitOptions): InitResult {
 
   write(".gitignore", "node_modules/\ndist/\n.env*\n.DS_Store\n");
 
-  const linkTypeNames = BASELINE_LINK_TYPES.map((t) => t.stem).join(", ");
-  const linkTypesBody = `This collection declares the link types used in this graph. Each file under this directory (${linkTypeNames}) names one relationship class and describes when to use it. The filename stem is the canonical key that frontmatter \`links[].type\` values reference.
+  // Scaffold _links/config.yaml — the link-type registry.
+  // Type names are self-explanatory; descriptions are offered for authors.
+  const linksConfigBody =
+    `# Link-type registry. The YAML key is the canonical type name (the\n` +
+    `# stem that frontmatter \`links[].type:\` values reference). Descriptions\n` +
+    `# are optional — type names should be self-explanatory.\n` +
+    `#\n` +
+    `# Governance (both default off):\n` +
+    `#   enforce: true       — warn on any type used in the graph but absent below\n` +
+    `#   min_uses: N         — warn when a type appears in fewer than N edges\n` +
+    `\n` +
+    `enforce: false\n` +
+    `min_uses: 0\n` +
+    `\n` +
+    `types:\n` +
+    BASELINE_LINK_TYPES.map(
+      (lt) => `  ${lt.stem}:\n    description: ${q(lt.description)}\n`
+    ).join("");
 
-Declaring a type here attaches its description to every edge that uses it, so agents and humans can see what a relationship means without following another hop. The vocabulary is deliberately small — prefer extending an existing type's description over adding a new type, and keep the namespace flat.
-`;
-  write(
-    "linkTypes/index.md",
-    frontmatter("Link Types", "The declared vocabulary of relationships used in this graph.") +
-      "\n" +
-      linkTypesBody
-  );
-
-  for (const lt of BASELINE_LINK_TYPES) {
-    write(`linkTypes/${lt.stem}.md`, frontmatter(lt.name, lt.description) + "\n");
-  }
+  write("_links/config.yaml", linksConfigBody);
 
   write(".github/workflows/publish.yml", PUBLISH_WORKFLOW);
 

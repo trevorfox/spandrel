@@ -50,29 +50,21 @@ describe("spandrel init — scaffold", () => {
     expect(gi).toContain(".DS_Store");
   });
 
-  it("writes linkTypes/index.md as a composite landing page", () => {
+  it("writes _links/config.yaml with the baseline link-type vocabulary", () => {
     scaffoldInit(root, { name: "x", description: "y" });
-    const raw = fs.readFileSync(path.join(root, "linkTypes/index.md"), "utf-8");
-    const parsed = matter(raw);
-    expect(parsed.data.name).toBe("Link Types");
-    expect(parsed.data.description).toBeTruthy();
-    // Every baseline stem should be mentioned somewhere in the landing page
-    // so the compiler does not emit unlisted_child warnings.
+    const yamlPath = path.join(root, "_links/config.yaml");
+    expect(fs.existsSync(yamlPath)).toBe(true);
+    const body = fs.readFileSync(yamlPath, "utf-8");
+    expect(body).toContain("enforce: false");
+    expect(body).toContain("min_uses: 0");
     for (const lt of BASELINE_LINK_TYPES) {
-      expect(raw).toContain(lt.stem);
+      expect(body).toContain(`  ${lt.stem}:`);
     }
   });
 
-  it("writes one leaf .md per baseline link type, each with name + description", () => {
+  it("does not scaffold a /linkTypes/ Things collection (removed in 0.9)", () => {
     scaffoldInit(root, { name: "x", description: "y" });
-    for (const lt of BASELINE_LINK_TYPES) {
-      const filePath = path.join(root, "linkTypes", `${lt.stem}.md`);
-      expect(fs.existsSync(filePath)).toBe(true);
-      const parsed = matter(fs.readFileSync(filePath, "utf-8"));
-      expect(parsed.data.name).toBe(lt.name);
-      expect(typeof parsed.data.description).toBe("string");
-      expect((parsed.data.description as string).length).toBeGreaterThan(40);
-    }
+    expect(fs.existsSync(path.join(root, "linkTypes"))).toBe(false);
   });
 
   it("seeds exactly 10 baseline link types", () => {
@@ -142,8 +134,9 @@ describe("spandrel init — idempotency", () => {
     // Existing file is untouched
     expect(fs.readFileSync(path.join(root, "index.md"), "utf-8")).toBe(existing);
 
-    // No linkTypes collection was scaffolded
+    // No files were scaffolded (linkTypes/ and _links/ both absent)
     expect(fs.existsSync(path.join(root, "linkTypes"))).toBe(false);
+    expect(fs.existsSync(path.join(root, "_links"))).toBe(false);
   });
 });
 
@@ -158,7 +151,7 @@ describe("spandrel init — compilability", () => {
     rmrf(root);
   });
 
-  it("produces a graph that compiles cleanly: 12 nodes, no warnings, 10 linkTypes", async () => {
+  it("produces a graph that compiles cleanly: 1 node, no warnings, 10 linkTypes", async () => {
     scaffoldInit(root, {
       name: "Test Graph",
       description: "A graph for verifying init output",
@@ -169,15 +162,10 @@ describe("spandrel init — compilability", () => {
     const warnings = await store.getWarnings();
     const linkTypes = await store.getLinkTypes();
 
-    expect(nodes).toHaveLength(12); // root + linkTypes landing + 10 leaves
-    expect(warnings).toEqual([]);
+    expect(warnings).toHaveLength(0);
+    // After init, only the root index node exists (linkTypes/ was removed)
+    expect(nodes).toHaveLength(1);
+    // Registry has 10 baseline types
     expect(linkTypes.size).toBe(10);
-
-    for (const lt of BASELINE_LINK_TYPES) {
-      const info = linkTypes.get(lt.stem);
-      expect(info).toBeDefined();
-      expect(info!.name).toBe(lt.name);
-      expect(info!.description).toBe(lt.description);
-    }
   });
 });
