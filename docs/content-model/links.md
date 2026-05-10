@@ -27,6 +27,8 @@ links:
 - `type` — a label for the relationship class (optional). Acts as the `linkType` on the resulting edge.
 - `description` — the primary semantic carrier. A short note about *this specific edge*, in terms of *this source* and *this target*. Author edges as if it's required; it is the entire semantic surface visible at traversal time.
 
+See [authorship](/patterns/authorship) for the broader discipline that covers names, descriptions, and link descriptions together.
+
 ## Inline markdown links
 
 `[label](/internal/path)` in node content also produces link edges, tagged `linkType: "mentions"`. The label becomes the edge's description. Use frontmatter when the relationship has a name that matters; use inline links for incidental prose references.
