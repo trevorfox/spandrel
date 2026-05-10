@@ -6,6 +6,7 @@ import type {
   SpandrelEdge,
   ValidationWarning,
   HistoryEntry,
+  LinkTypeInfo,
 } from "./types.js";
 import type { GraphStore } from "../storage/graph-store.js";
 import { InMemoryGraphStore } from "../storage/in-memory-graph-store.js";
@@ -111,6 +112,13 @@ export async function compile(rootDir: string): Promise<GraphStore> {
   for (const node of nodes.values()) await store.setNode(node);
   await store.replaceEdges(edges);
   await store.replaceWarnings(warnings);
+
+  const linkTypes = new Map<string, LinkTypeInfo>();
+  for (const [stem, entry] of linkRegistry.types) {
+    linkTypes.set(stem, { stem, description: entry.description });
+  }
+  await store.replaceLinkTypes(linkTypes);
+
   return store;
 }
 
