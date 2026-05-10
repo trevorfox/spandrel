@@ -183,8 +183,8 @@
     { "from": "/projects/migration", "to": "/people/jane-doe", "type": "link" }
   ],
   "linkTypes": [
-    { "name": "Owned By", "description": "Source node is owned, managed, or stewarded by the target.", "path": "/linkTypes/owned-by" },
-    { "name": "Depends On", "description": "Source node requires the target to function correctly.", "path": "/linkTypes/depends-on" }
+    { "stem": "owned-by", "description": "Source node is owned, managed, or stewarded by the target." },
+    { "stem": "depends-on", "description": "Source node requires the target to function correctly." }
   ],
   "warnings": [
     { "path": "/people", "type": "missing_description", "message": "Node /people has no description frontmatter." },
