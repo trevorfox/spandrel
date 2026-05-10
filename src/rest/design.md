@@ -17,7 +17,8 @@ Reference implementation of the [REST](../../docs/architecture/rest.md) wire sur
 | GET | `/content/{...path}` | `content.ts` | text/markdown body of the node |
 | GET | `/node/{...path}` | `node.ts` | shaped node JSON with HAL `_links`, optional `?depth` and `?includeContent` |
 | PUT | `/node/{...path}` | `node.ts` | create/update a node — body is JSON `ThingData` |
-| DELETE | `/node/{...path}` | `node.ts` | delete a node and its subtree |
+| DELETE | `/node/{...path}` | `node.ts` | delete a node and its subtree. Refuses (HTTP 400) when inbound declared-link referrers exist; pass `?cascade=remove-link` to strip the dead link entries from every referrer's frontmatter as part of the deletion |
+| POST | `/node/{...path}/move` | `node.ts` | rename or move a node. Body: `{ "to": "/new/path" }`. Cascades frontmatter rewrites to every declared-link referrer; returns `{ success, from, to, moveResult, warnings }` with `danglingMentions` listing inline prose mentions that were not auto-rewritten |
 | GET | `/graph?root=&depth=` | `graph.ts` | subgraph rooted at `root` to depth `depth` |
 | GET | `/search?q=&path=` | `search.ts` | keyword search results, scoped optionally to a subtree |
 | GET | `/linkTypes` | `linkTypes.ts` | declared link-type vocabulary |
