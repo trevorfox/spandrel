@@ -1,6 +1,6 @@
 ---
 name: Deployment
-description: How to run Spandrel — local development and production patterns
+description: Three deployment modes — local in-memory dev, static + flat-file MCP for read-only publishing, and a hosted live backend when you need writes, identity-aware reads, or federation
 links:
   - to: /architecture
     type: relates-to

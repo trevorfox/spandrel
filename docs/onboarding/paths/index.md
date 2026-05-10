@@ -1,6 +1,6 @@
 ---
 name: Paths
-description: Five entry points matched to what the user is working with — empty, bulk, survey, existing, or code
+description: Five entry points matched to user starting materials — different inventory rules and seeding steps for empty, bulk, survey, existing, or code starts. One linear flow would force inappropriate prompts.
 links:
   - to: /onboarding
     type: part-of
