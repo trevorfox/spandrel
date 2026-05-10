@@ -15,12 +15,11 @@ const yaml = require("js-yaml");
  */
 export function loadLinksConfig(rootDir: string): LinkRegistry {
   const configPath = path.join(rootDir, "_links", "config.yaml");
-  if (!fs.existsSync(configPath)) return cloneEmpty();
-
   let raw: string;
   try {
     raw = fs.readFileSync(configPath, "utf-8");
   } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return cloneEmpty();
     console.error(`[spandrel] failed to read ${configPath}:`, err);
     return cloneEmpty();
   }
@@ -37,10 +36,16 @@ export function loadLinksConfig(rootDir: string): LinkRegistry {
   const obj = parsed as Record<string, unknown>;
 
   const enforce = obj.enforce === true;
-  const minUses =
-    typeof obj.min_uses === "number" && Number.isFinite(obj.min_uses) && obj.min_uses >= 0
-      ? Math.floor(obj.min_uses)
-      : 0;
+  let minUses = 0;
+  if (obj.min_uses !== undefined) {
+    if (Number.isInteger(obj.min_uses) && (obj.min_uses as number) >= 0) {
+      minUses = obj.min_uses as number;
+    } else {
+      console.error(
+        `[spandrel] min_uses in ${configPath} must be a non-negative integer; got ${JSON.stringify(obj.min_uses)} — defaulting to 0.`
+      );
+    }
+  }
 
   const types = new Map<string, LinkTypeEntry>();
   const typesField = obj.types;

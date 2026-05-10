@@ -84,5 +84,25 @@ describe("loadLinksConfig", () => {
     );
     const reg = loadLinksConfig(root);
     expect(reg.types.size).toBe(1);
+    expect(reg.enforce).toBe(false);
+  });
+
+  it("rejects non-integer or negative min_uses with a warning, defaults to 0", () => {
+    const root = tempRoot();
+    fs.mkdirSync(path.join(root, "_links"));
+    fs.writeFileSync(
+      path.join(root, "_links/config.yaml"),
+      `min_uses: 2.9\ntypes: {}\n`
+    );
+    const errs: unknown[] = [];
+    const origErr = console.error;
+    console.error = (...a: unknown[]) => errs.push(a);
+    try {
+      const reg = loadLinksConfig(root);
+      expect(reg.minUses).toBe(0);
+      expect(errs.length).toBeGreaterThan(0);
+    } finally {
+      console.error = origErr;
+    }
   });
 });
