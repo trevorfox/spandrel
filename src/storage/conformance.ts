@@ -262,54 +262,53 @@ export function runConformanceTests(createStore: () => GraphStore): void {
     });
 
     describe("getLinkTypes", () => {
-      it("returns an empty map when no /linkTypes/* nodes exist", async () => {
+      it("returns an empty map by default", async () => {
         expect(await store.getLinkTypes()).toEqual(new Map());
       });
 
-      it("returns an empty map when unrelated nodes exist", async () => {
-        await store.setNode(makeNode("/"));
-        await store.setNode(makeNode("/clients"));
-        expect(await store.getLinkTypes()).toEqual(new Map());
-      });
-
-      it("indexes direct children of /linkTypes/ by filename stem", async () => {
-        await store.setNode(makeNode("/linkTypes", { name: "Link Types", description: "Vocab" }));
-        await store.setNode(makeNode("/linkTypes/owns", {
-          name: "owns",
-          description: "The source controls the target.",
-        }));
-        await store.setNode(makeNode("/linkTypes/depends-on", {
-          name: "depends-on",
-          description: "Source cannot function without target.",
-        }));
-
+      it("returns whatever was last passed to replaceLinkTypes", async () => {
+        await store.replaceLinkTypes(
+          new Map([
+            ["owns", { stem: "owns", description: "The source controls the target." }],
+            ["depends-on", { stem: "depends-on", description: "Source cannot function without target." }],
+          ])
+        );
         const linkTypes = await store.getLinkTypes();
         expect(linkTypes.size).toBe(2);
         expect(linkTypes.get("owns")).toEqual({
-          name: "owns",
+          stem: "owns",
           description: "The source controls the target.",
-          path: "/linkTypes/owns",
         });
         expect(linkTypes.get("depends-on")).toEqual({
-          name: "depends-on",
+          stem: "depends-on",
           description: "Source cannot function without target.",
-          path: "/linkTypes/depends-on",
         });
       });
 
-      it("excludes the /linkTypes landing page itself", async () => {
-        await store.setNode(makeNode("/linkTypes", { name: "Link Types", description: "Vocab" }));
-        await store.setNode(makeNode("/linkTypes/owns", {
-          name: "owns",
-          description: "Controls target.",
-        }));
+      it("supports types without descriptions", async () => {
+        await store.replaceLinkTypes(
+          new Map([["owns", { stem: "owns" }]])
+        );
         const linkTypes = await store.getLinkTypes();
-        expect(Array.from(linkTypes.keys())).toEqual(["owns"]);
+        expect(linkTypes.get("owns")).toEqual({ stem: "owns" });
       });
 
-      it("does not include nodes outside /linkTypes/", async () => {
-        await store.setNode(makeNode("/linkTypesReservation", { name: "Unrelated", description: "" }));
-        await store.setNode(makeNode("/other/linkTypes", { name: "Unrelated", description: "" }));
+      it("replaceLinkTypes overwrites prior contents", async () => {
+        await store.replaceLinkTypes(
+          new Map([["a", { stem: "a", description: "first" }]])
+        );
+        await store.replaceLinkTypes(
+          new Map([["b", { stem: "b", description: "second" }]])
+        );
+        const linkTypes = await store.getLinkTypes();
+        expect(Array.from(linkTypes.keys())).toEqual(["b"]);
+      });
+
+      it("does not auto-populate from /linkTypes/ Things (removed in 0.9)", async () => {
+        // Setting nodes under /linkTypes/ no longer populates the registry —
+        // the registry is sourced from _links/config.yaml at compile time.
+        await store.setNode(makeNode("/linkTypes", { name: "Link Types", description: "Vocab" }));
+        await store.setNode(makeNode("/linkTypes/owns", { name: "owns", description: "x" }));
         expect(await store.getLinkTypes()).toEqual(new Map());
       });
     });
