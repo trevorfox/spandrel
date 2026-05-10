@@ -27,6 +27,8 @@ A description answers: "Is this the Thing I'm looking for, and is it worth readi
 **Good:** `Quarterly architecture review process — runs first Monday of each quarter, produces decisions logged in /decisions/`
 **Bad:** `Architecture reviews`
 
+See [authorship](/patterns/authorship) for the broader discipline that covers names, descriptions, and link descriptions together.
+
 ## For index.md files (collections)
 
 A [collection](/patterns/collections)'s index.md should summarize what's below. Not just list children — describe the space.
@@ -47,3 +49,13 @@ for what a well-formed client looks like.
 ## For agents
 
 Agents use progressive disclosure to navigate efficiently. `get_node` with `depth=2` gives names and descriptions for two levels — enough to orient without reading full content. Only call `get_content` when you've found the right node.
+
+## Path-scale: progressive disclosure across the walk
+
+Progressive disclosure operates at two scales. Within a single node — name → description → content → children — the reader decides at each level whether to go deeper. Across a sequence of MCP calls, the *traversal itself* discloses progressively:
+
+- **Orient** — the agent's first calls (root, top-level collections) deliver the lay of the land. What's here, what to skip, what the vocabulary is.
+- **Narrow** — middle calls follow edges toward task-relevant neighborhoods. Edge descriptions point direction; the agent commits less, learns more, with each step.
+- **Resolve** — final calls deliver the full content of the Thing(s) that answer the work. Further traversal would be scope creep.
+
+Same principle, applied to the walk rather than the page. The agent walks; the graph hands it increasingly specific information at each step. See [authorship](/patterns/authorship) for what makes the descriptions and edge descriptions at each step high-signal.
