@@ -74,6 +74,14 @@
     "schemaType": {
       "type": "string",
       "description": "Override for `@type` inference in static-publish JSON-LD output (e.g. `Organization`, `Person`)"
+    },
+    "schema": {
+      "type": "object",
+      "description": "Collection-schema declaration (DESIGN.md only): a JSON Schema, Draft 2020-12, validating each member's frontmatter. Opaque to the framework-wide validator."
+    },
+    "graph": {
+      "type": "object",
+      "description": "Collection-schema declaration (DESIGN.md only): Spandrel-specific block declaring link semantics, required subcollections, and naming patterns for collection members. See specs/2026-05-10-collection-schemas.md."
     }
   }
 }

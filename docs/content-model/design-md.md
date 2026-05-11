@@ -29,3 +29,14 @@ The deeper role is that design docs are how Spandrel stays configurable without 
 ## What makes a good design doc
 
 A good `design.md` says "we chose X because Y, and the alternative Z was rejected because W." A bad one just describes what the code does. Design docs should be decisions, not descriptions.
+
+## Collection schemas
+
+A `DESIGN.md` on a collection can carry two optional top-level frontmatter keys that the compiler validates at build time:
+
+- **`schema:`** — a JSON Schema document (Draft 2020-12) validating every member's frontmatter. Required fields, types, enums, formats, patterns.
+- **`graph:`** — a small Spandrel-specific block declaring expected outgoing-link types, required subcollections, and naming patterns that JSON Schema can't naturally express.
+
+Both keys are optional. A `DESIGN.md` without them is the existing prose-only case and continues to work unchanged. When present, the audit pass walks the collection's members and surfaces violations as advisory `ValidationWarning`s — the same advisory pipeline as the WS-B1 description-quality findings. No errors; the compiler always exits 0.
+
+See `specs/2026-05-10-collection-schemas.md` for the full vocabulary, the meta-schema for the `graph:` block, and worked examples. The stable promotion of this content to `/patterns/collection-schemas` is tracked under WS-D4.

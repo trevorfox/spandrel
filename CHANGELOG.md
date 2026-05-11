@@ -17,6 +17,8 @@ All notable changes to Spandrel are documented here. The format is based on [Kee
 
 - **`spandrel audit --priority`** — now implemented; produces a ranked queue of findings prioritized by finding count, in-degree, and age. (WS-C2) Findings are grouped by node and scored as `findingCount + 1.5·inDegree + 0.005·ageDays` (in-degree dominates so heavy-fan-in nodes triage first). `--node` and `--kinds` filter before ranking. With `--format json`, emits `QueueItem[]` (`{ path, score, scoreBreakdown, warnings }`) sorted by score descending, alphabetical tiebreak. Null `updated` is treated as 0 age (no penalty for nodes without git history).
 
+- **Collection schemas implemented** — `DESIGN.md` files can now carry `schema:` (JSON Schema, Draft 2020-12) and `graph:` (Spandrel link-semantics extensions) frontmatter keys. Members are validated at compile time; violations surface as advisory `ValidationWarning`s through the same pipeline as the WS-B1 heuristic findings. Nine new warning codes: `missing_required_field`, `field_enum_violation`, `schema_violation`, `missing_required_link`, `disallowed_link_type`, `link_target_mismatch`, `missing_required_subcollection`, `naming_violation`, `invalid_graph_schema`. `spandrel audit --kinds` accepts all of them. Backed by Ajv 8 with Draft 2020-12 dialect, `strict: false`, `allErrors: true`. The `graph:` vocabulary is itself meta-validated; typos surface as `invalid_graph_schema` rather than silently disabling enforcement. Validation is opt-in per collection — a `DESIGN.md` without `schema:` / `graph:` continues to work unchanged. See `specs/2026-05-10-collection-schemas.md` for the full vocabulary. (WS-C3)
+
 ---
 
 ## [0.9.0] — 2026-05-09

@@ -14,6 +14,8 @@ Stable. Use these by default.
 
 ### Compiler
 
+`DESIGN.md` companion files can carry optional `schema:` (JSON Schema, Draft 2020-12) and `graph:` (Spandrel link-semantics extensions) frontmatter keys; the compiler validates every member of the surrounding collection at build time and surfaces violations as advisory `ValidationWarning`s. See `specs/2026-05-10-collection-schemas.md` for the vocabulary; see `docs/content-model/design-md.md` for the user-facing summary. Validation is opt-in per collection and never blocks compilation.
+
 ```ts
 import {
   compile,
@@ -176,7 +178,7 @@ The `spandrel` binary's subcommand surface is part of the stable public API — 
 - **`spandrel publish [root-dir] [--out <dir>] [--base <href>] [--static] [--site-url <url>] [--noindex] [--no-strip-private]`** — emit a static bundle for hosting.
 - **`spandrel mv <from> <to> [root-dir] [--dry-run] [--yes]`** — rename or move a node, cascading frontmatter-link rewrites across every referrer. Previews to stderr; requires `--yes` to mutate.
 - **`spandrel rm <path> [root-dir] [--cascade] [--dry-run] [--yes]`** — delete a node. Refuses by default when inbound declared-link referrers exist; `--cascade` strips dead link entries first. Previews to stderr; requires `--yes` to mutate.
-- **`spandrel audit [root-dir] [--kinds <list>] [--format human|json] [--node <path>] [--severity all|advisory|warning] [--priority]`** — query the advisory audit findings produced by the audit pass. Exits 0 in all normal cases (audit is advisory, never blocks). `--priority` groups findings by node and prints a ranked queue (heavy-fan-in, stale, weak-described nodes float to the top); score = `findingCount + 1.5·inDegree + 0.005·ageDays`. With `--format json`, `--priority` emits an array of `QueueItem` records: `{ path, score, scoreBreakdown: { findingCount, inDegree, ageDays }, warnings: ValidationWarning[] }` sorted by `score` descending, alphabetical tiebreak. `--node` and `--kinds` filter *before* ranking.
+- **`spandrel audit [root-dir] [--kinds <list>] [--format human|json] [--node <path>] [--severity all|advisory|warning] [--priority]`** — query the advisory audit findings produced by the audit pass. Exits 0 in all normal cases (audit is advisory, never blocks). `--priority` groups findings by node and prints a ranked queue (heavy-fan-in, stale, weak-described nodes float to the top); score = `findingCount + 1.5·inDegree + 0.005·ageDays`. With `--format json`, `--priority` emits an array of `QueueItem` records: `{ path, score, scoreBreakdown: { findingCount, inDegree, ageDays }, warnings: ValidationWarning[] }` sorted by `score` descending, alphabetical tiebreak. `--node` and `--kinds` filter *before* ranking. As of WS-C3, `--kinds` also accepts the collection-schema validator codes (`missing_required_field`, `field_enum_violation`, `schema_violation`, `missing_required_link`, `disallowed_link_type`, `link_target_mismatch`, `missing_required_subcollection`, `naming_violation`, `invalid_graph_schema`).
 
 `spandrel --version` (or `-v` / `version`) prints the installed package version.
 

@@ -96,8 +96,10 @@ async function dev(rootDir: string) {
   await addGitMetadata(store, rootDir);
   // Audit pass runs *after* git metadata so freshness detectors see
   // `updated` timestamps. Non-blocking — findings ride the same warnings
-  // pipeline as compile/validate warnings.
-  await runAuditPass(store);
+  // pipeline as compile/validate warnings. `rootDir` is passed so the
+  // collection-schema validator can discriminate directory-form from
+  // leaf-form members for `required_subcollections`.
+  await runAuditPass(store, undefined, rootDir);
   const warnings = await store.getWarnings();
   console.log(
     `[spandrel] Compiled: ${store.nodeCount} nodes, ${store.edgeCount} edges, ${warnings.length} warnings`
@@ -371,8 +373,10 @@ async function mcp(rootDir: string) {
 
   await addGitMetadata(store, rootDir);
   // Audit pass runs after git metadata so freshness detectors see
-  // `updated` timestamps. Non-blocking.
-  await runAuditPass(store);
+  // `updated` timestamps. Non-blocking. `rootDir` is passed so the
+  // collection-schema validator can discriminate directory-form from
+  // leaf-form members.
+  await runAuditPass(store, undefined, rootDir);
   const accessConfig = loadAccessConfig(rootDir);
   if (accessConfig) {
     console.error(`[spandrel] Access config loaded (${Object.keys(accessConfig.roles).length} roles)`);
@@ -535,7 +539,7 @@ async function compileOnly(argv: string[]) {
   // freshness detectors need `updated` timestamps. Both are no-ops on
   // non-git directories.
   await addGitMetadata(store, rootDir);
-  await runAuditPass(store);
+  await runAuditPass(store, undefined, rootDir);
   const warnings = await store.getWarnings();
   console.log(
     `Compiled: ${store.nodeCount} nodes, ${store.edgeCount} edges, ${warnings.length} warnings`
