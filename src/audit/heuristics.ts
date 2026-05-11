@@ -526,7 +526,11 @@ export function detectAbsoluteStaleness(
   if (updatedMs === null || nowMs === null) return null;
 
   const ageDays = (nowMs - updatedMs) / MS_PER_DAY;
-  if (ageDays < thresholdDays) return null;
+  // Strict comparison: exactly at threshold is clean. Matches the convention
+  // used by every other detector in this module (PR #16 + WS-A2's body
+  // density). Cross-detector coherence wins over the "anything older than 6
+  // months" reading.
+  if (ageDays <= thresholdDays) return null;
 
   return {
     kind: "staleness",
@@ -582,7 +586,8 @@ export function detectDifferentialStaleness(
     sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 
   const gapDays = (medianMs - nodeMs) / MS_PER_DAY;
-  if (gapDays < thresholdDays) return null;
+  // Strict: exactly at threshold is clean. Cross-detector coherence.
+  if (gapDays <= thresholdDays) return null;
 
   return {
     kind: "staleness",
@@ -628,7 +633,11 @@ export function detectHighFanInLowFreshness(
   if (updatedMs === null || nowMs === null) return null;
 
   const ageDays = (nowMs - updatedMs) / MS_PER_DAY;
-  if (ageDays < daysThreshold) return null;
+  // Strict on age (matches `detectAbsoluteStaleness`). `inDegree` keeps the
+  // `<` check above — exactly at the in-degree threshold still flags, by
+  // analogy with `detectThinness` (composite with >= minChildren still
+  // qualifies for the check).
+  if (ageDays <= daysThreshold) return null;
 
   return {
     kind: "staleness",

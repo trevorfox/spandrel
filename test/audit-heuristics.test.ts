@@ -718,17 +718,26 @@ describe("detectAbsoluteStaleness", () => {
     expect(finding).toBeNull();
   });
 
-  it("flags exactly at the threshold (>= semantics)", () => {
-    // 180 days old with threshold 180 → flagged. "Anything older than 6 months"
-    // is the user's intuition; treating the threshold as inclusive matches that.
+  it("does not flag exactly at the threshold (strict > semantics)", () => {
+    // 180 days old with threshold 180 → clean. Matches the strict-comparison
+    // convention shared by the description-level detectors (PR #16) and
+    // WS-A2's body-density detectors — readers shouldn't have to remember
+    // which detector uses which convention.
     const finding = detectAbsoluteStaleness(daysBeforeNow(180), NOW, 180);
-    expect(finding).not.toBeNull();
+    expect(finding).toBeNull();
   });
 
   it("does not flag just under the threshold", () => {
-    // Same idea, but one day shy of the threshold → no finding.
+    // One day shy of the threshold → no finding.
     const finding = detectAbsoluteStaleness(daysBeforeNow(179), NOW, 180);
     expect(finding).toBeNull();
+  });
+
+  it("flags one day past the threshold", () => {
+    // 181 days old with threshold 180 → flagged. Symmetric boundary coverage
+    // with the just-under and at-threshold cases above.
+    const finding = detectAbsoluteStaleness(daysBeforeNow(181), NOW, 180);
+    expect(finding).not.toBeNull();
   });
 
   it("respects a caller-supplied threshold", () => {
