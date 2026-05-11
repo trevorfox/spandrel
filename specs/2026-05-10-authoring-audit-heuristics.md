@@ -287,6 +287,14 @@ The first end-to-end run of `runAuditPass` against `docs/` (Phase B wiring) prod
 
 The bulk of the 231 `weak_edge_description` warnings (75 missing + 156 tautologous) are real: most `relates-to` edges in `docs/` were authored without descriptions in 0.x.
 
+## Scope and exemptions (WS-B1)
+
+When the audit pass runs inside the compile pipeline, two scope decisions shape what authors see. Both are sensible in context but worth surfacing — direct callers of `auditNode()` (e.g. the `spandrel-author` skill auditing a single file in isolation) inherit different defaults and may want to mirror these exemptions explicitly.
+
+**Companion documents are exempt from audit.** The audit pass skips any node with `kind === "document"` — the companion files DESIGN.md, SKILL.md, AGENT.md, README.md, CLAUDE.md, AGENTS.md. Companion files derive default names and descriptions from their filename when frontmatter is absent (see `defaultDescription` in `src/compiler/compiler.ts`), and those generic strings would reliably trip several detectors. Beyond the false-positive concern, the purpose of a companion file — design notes, agent instructions, human orientation — differs from an authored knowledge node; the heuristics in this spec are tuned for the latter. Implication for direct callers: `auditNode()` itself does not check `kind`. A caller auditing a companion file with default fallback content will receive findings the compiler suppresses. Apply the same `kind === "document"` skip when matching compiler behavior.
+
+**`inDegree` counts only `link`-type edges.** The fan-in input to `detectHighFanInLowFreshness` excludes hierarchy edges and `authored_by` edges. "Incoming reference" in the audit context means an *explicit semantic link* (a frontmatter `links:` entry or an inline-prose mention) — not a structural parent-child relationship. Hierarchy ancestry is universal: every non-root node has a parent edge pointing at it, so counting hierarchy would make every parent look like a hub and defeat the heuristic. The fan-in detector is looking for hubs in the agent traversal graph, which is the link layer, not the file tree.
+
 ## Status
 
 - This spec captures the methodology; the tooling is unbuilt.
