@@ -11,9 +11,11 @@ All notable changes to Spandrel are documented here. The format is based on [Kee
   - `--format human|json` — output format. Default `human` (path-grouped `path: [kind.subkind] message` lines); `json` emits the filtered array verbatim for tooling.
   - `--node <path>` — limit to a single node's findings. Leading slash optional.
   - `--severity all|advisory|warning` — future-proofing. Today every audit finding is advisory (no `severity` field on `ValidationWarning`), so `warning` silently filters everything out.
-  - `--priority` — reserved for a future prioritization pass (WS-C2). Prints a punt notice to stderr and exits 0.
+  - `--priority` — groups findings by node and prints a ranked queue (see next entry).
 
   Exits 0 in all normal cases — audit is advisory, never blocks. Bad arg parse exits 2; operational failure (unreadable dir, etc.) exits 1.
+
+- **`spandrel audit --priority`** — now implemented; produces a ranked queue of findings prioritized by finding count, in-degree, and age. (WS-C2) Findings are grouped by node and scored as `findingCount + 1.5·inDegree + 0.005·ageDays` (in-degree dominates so heavy-fan-in nodes triage first). `--node` and `--kinds` filter before ranking. With `--format json`, emits `QueueItem[]` (`{ path, score, scoreBreakdown, warnings }`) sorted by score descending, alphabetical tiebreak. Null `updated` is treated as 0 age (no penalty for nodes without git history).
 
 ---
 

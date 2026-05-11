@@ -38,6 +38,34 @@ Edge-level detectors all emit the same `weak_edge_description` finding kind; the
 
 The three staleness detectors share a single `Finding.kind = "staleness"` with `detail.subkind` distinguishing `absolute` / `differential` / `high_fanin` (G2 pattern). Freshness inputs (`updated`, `inDegree`, `neighborUpdates`, `now`) are optional on `NodeAuditInput`; detectors silently skip when their required inputs are absent.
 
+## Prioritization (WS-C2)
+
+The audit pass produces a flat list of findings. `buildPriorityQueue` in `priority.ts` groups them by node and ranks each node so that the highest-blast-radius problems surface first.
+
+**Score formula** — linear, transparent, debuggable:
+
+```
+score = findingCount * weights.findings
+      + inDegree    * weights.inDegree
+      + ageDays     * weights.age
+```
+
+Defaults (`DEFAULT_WEIGHTS`):
+
+| Weight | Value | Rationale |
+|---|---|---|
+| `findings` | `1.0` | Baseline. One point per finding. |
+| `inDegree` | `1.5` | In-degree dominates raw count: a hub node's findings cascade through every traversal that touches it, so a 1-finding 4-ref node outranks a 2-finding leaf. |
+| `age` | `0.005` | Slow ramp — roughly 1.8 points per year. Recent edits shouldn't drown out signal, but a multi-year-stale hub really should rise. |
+
+**Null `updated` is treated as 0 age**, not "infinitely old". A fresh file with no git history shouldn't be penalized harder than the oldest file in the repo. The `scoreBreakdown.ageDays` field still carries `null` so the renderer can show "age: n/a" instead of misleadingly showing 0d.
+
+**Negative ages are clamped to 0** (clock skew, future-dated commits). The score formula is monotonic in age, so negatives would subtract from the score — undesirable.
+
+**Tiebreak is alphabetical by path.** Stable across runs, doesn't depend on Map iteration order.
+
+`buildPriorityQueue` is pure — no I/O, no `new Date()`. The CLI (`cli-audit.ts`) joins the store-side metadata (in-degree via the same `link`-edge sweep `audit-pass.ts` uses; `updated` from `addGitMetadata`-augmented nodes) and passes it in. Non-audit `ValidationWarning`s (e.g. `broken_link`) are filtered out before ranking — only the six audit-pass warning types feed the queue.
+
 ## What this module is *not*
 
 - Not a config file. Tuning happens via function arguments at the call site, not via YAML in the graph. If a graph wants stricter or looser thresholds globally, the compiler-integration layer reads a config; this module stays pure.

@@ -15,8 +15,9 @@
  * - All audit findings are advisory today (G1 decision: no `severity` field on
  *   `ValidationWarning`). `--severity warning` is a no-op-style filter today —
  *   it silently filters out every finding. Documented as future-proofing.
- * - `--priority` is punted to WS-C2; this handler prints a notice and exits 0.
- *   Don't try to wire in a stub prioritizer here.
+ * - `--priority` (WS-C2) ranks findings by `(findingCount, inDegree, ageDays)`
+ *   and prints a queue ordered by score descending. Same compile pipeline as
+ *   the default invocation, just grouped + scored before render.
  * - Filters AND-combine: a warning must pass every active filter to print.
  */
 
@@ -24,6 +25,8 @@ import path from "node:path";
 import { compile, addGitMetadata } from "./compiler/compiler.js";
 import { runAuditPass } from "./compiler/audit-pass.js";
 import type { ValidationWarning } from "./compiler/types.js";
+import { buildPriorityQueue, type NodeMetadata } from "./audit/priority.js";
+import type { QueueItem } from "./audit/types.js";
 
 /**
  * The six audit-pass warning types. Anything outside this set is a non-audit
@@ -53,7 +56,12 @@ export interface AuditOptions {
   node?: string | null;
   /** Severity filter. Default `all`. `warning` filters everything (no severity field today). */
   severity?: AuditSeverity;
-  /** Print prioritized queue. Reserved for WS-C2; prints punt notice and exits 0. */
+  /**
+   * Print a prioritized queue of findings instead of the flat list.
+   * Findings are grouped by node and scored by
+   * `findingCount + inDegree + ageDays` (each with a weight; in-degree
+   * dominates). Same compile pipeline + filters as the flat mode.
+   */
   priority?: boolean;
   /**
    * Optional output sinks for tests. Defaults route to process.stdout/stderr.
@@ -160,15 +168,6 @@ export async function runAudit(options: AuditOptions): Promise<RunAuditResult> {
   const stdout = options.stdout ?? ((line: string) => process.stdout.write(line + "\n"));
   const stderr = options.stderr ?? ((line: string) => process.stderr.write(line + "\n"));
 
-  // --priority is reserved for WS-C2. Punt with an early return: print a
-  // notice to stderr and exit 0 (not 1 — audit never errors out, and we
-  // don't want CI to start failing the day someone wires this in).
-  // TODO(WS-C2): replace with a real prioritized queue implementation.
-  if (options.priority) {
-    stderr("spandrel audit: --priority is not yet implemented — see WS-C2.");
-    return { code: 0, warnings: [] };
-  }
-
   // G1: no severity field on ValidationWarning today, so every audit finding
   // is `advisory`. `--severity warning` silently filters everything — which
   // is misleading for a user who passes it expecting "show me the serious
@@ -181,10 +180,13 @@ export async function runAudit(options: AuditOptions): Promise<RunAuditResult> {
   }
 
   // Mirror compileOnly()'s sequence: walk → git metadata → audit. Freshness
-  // detectors need `updated` timestamps populated by addGitMetadata.
+  // detectors need `updated` timestamps populated by addGitMetadata. We
+  // capture `now` once and pass it to both runAuditPass (so detectors see a
+  // single reference time) and buildPriorityQueue (so age math matches).
+  const referenceNow = new Date().toISOString();
   const store = await compile(options.rootDir);
   await addGitMetadata(store, options.rootDir);
-  await runAuditPass(store);
+  await runAuditPass(store, referenceNow);
 
   const allWarnings = await store.getWarnings();
   const filtered = filterAuditWarnings(allWarnings, {
@@ -194,6 +196,23 @@ export async function runAudit(options: AuditOptions): Promise<RunAuditResult> {
   });
 
   const format: AuditFormat = options.format ?? "human";
+
+  // --priority: group filtered findings by node, score, and render as a
+  // ranked queue. Filters are applied *before* ranking so `--node` and
+  // `--kinds` narrow the queue rather than the underlying compile.
+  if (options.priority) {
+    const nodeMetadata = await buildNodeMetadata(store);
+    const queue = buildPriorityQueue(filtered, nodeMetadata, referenceNow);
+    if (format === "json") {
+      stdout(JSON.stringify(queue, null, 2));
+    } else if (queue.length === 0) {
+      stdout("No audit findings.");
+    } else {
+      stdout(renderQueueHuman(queue));
+    }
+    return { code: 0, warnings: filtered };
+  }
+
   if (format === "json") {
     stdout(JSON.stringify(filtered, null, 2));
   } else {
@@ -205,6 +224,67 @@ export async function runAudit(options: AuditOptions): Promise<RunAuditResult> {
   }
 
   return { code: 0, warnings: filtered };
+}
+
+/**
+ * Compute per-node metadata for the priority queue from the compiled store.
+ * Mirrors the in-degree precompute in `audit-pass.ts`: only `link`-type edges
+ * count (hierarchy and authored_by edges aren't "references" in the audit
+ * sense). `updated` comes from `addGitMetadata` (null when the node has no
+ * git history — fresh files, non-repo dirs).
+ */
+async function buildNodeMetadata(
+  store: import("./storage/graph-store.js").GraphStore,
+): Promise<Map<string, NodeMetadata>> {
+  const allNodes = await store.getAllNodes();
+  const allEdges = await store.getEdges();
+
+  const inDegree = new Map<string, number>();
+  for (const edge of allEdges) {
+    if (edge.type !== "link") continue;
+    inDegree.set(edge.to, (inDegree.get(edge.to) ?? 0) + 1);
+  }
+
+  const meta = new Map<string, NodeMetadata>();
+  for (const node of allNodes) {
+    meta.set(node.path, {
+      inDegree: inDegree.get(node.path) ?? 0,
+      updated: node.updated,
+    });
+  }
+  return meta;
+}
+
+/**
+ * Render a priority queue as a human-readable block. Each item gets a
+ * numbered rank line with score breakdown, followed by indented warning
+ * messages. Mirrors the bracketed-subcode prefix already in `w.message`.
+ *
+ * Example output:
+ *   1. /clients/acme  (score: 12.5, findings: 3, in-degree: 4, age: 412d)
+ *      [weak_description] [toc_overlap] ...
+ *      [weak_edge_description.missing] Edge of type "owns" ...
+ *      [stub_marker] Body contains stub markers: TBD
+ */
+function renderQueueHuman(queue: QueueItem[]): string {
+  const lines: string[] = [];
+  for (let i = 0; i < queue.length; i++) {
+    const item = queue[i];
+    const ageLabel =
+      item.scoreBreakdown.ageDays === null
+        ? "n/a"
+        : `${item.scoreBreakdown.ageDays}d`;
+    const scoreLabel = Number.isInteger(item.score)
+      ? item.score.toString()
+      : item.score.toFixed(2);
+    lines.push(
+      `${i + 1}. ${item.path}  (score: ${scoreLabel}, findings: ${item.scoreBreakdown.findingCount}, in-degree: ${item.scoreBreakdown.inDegree}, age: ${ageLabel})`,
+    );
+    for (const w of item.warnings) {
+      lines.push(`   ${w.message}`);
+    }
+  }
+  return lines.join("\n");
 }
 
 /**
