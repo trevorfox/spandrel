@@ -128,3 +128,7 @@ Judge results are cached in `test/fidelity/cache/<task_id>/<response_hash>_<sign
 - Single-task at a time, sequentially — claude -p is one-shot, so cross-task isolation is automatic but throughput is bounded by per-subprocess startup.
 - Stream-json event shape depends on the installed `claude` version. The processor handles the SDK message shape and the older flat shapes; if a future version changes it again, `processStreamEvent` is the one spot to update.
 - LLM-as-judge variance is real (±10% per signal across reruns is realistic). The cache pins one response's score for that response's lifetime; a regenerated response will re-judge.
+
+## Known caveats
+
+**Call-count caveat.** The `calls_made` metric currently includes Claude Code's internal `ToolSearch` calls in addition to the `mcp__spandrel__*` graph-traversal calls. If your `max_calls` budget is tight, this may inflate the count. The harness doesn't filter `ToolSearch` today — pending observation on a real EA-OS task set before deciding whether filtering is worth the complexity. See the `TODO(ToolSearch filtering)` note in `score.ts`.

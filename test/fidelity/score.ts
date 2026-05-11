@@ -165,6 +165,15 @@ export async function scoreTask(
   opts: ScoreTaskOptions,
 ): Promise<TaskScore> {
   const excerptChars = opts.excerptChars ?? 500;
+  // TODO(ToolSearch filtering): `callsMade` currently includes Claude Code's
+  // internal `ToolSearch` calls (deferred-tool-fetcher) alongside the actual
+  // `mcp__spandrel__*` graph-traversal calls. On generous `max_calls` budgets
+  // this doesn't matter; on tighter budgets it inflates the count by 1-N
+  // depending on how many tools Claude Code lazy-loads. Decision pending:
+  // either filter `ToolSearch` from `callsMade` before efficiency scoring
+  // (cleanest — only count graph calls against the graph-quality budget) or
+  // leave it in (it's a real model-side cost). Revisit when we see it bite
+  // on a real EA-OS task set.
   const callsMade = callLog.length;
   const efficiency = computeEfficiency(callsMade, task.max_calls);
   const hardGatePass = evaluateHardGates(task, response);
