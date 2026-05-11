@@ -160,6 +160,44 @@ All three are cheap (regex + word-count). They live in `src/audit/heuristics.ts`
 
 Unlike edge-level heuristics (which share `weak_edge_description` with a `subkind` in `detail` because all three describe the same underlying issue), the three body-content findings are conceptually distinct: presence of stub markers, body too short, and body too long. A single kind would lose information for downstream consumers (compiler warning sub-codes, CLI filtering, prioritization). Three kinds keeps the data structure honest.
 
+## Freshness heuristics
+
+The cheap detectors above all read the *current* state of a node (name, description, children). A second axis is equally cheap and orthogonal: *when* the node was last touched. Authoring discipline is not just about substance; it's also about staying current with the surrounding graph. A doc that gave perfect signal in 2024 may now be quietly wrong because the world moved on.
+
+Inputs come from `addGitMetadata` in the compiler — `simple-git` stamps each `SpandrelNode` with a `created` and `updated` string (the date of the file's first and most recent commits). Both are `string | null`; the format is whatever `simple-git` emits (ISO 8601 with offset in practice). `Date.parse` handles them, and unparseable values are treated as missing — staleness is advisory, never load-bearing, so bad timestamps yield "no signal" rather than crashes.
+
+All three freshness detectors emit a single `staleness` Finding kind with `detail.subkind` distinguishing `absolute` / `differential` / `high_fanin`. They share a kind because the conceptual issue is identical — "this node may be out of date" — and the subkind tells the caller which signal fired. This follows the G2 pattern set by the edge-description heuristics (WS-A1): one kind per concept, subkinds per detector.
+
+All three take `now` as an explicit parameter rather than calling `new Date()` internally. Detectors stay pure; tests stay deterministic.
+
+### Absolute staleness
+
+**Signal:** Node not updated in N days, where N defaults to 180.
+
+**Why it fails the test:** Six months is a useful sniff threshold — short enough that an active doc won't trip it, long enough that an abandoned doc will. Whatever the surrounding graph is doing, a half-year-old node deserves a glance.
+
+**Detection heuristic:** `(now - updated) >= thresholdDays` (default 180). Caller can tighten (fast-moving directories like `/clients/`) or loosen (stable specs).
+
+### Differential staleness
+
+**Signal:** Node was last updated significantly before the *median* of its neighbors (parent + recently-edited siblings, chosen by the caller). Default gap threshold: 365 days.
+
+**Why it fails the test:** Absolute age misses the case where the entire neighborhood is old. Differential age catches the more telling failure: the neighborhood evolved and this doc didn't keep up. If half the siblings have been touched in the last few months and this one hasn't been touched in a year, the doc is structurally surrounded by activity it isn't part of.
+
+**Detection heuristic:** Median rather than max — max is fragile to a single sibling's typo fix, while median requires roughly half the neighbors to be more recent. Fixed-day gap rather than ratio — ratios collapse to nonsense over short timespans (a 2× ratio over 1 day is noise; 365 days of drift is unambiguous).
+
+### High-fan-in low-freshness
+
+**Signal:** Heavily-referenced node (in-degree ≥ 5) that hasn't been updated in ≥ 365 days.
+
+**Why it fails the test:** A high-fan-in node is a hub in the agent's traversal graph. Stale answers there cascade to every consumer — a stale `/patterns/authorship` corrupts every node that links to it. A low-fan-in stale node is a lower priority because its blast radius is smaller. The conjunction matters: fan-in alone says "this is load-bearing", staleness alone says "this might be wrong", together they say "this is load-bearing *and* likely wrong."
+
+**Detection heuristic:** Combined gate: `inDegree >= 5 && ageDays >= 365`. The caller computes `inDegree` from the graph (it isn't derivable from the node alone). Both thresholds are function args.
+
+### How freshness fits the audit pipeline
+
+Same pattern as the description-level heuristics: each detector is a pure function returning `Finding | null`; `auditNode()` composes them; missing optional inputs (no `updated`, empty `neighborUpdates`, no `inDegree`) cause the relevant detector to silently skip. Existing callers and tests that don't supply freshness data keep working unchanged.
+
 ### Mid-cost (LLM-as-judge or embedding-based)
 
 - **Description-vs-children semantic distance.** Embed the description and each child's `name+description`. If the description's embedding is too close to the *concatenation of child names*, it's TOC-shaped. If it's too far from any individual child's claim, it's not synthesizing them.

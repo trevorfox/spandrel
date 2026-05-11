@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   auditNode,
+  detectAbsoluteStaleness,
+  detectDifferentialStaleness,
+  detectHighFanInLowFreshness,
   detectMissingEdgeDescription,
   detectOverlongBody,
   detectStubMarkers,
@@ -685,5 +688,211 @@ describe("auditNode body integration (WS-A2)", () => {
     expect(kinds).toContain("thin_body");
     expect(kinds).not.toContain("stub_marker");
     expect(kinds).not.toContain("overlong_body");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Freshness detectors (WS-A3)
+// ---------------------------------------------------------------------------
+// All timestamps below are anchored against NOW = 2026-05-10T00:00:00Z so the
+// arithmetic stays obvious in test diffs.
+
+const NOW = "2026-05-10T00:00:00Z";
+
+/** Returns an ISO timestamp `daysAgo` days before NOW. */
+function daysBeforeNow(daysAgo: number): string {
+  const ms = Date.parse(NOW) - daysAgo * 86_400_000;
+  return new Date(ms).toISOString();
+}
+
+describe("detectAbsoluteStaleness", () => {
+  it("flags a node updated well past the default threshold", () => {
+    const finding = detectAbsoluteStaleness(daysBeforeNow(400), NOW);
+    expect(finding?.kind).toBe("staleness");
+    expect(finding?.detail?.subkind).toBe("absolute");
+    expect(finding?.detail?.ageDays).toBe(400);
+  });
+
+  it("does not flag a freshly-updated node", () => {
+    const finding = detectAbsoluteStaleness(daysBeforeNow(7), NOW);
+    expect(finding).toBeNull();
+  });
+
+  it("flags exactly at the threshold (>= semantics)", () => {
+    // 180 days old with threshold 180 → flagged. "Anything older than 6 months"
+    // is the user's intuition; treating the threshold as inclusive matches that.
+    const finding = detectAbsoluteStaleness(daysBeforeNow(180), NOW, 180);
+    expect(finding).not.toBeNull();
+  });
+
+  it("does not flag just under the threshold", () => {
+    // Same idea, but one day shy of the threshold → no finding.
+    const finding = detectAbsoluteStaleness(daysBeforeNow(179), NOW, 180);
+    expect(finding).toBeNull();
+  });
+
+  it("respects a caller-supplied threshold", () => {
+    // 100 days old; default 180 wouldn't trip but a tighter 90 should.
+    expect(detectAbsoluteStaleness(daysBeforeNow(100), NOW)).toBeNull();
+    expect(detectAbsoluteStaleness(daysBeforeNow(100), NOW, 90)).not.toBeNull();
+  });
+
+  it("returns null for null/undefined/empty/malformed updated", () => {
+    expect(detectAbsoluteStaleness(null, NOW)).toBeNull();
+    expect(detectAbsoluteStaleness(undefined, NOW)).toBeNull();
+    expect(detectAbsoluteStaleness("", NOW)).toBeNull();
+    expect(detectAbsoluteStaleness("   ", NOW)).toBeNull();
+    expect(detectAbsoluteStaleness("not-a-date", NOW)).toBeNull();
+  });
+
+  it("returns null when now is malformed", () => {
+    expect(detectAbsoluteStaleness(daysBeforeNow(400), "garbage")).toBeNull();
+  });
+});
+
+describe("detectDifferentialStaleness", () => {
+  it("flags a node a year behind the median neighbor", () => {
+    const finding = detectDifferentialStaleness(daysBeforeNow(500), [
+      daysBeforeNow(10),
+      daysBeforeNow(20),
+      daysBeforeNow(50),
+    ]);
+    expect(finding?.kind).toBe("staleness");
+    expect(finding?.detail?.subkind).toBe("differential");
+    expect(finding?.detail?.neighborCount).toBe(3);
+  });
+
+  it("does not flag when the gap is below the threshold", () => {
+    // Node 100 days old, neighbors clustered at 10/20/50 days → gap ~ 80 days < 365.
+    const finding = detectDifferentialStaleness(daysBeforeNow(100), [
+      daysBeforeNow(10),
+      daysBeforeNow(20),
+      daysBeforeNow(50),
+    ]);
+    expect(finding).toBeNull();
+  });
+
+  it("uses median, not max — resists a single recent outlier", () => {
+    // One sibling edited yesterday (1 day ago), three siblings ~600 days old,
+    // node is 500 days old. Median neighbor ≈ 600 days old → node is more
+    // recent than the median → no finding.
+    const finding = detectDifferentialStaleness(daysBeforeNow(500), [
+      daysBeforeNow(1),
+      daysBeforeNow(600),
+      daysBeforeNow(610),
+      daysBeforeNow(620),
+    ]);
+    expect(finding).toBeNull();
+  });
+
+  it("returns null when neighborUpdates is empty", () => {
+    const finding = detectDifferentialStaleness(daysBeforeNow(500), []);
+    expect(finding).toBeNull();
+  });
+
+  it("silently drops malformed neighbor timestamps", () => {
+    // Two malformed, one valid (10 days old). Node is 500 days old →
+    // gap ≈ 490 days > 365 → flagged.
+    const finding = detectDifferentialStaleness(daysBeforeNow(500), [
+      "garbage",
+      "",
+      daysBeforeNow(10),
+    ]);
+    expect(finding).not.toBeNull();
+    expect(finding?.detail?.neighborCount).toBe(1);
+  });
+
+  it("returns null when nodeUpdated is missing", () => {
+    expect(
+      detectDifferentialStaleness(null, [daysBeforeNow(10)]),
+    ).toBeNull();
+    expect(
+      detectDifferentialStaleness(undefined, [daysBeforeNow(10)]),
+    ).toBeNull();
+  });
+
+  it("respects a caller-supplied threshold", () => {
+    // Gap of ~200 days: default 365 wouldn't trip but a 90-day threshold should.
+    const args = [daysBeforeNow(250), [daysBeforeNow(50)]] as const;
+    expect(detectDifferentialStaleness(...args)).toBeNull();
+    expect(detectDifferentialStaleness(args[0], args[1], 90)).not.toBeNull();
+  });
+});
+
+describe("detectHighFanInLowFreshness", () => {
+  it("flags a heavily-referenced node that hasn't been touched", () => {
+    const finding = detectHighFanInLowFreshness(daysBeforeNow(400), NOW, 8);
+    expect(finding?.kind).toBe("staleness");
+    expect(finding?.detail?.subkind).toBe("high_fanin");
+    expect(finding?.detail?.inDegree).toBe(8);
+  });
+
+  it("does not flag a low-fan-in node even if stale", () => {
+    // Only 2 incoming refs — below default threshold of 5.
+    const finding = detectHighFanInLowFreshness(daysBeforeNow(800), NOW, 2);
+    expect(finding).toBeNull();
+  });
+
+  it("does not flag a fresh hub node", () => {
+    const finding = detectHighFanInLowFreshness(daysBeforeNow(30), NOW, 20);
+    expect(finding).toBeNull();
+  });
+
+  it("does not flag exactly at the fan-in threshold but below the age threshold", () => {
+    const finding = detectHighFanInLowFreshness(daysBeforeNow(100), NOW, 5);
+    expect(finding).toBeNull();
+  });
+
+  it("respects caller-supplied thresholds", () => {
+    // 3 refs, 200 days old: defaults skip; a tighter (in=3, days=180) policy trips.
+    expect(detectHighFanInLowFreshness(daysBeforeNow(200), NOW, 3)).toBeNull();
+    expect(
+      detectHighFanInLowFreshness(daysBeforeNow(200), NOW, 3, 3, 180),
+    ).not.toBeNull();
+  });
+
+  it("returns null for missing/malformed timestamps", () => {
+    expect(detectHighFanInLowFreshness(null, NOW, 10)).toBeNull();
+    expect(detectHighFanInLowFreshness(undefined, NOW, 10)).toBeNull();
+    expect(
+      detectHighFanInLowFreshness(daysBeforeNow(400), "garbage", 10),
+    ).toBeNull();
+  });
+});
+
+describe("auditNode (freshness integration)", () => {
+  it("combines freshness findings with description-level findings", () => {
+    // Description trips `topic_opening`; git metadata trips absolute staleness
+    // and high-fan-in staleness simultaneously.
+    const findings = auditNode({
+      name: "Deployment",
+      description:
+        "How to run Spandrel — local development and production patterns",
+      childNames: ["Local", "Static", "Hosted"],
+      updated: daysBeforeNow(400),
+      now: NOW,
+      inDegree: 10,
+    });
+    const kinds = findings.map((f) => f.kind);
+    expect(kinds).toContain("topic_opening");
+    expect(kinds.filter((k) => k === "staleness").length).toBeGreaterThanOrEqual(
+      2,
+    );
+    const subkinds = findings
+      .filter((f) => f.kind === "staleness")
+      .map((f) => f.detail?.subkind);
+    expect(subkinds).toContain("absolute");
+    expect(subkinds).toContain("high_fanin");
+  });
+
+  it("emits no freshness findings when freshness inputs are absent", () => {
+    // Existing call shape — proves backwards compatibility.
+    const findings = auditNode({
+      name: "Spandrel",
+      description:
+        "What Spandrel believes about agent-friendly knowledge graphs — structure emerges from content rather than being imposed; conversational coherence with agents is the design target; instruction stays separate from knowledge; paths are addresses",
+      childNames: ["Philosophy", "Hypothesis", "Content Model"],
+    });
+    expect(findings.every((f) => f.kind !== "staleness")).toBe(true);
   });
 });
