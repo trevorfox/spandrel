@@ -4,6 +4,7 @@ description: Reusable conventions for agent-friendly knowledge graphs — collec
 links:
   - to: /content-model
     type: relates-to
+    description: Content model defines what's possible (nodes, links, paths, companions); patterns are the author-time conventions for combining those primitives well
 ---
 
 # Patterns

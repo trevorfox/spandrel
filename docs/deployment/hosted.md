@@ -4,10 +4,13 @@ description: Postgres-backed GraphStore + serverless runtime — the pattern for
 links:
   - to: /architecture/storage
     type: depends-on
+    description: Hosted mode requires a persistent GraphStore (Postgres-class typically) — compile runs in CI and writes the graph; serverless handlers read at request time
   - to: /architecture/access
     type: relates-to
+    description: Hosted mode is where identity-aware reads matter — actor tiers and access levels become live runtime concerns rather than the wide-open default of local dev
   - to: /architecture/access-policy
     type: relates-to
+    description: Each serverless wire surface (REST, MCP) constructs an actor from the request and calls the same Access Policy before serializing or accepting a write
 ---
 
 # Production deployment

@@ -4,6 +4,7 @@ description: Making Things understandable at multiple levels of depth — from n
 links:
   - to: /architecture/access
     type: relates-to
+    description: Access levels (none → exists → description → content → traverse) are progressive disclosure expressed at the governance layer — the same pattern applied to who-sees-what
 ---
 
 # Progressive Disclosure Pattern

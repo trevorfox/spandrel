@@ -4,6 +4,7 @@ description: Agent identity and behavior files — who an agent is when operatin
 links:
   - to: /content-model/skill-md
     type: relates-to
+    description: Paired companion — SKILL.md defines what an agent can do here, AGENT.md defines how it should behave and communicate while doing it
 ---
 
 # AGENT.md

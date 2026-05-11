@@ -4,8 +4,10 @@ description: Three deployment modes — local in-memory dev, static + flat-file 
 links:
   - to: /architecture
     type: relates-to
+    description: Each deployment mode wires the same three architectural phases (compile, store, serve) — modes differ in where compile runs and what storage backend serves the wire surfaces
   - to: /architecture/storage
     type: relates-to
+    description: Backend choice is the main differentiator between modes — in-memory for local dev, flat HTTP files for static publish, Postgres-class for hosted live
 ---
 
 # Deployment

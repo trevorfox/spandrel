@@ -4,6 +4,7 @@ description: Pre-authored collection skeletons for common scenarios — pair any
 links:
   - to: /onboarding
     type: part-of
+    description: Templates are the menu offered at Level 2; pair any template with any inventory path that produced the seeding context
 ---
 
 # Templates

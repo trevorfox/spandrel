@@ -4,10 +4,13 @@ description: The single enforcement contract for read shaping and write gating a
 links:
   - to: /architecture/access
     type: relates-to
+    description: Enforces the identity tiers, access levels, and read-write axes defined here — this node is the contract, /architecture/access is its concept vocabulary
   - to: /architecture/mcp
     type: relates-to
+    description: MCP wire surface defers all read shaping and write gating to this policy before serializing or accepting any request
   - to: /architecture/rest
     type: relates-to
+    description: REST wire surface defers all read shaping and write gating to this policy — peer of MCP, same enforcement point
 ---
 
 # Access Policy

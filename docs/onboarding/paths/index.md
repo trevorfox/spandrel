@@ -4,6 +4,7 @@ description: Five entry points matched to user starting materials — different 
 links:
   - to: /onboarding
     type: part-of
+    description: Paths are the Level 1 classifier — agent matches the user's starting material to one of five inventory-and-seeding playbooks before any structure is proposed
 ---
 
 # Paths

@@ -1,6 +1,10 @@
 ---
 name: Static + flat-file MCP
 description: Deploy a Spandrel knowledge graph as static files plus a thin MCP shim — works on GitHub Pages, Vercel, Cloudflare, or embedded in an existing site.
+links:
+  - to: /architecture/storage
+    type: relates-to
+    description: Backend is a `RemoteGraphStore` that reads `graph.json` and per-node `index.json` over HTTP from the published bundle — no live database in the request path
 ---
 
 # Static + flat-file MCP

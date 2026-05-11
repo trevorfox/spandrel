@@ -4,8 +4,10 @@ description: Agent-guided graph setup — five paths matched to user starting ma
 links:
   - to: /patterns/frameworks
     type: relates-to
+    description: When the user's native structure is unclear, Level 2 of onboarding offers the framework menu (Dunford, OKRs, RACI, bowtie, 5-whys, service blueprint) as a fallback for seeding top-level collections
   - to: /patterns/collections
     type: relates-to
+    description: Each onboarding path ends at a 3–7 collection skeleton; collection vocabulary is the load-bearing decision the onboarding session makes
 ---
 
 # Onboarding

@@ -4,6 +4,7 @@ description: Single-user knowledge base — intentionally modest, no team roles,
 links:
   - to: /onboarding/templates
     type: part-of
+    description: Tier-1 template for the solo author — kept intentionally modest so a personal KB doesn't drift into a fake team graph
 ---
 
 # Personal repo template

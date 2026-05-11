@@ -4,8 +4,10 @@ description: What Spandrel believes about agent-friendly knowledge graphs — st
 links:
   - to: /content-model
     type: relates-to
+    description: Philosophy fixes the design targets; the content model is the concrete shape that realizes them — paths-as-addresses and markdown-as-interface become file paths and frontmatter
   - to: /content-model/design-md
     type: relates-to
+    description: DESIGN.md is the operational form of "intent over configuration" — markdown describing decisions takes the place of YAML parameterizing behavior
 ---
 
 # Philosophy

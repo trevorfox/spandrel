@@ -1,13 +1,16 @@
 ---
 name: Vibe Checking
-description: How to test whether a knowledge graph actually works — task-based validation over structural metrics
+description: Compile warnings tell you the graph is valid; vibe checking tells you it's good. Five tests — navigate from root, answer real user questions, run search, follow links laterally, and hand the MCP to a blind agent. If the agent gets lost, descriptions aren't gating navigation. Audit-pass warnings (weak_description, weak_edge_description, stub_marker, thin_body, overlong_body, staleness) are the structural side and are advisory only.
 links:
   - to: /patterns/progressive-disclosure
     type: relates-to
+    description: Blind-agent traversal is the load test for progressive disclosure — if the agent can't decide what to read next from descriptions alone, the gating layer is broken
   - to: /architecture/mcp
     type: relates-to
+    description: MCP is the surface a blind agent uses to vibe-check — `context()` and `get_node()` are the calls that exercise whether descriptions guide navigation
   - to: /patterns/collections
     type: relates-to
+    description: Top-level collection vocabulary is what the agent sees first; bad collection names fail the navigate-from-root test before any other test runs
 ---
 
 # Vibe Checking

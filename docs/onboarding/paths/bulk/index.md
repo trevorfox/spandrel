@@ -4,6 +4,7 @@ description: An unstructured pile the user wants processed in conversation — d
 links:
   - to: /onboarding/paths
     type: part-of
+    description: The unstructured-pile variant of the five entry paths; shape emerges from dialogue with the user rather than from a filesystem scan
 ---
 
 # Bulk path

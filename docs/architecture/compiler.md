@@ -4,10 +4,13 @@ description: Transforms a markdown directory tree into a graph of nodes and edge
 links:
   - to: /content-model/nodes
     type: depends-on
+    description: Resolves each markdown file or directory into a node per the leaf/composite rules defined here
   - to: /content-model/links
     type: depends-on
+    description: Parses frontmatter links and inline body mentions into edges per the model defined here
   - to: /architecture/storage
     type: relates-to
+    description: Writes the produced graph (nodes + edges + warnings) into whatever storage backend the wire surfaces read from
 ---
 
 # Compiler

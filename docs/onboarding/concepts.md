@@ -4,8 +4,10 @@ description: Spandrel primitives in one page — for repeat users who want to sk
 links:
   - to: /content-model/nodes
     type: relates-to
+    description: One-page restatement of the node model (leaf vs composite, frontmatter, companion files) sized for repeat users
   - to: /patterns/progressive-disclosure
     type: relates-to
+    description: The cheat sheet is itself an example of progressive disclosure — a short surface that lets a repeat user skip the long-form pedagogy
 ---
 
 # Concepts cheat sheet

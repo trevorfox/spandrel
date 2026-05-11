@@ -4,10 +4,13 @@ description: The GraphStore interface — backend-agnostic contract between comp
 links:
   - to: /architecture/compiler
     type: relates-to
+    description: Compiler is the writer — produces nodes and edges that land in whatever backend implements the GraphStore interface
   - to: /architecture/access-policy
     type: relates-to
+    description: Storage returns raw nodes and edges; the policy shapes them at serialization time, so the backend never has to know about access levels
   - to: /deployment
     type: relates-to
+    description: Backend choice is the main lever between local (in-memory) and hosted (Postgres-class) deployments
 ---
 
 # Storage

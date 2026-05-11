@@ -4,6 +4,7 @@ description: Curated corpus or already-Spandrel repo — audit mode, edit in pla
 links:
   - to: /onboarding/paths
     type: part-of
+    description: The already-Spandrel variant of the five entry paths; audit mode — edit in place, don't re-propose the structure that already exists
 ---
 
 # Existing path

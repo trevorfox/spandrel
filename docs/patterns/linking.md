@@ -1,9 +1,10 @@
 ---
 name: Linking
-description: How links connect Things across the hierarchy to form a graph
+description: Frontmatter `links:` carries the typed edges; per-edge `description:` is the load-bearing semantic carrier and should be authored as if required. Inline `[label](/path)` produces `mentions` edges. `_links/config.yaml` is opt-in graph-local vocabulary with `enforce` / `min_uses` governance. Link instead of nest when relationships cross hierarchy; prefer timeless structural claims over implementation specifics.
 links:
   - to: /content-model/links
     type: relates-to
+    description: Content-model side defines the mechanics (frontmatter shape, inline extraction, backlinks); this pattern is the authoring discipline for when and how to use them
 ---
 
 # Linking Pattern
