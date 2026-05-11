@@ -82,17 +82,6 @@ export function normalizeNodePath(input: string): string {
 }
 
 /**
- * Extract the bracketed kind/subkind prefix from a warning message. Audit
- * warnings are formatted as `[kind]` or `[kind.subkind]` followed by the
- * detector's prose (see `formatFindingMessage` in `audit-pass.ts`). Returns
- * just the contents of the brackets, or `null` if no bracket is found.
- */
-function extractMessagePrefix(message: string): string | null {
-  const match = message.match(/^\[([^\]]+)\]/);
-  return match ? match[1] : null;
-}
-
-/**
  * Filter the store's warnings down to audit findings that pass every active
  * filter. Pure — testable in isolation from the compile pipeline.
  */
@@ -178,6 +167,17 @@ export async function runAudit(options: AuditOptions): Promise<RunAuditResult> {
   if (options.priority) {
     stderr("spandrel audit: --priority is not yet implemented — see WS-C2.");
     return { code: 0, warnings: [] };
+  }
+
+  // G1: no severity field on ValidationWarning today, so every audit finding
+  // is `advisory`. `--severity warning` silently filters everything — which
+  // is misleading for a user who passes it expecting "show me the serious
+  // findings." Surface the no-op explicitly so the empty result has context.
+  // `advisory` and `all` are equivalent today; no notice needed.
+  if (options.severity === "warning") {
+    stderr(
+      "note: no audit findings have \"warning\" severity today; --severity is reserved for future tuning.",
+    );
   }
 
   // Mirror compileOnly()'s sequence: walk → git metadata → audit. Freshness

@@ -253,6 +253,9 @@ describe("runAudit — --severity", () => {
     expect(result.warnings.length).toBe(0);
     // Human-mode renders "No audit findings." when the filter yields nothing.
     expect(out.lines.join("\n")).toMatch(/No audit findings\./);
+    // Stderr notice makes the no-op visible — otherwise a user passing
+    // --severity warning would mistake the empty output for a clean graph.
+    expect(err.lines.join("\n")).toMatch(/--severity is reserved for future tuning/);
   });
 });
 
