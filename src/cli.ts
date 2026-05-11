@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import readline from "node:readline/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { compile, addGitMetadata, getHistory } from "./compiler/compiler.js";
+import { runAuditPass } from "./compiler/audit-pass.js";
 import { buildManifest } from "./compiler/manifest.js";
 import { createMcpServer } from "./server/mcp.js";
 import { watchTree } from "./compiler/watcher.js";
@@ -84,6 +85,10 @@ async function dev(rootDir: string) {
   console.log(`[spandrel] Compiling ${rootDir}...`);
   const store = await compile(rootDir);
   await addGitMetadata(store, rootDir);
+  // Audit pass runs *after* git metadata so freshness detectors see
+  // `updated` timestamps. Non-blocking — findings ride the same warnings
+  // pipeline as compile/validate warnings.
+  await runAuditPass(store);
   const warnings = await store.getWarnings();
   console.log(
     `[spandrel] Compiled: ${store.nodeCount} nodes, ${store.edgeCount} edges, ${warnings.length} warnings`
@@ -356,6 +361,9 @@ async function mcp(rootDir: string) {
   );
 
   await addGitMetadata(store, rootDir);
+  // Audit pass runs after git metadata so freshness detectors see
+  // `updated` timestamps. Non-blocking.
+  await runAuditPass(store);
   const accessConfig = loadAccessConfig(rootDir);
   if (accessConfig) {
     console.error(`[spandrel] Access config loaded (${Object.keys(accessConfig.roles).length} roles)`);
@@ -514,6 +522,11 @@ async function compileOnly(argv: string[]) {
   const { rootDir, manifestPath } = parseCompileArgs(argv);
   console.log(`Compiling ${rootDir}...`);
   const store = await compile(rootDir);
+  // Populate git timestamps and run audit pass before reading warnings —
+  // freshness detectors need `updated` timestamps. Both are no-ops on
+  // non-git directories.
+  await addGitMetadata(store, rootDir);
+  await runAuditPass(store);
   const warnings = await store.getWarnings();
   console.log(
     `Compiled: ${store.nodeCount} nodes, ${store.edgeCount} edges, ${warnings.length} warnings`

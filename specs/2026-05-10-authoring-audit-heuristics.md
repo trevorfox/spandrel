@@ -278,8 +278,18 @@ Six top-tier index nodes audited; five fixed. Anti-patterns by node:
 
 Two kept (`/index.md` lists artifact facets, not children; `/onboarding/templates/index` already substantive) — useful negative examples for tuning thresholds.
 
+## False positives observed (WS-B1 dogfood, 2026-05-10)
+
+The first end-to-end run of `runAuditPass` against `docs/` (Phase B wiring) produced 236 audit warnings on a 56-node graph. Skim of the output surfaced one borderline pattern worth recording before any threshold tuning. **Advisory: no detector changes in WS-B1 — author-facing triage comes next.**
+
+- **`topic_opening` on 10–14-word "How … " descriptions** — Several substantive descriptions trip the detector because they begin with `How` and sit just under the 15-word threshold (`/content-model/nodes`, `/content-model/links`, `/patterns/linking`, `/patterns/placement`, `/patterns/vibe-checking`). The descriptions read as good-enough orientation prose, not as topic-style framing. Two reasonable responses, neither for this PR: (a) lower `maxWords` to 8–10 so only the genuinely thin "How X works" cases trip; (b) require an additional signal (e.g. missing concrete noun in the first clause) in addition to the question-word opening. Option (b) is closer to the original anti-pattern intent.
+- **`weak_edge_description.tautologous` on intentionally-terse edges** — Some link descriptions are deliberately the target node's name when the link surface is a navigational TOC inside a parent body. The detector flags them as restatements of the target stem. This matches the spec's intent (the reader can already see the target name), so it's not a false positive per se, but bulk fixes on these specific edges have low ROI compared to authoring fixes on `[topic_opening]` and `[weak_edge_description.missing]` cases. Prioritization (WS-C2) will sort this out.
+
+The bulk of the 231 `weak_edge_description` warnings (75 missing + 156 tautologous) are real: most `relates-to` edges in `docs/` were authored without descriptions in 0.x.
+
 ## Status
 
 - This spec captures the methodology; the tooling is unbuilt.
 - The `ROADMAP.md` entry for "Authoring tools" references this spec as the heuristics source.
 - The 2026-05-10 sweep itself is the validation: same heuristics applied by hand caught five of six low-signal descriptions.
+- WS-B1 (this branch) wires the heuristics into `spandrel compile` — see `src/compiler/audit-pass.ts` for the bridge. Compile output now carries audit findings as `ValidationWarning`s (non-blocking).

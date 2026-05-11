@@ -72,6 +72,18 @@ The strongest test: give the MCP connection to an agent that has never seen the 
 - **unlisted_child** — a parent node's body text doesn't mention a child. Advisory only. Fixing it improves the parent's content but isn't required.
 - **missing_name / missing_description** — frontmatter gaps. Fix these — they break progressive disclosure.
 
+### Audit-pass warnings (structural vibe-checking)
+
+The [compiler](/architecture/compiler) also runs an audit pass that flags low-signal authoring at compile time. These are the structural side of vibe-checking — they don't replace blind-agent traversal, but they catch the cheap signals before the agent ever sees the graph:
+
+- **weak_description** — node description is TOC-style, vague, topic-only, thin, or tautological with the node's name. Sub-code in message (e.g. `[toc_overlap]`).
+- **weak_edge_description** — edge has no description, or its description restates the target path / link type, or is a single word. Sub-code in message (`missing` / `tautologous` / `thin`).
+- **stub_marker** — body contains `TBD` / `TODO` / `WIP` / `(auto-generated stub)` / `[placeholder]`.
+- **thin_body** / **overlong_body** — body word count below or above the threshold.
+- **staleness** — git `updated` is old (absolute), well behind sibling neighbors (differential), or stale on a heavily-referenced hub (high_fanin). Sub-code in message.
+
+All audit warnings are advisory — they never block compile. Treat them as candidates for vibe-check triage, not as errors.
+
 ## What matters more than warnings
 
 - Can an agent answer real questions from the graph?
