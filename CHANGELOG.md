@@ -2,6 +2,21 @@
 
 All notable changes to Spandrel are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The stable surface for consumers is documented in [PUBLIC-API.md](./PUBLIC-API.md).
 
+## [Unreleased]
+
+### Added
+
+- **`spandrel audit [path] [flags]`** — dedicated CLI subcommand for querying the advisory audit findings produced by the audit pass (WS-B1). Runs `compile → addGitMetadata → runAuditPass`, then filters and formats the resulting `ValidationWarning` set without the rest of the compile output. Flags:
+  - `--kinds <comma,separated>` — filter to specific audit types (`weak_description`, `weak_edge_description`, `stub_marker`, `thin_body`, `overlong_body`, `staleness`).
+  - `--format human|json` — output format. Default `human` (path-grouped `path: [kind.subkind] message` lines); `json` emits the filtered array verbatim for tooling.
+  - `--node <path>` — limit to a single node's findings. Leading slash optional.
+  - `--severity all|advisory|warning` — future-proofing. Today every audit finding is advisory (no `severity` field on `ValidationWarning`), so `warning` silently filters everything out.
+  - `--priority` — reserved for a future prioritization pass (WS-C2). Prints a punt notice to stderr and exits 0.
+
+  Exits 0 in all normal cases — audit is advisory, never blocks. Bad arg parse exits 2; operational failure (unreadable dir, etc.) exits 1.
+
+---
+
 ## [0.9.0] — 2026-05-09
 
 Replaces the `/linkTypes/{stem}.md` per-type Things scaffolding with a single `_links/config.yaml` registry, recasts link types as system config (sibling of `_access/`), drops per-edge `linkTypeDescription` decoration from the wire, removes the link-types vocabulary block from MCP server instructions, drops the Schema.org type-aware JSON-LD projection, and adds opt-in `min_uses` reuse-discipline governance.

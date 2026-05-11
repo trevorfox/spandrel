@@ -18,6 +18,7 @@ import { scaffoldInit, type InitOptions } from "./cli-init.js";
 import { publish, parsePublishArgs, resolveBundleDir } from "./cli-publish.js";
 import { runMv, parseMvArgs } from "./cli-mv.js";
 import { runRm, parseRmArgs } from "./cli-rm.js";
+import { cliAudit } from "./cli-audit.js";
 import { emitGraph } from "./compiler/emit-graph.js";
 import { renderNodeAsMarkdown } from "./web/render-node.js";
 import { extensionToNodePath } from "./cli-routing.js";
@@ -45,6 +46,8 @@ if (command === "--version" || command === "-v" || command === "version") {
   mvCmd(args.slice(1));
 } else if (command === "rm") {
   rmCmd(args.slice(1));
+} else if (command === "audit") {
+  cliAudit(args.slice(1));
 } else {
   console.log(`spandrel ${readPackageVersion()}
 
@@ -59,10 +62,16 @@ Commands:
   publish   Emit a static bundle (graph.json + SPA) to --out
   mv        Rename a node and cascade frontmatter rewrites
   rm        Delete a node; use --cascade to strip dead links from referrers
+  audit     Query and filter audit findings produced during compile
 
 Flags:
   --version, -v       Print the installed version and exit
   --manifest [path]   (compile) Write a JSON build manifest. Path defaults to spandrel-manifest.json
+  --kinds <list>      (audit) Filter to specific audit types (comma-separated)
+  --format human|json (audit) Output format (default human)
+  --node <path>       (audit) Limit to a single node's findings
+  --severity <level>  (audit) all | advisory | warning (default all)
+  --priority          (audit) Reserved for WS-C2; prints punt notice
 `);
   process.exit(1);
 }

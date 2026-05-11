@@ -164,6 +164,24 @@ The viewer source ships in `src/web/` and powers `spandrel publish`'s static SPA
 
 ---
 
+## CLI subcommands
+
+The `spandrel` binary's subcommand surface is part of the stable public API — names, positional shape, and documented flags follow the same semver discipline as the library imports. Full reference lives in [`docs/architecture/cli`](./docs/architecture/cli.md); this section calls out the contract for each subcommand.
+
+- **`spandrel init [target-dir]`** — scaffold a new knowledge repo. Prompts for `name` and `description`, or pass `--name` / `--description` non-interactively.
+- **`spandrel init-mcp [root-dir]`** — emit MCP client config JSON.
+- **`spandrel compile [root-dir] [--manifest [path]]`** — compile and validate; print nodes and every warning. `--manifest` writes a JSON build manifest (default path `spandrel-manifest.json`).
+- **`spandrel dev [root-dir]`** — compile, watch, serve REST + viewer + per-node `.md` / `.json` routes on `PORT` (default `4000`).
+- **`spandrel mcp [root-dir]`** — compile, watch, serve the MCP server over stdio.
+- **`spandrel publish [root-dir] [--out <dir>] [--base <href>] [--static] [--site-url <url>] [--noindex] [--no-strip-private]`** — emit a static bundle for hosting.
+- **`spandrel mv <from> <to> [root-dir] [--dry-run] [--yes]`** — rename or move a node, cascading frontmatter-link rewrites across every referrer. Previews to stderr; requires `--yes` to mutate.
+- **`spandrel rm <path> [root-dir] [--cascade] [--dry-run] [--yes]`** — delete a node. Refuses by default when inbound declared-link referrers exist; `--cascade` strips dead link entries first. Previews to stderr; requires `--yes` to mutate.
+- **`spandrel audit [root-dir] [--kinds <list>] [--format human|json] [--node <path>] [--severity all|advisory|warning] [--priority]`** — query the advisory audit findings produced by the audit pass. Exits 0 in all normal cases (audit is advisory, never blocks). `--priority` is reserved for a future prioritization pass and prints a punt notice today.
+
+`spandrel --version` (or `-v` / `version`) prints the installed package version.
+
+---
+
 ## What's internal
 
 Anything not listed above is internal. In particular:
