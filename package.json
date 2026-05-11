@@ -54,7 +54,8 @@
     "dev": "tsx src/cli.ts dev",
     "dev:web": "vite --config src/web/app/vite.config.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:fidelity": "tsx test/fidelity/run.ts"
   },
   "dependencies": {
     "ajv": "^8.20.0",
