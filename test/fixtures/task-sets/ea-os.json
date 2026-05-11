@@ -1,0 +1,161 @@
+{
+  "graph_label": "EA-OS (consulting agency operating system) — seed task set",
+  "graph_root": "~/apps/elegant-atomics",
+  "model": "claude-sonnet-4-6",
+  "tasks": [
+    {
+      "id": "definite-account-lead",
+      "question": "Who is the account lead on the Definite engagement?",
+      "must_include": ["Trevor"],
+      "must_not_include": [],
+      "signals": [
+        "names Trevor Fox as the lead on Definite explicitly",
+        "references the /clients/definite node or its `led-by` edge as the source",
+        "grounds the claim in graph content rather than guessing from the founder's role"
+      ],
+      "max_calls": 5,
+      "max_total_tokens": 8000,
+      "notes": "Discovery via simplest path: from root, find /clients/definite, surface the led-by edge pointing at /core/people/trevor. Tests the load-bearing weak_edge_description.missing case — the led-by edge has no description, so the agent must rely on the type-plus-target pattern."
+    },
+    {
+      "id": "seo-content-clients",
+      "question": "Which active EA clients receive SEO + Content service, and what's the scope of each engagement?",
+      "must_include": ["Definite", "SEO"],
+      "must_not_include": [],
+      "signals": [
+        "lists at least the active clients that receive SEO + Content (Definite, Looker Pros at minimum)",
+        "describes each client's engagement scope using language drawn from the graph (e.g. 'SEO + Content with outbound execution via Segun' for Definite)",
+        "uses the /core/services/seo-content node's `applied-to` edges or the client-side `served-by` edges as the basis for the answer",
+        "does not invent clients that aren't in the graph"
+      ],
+      "max_calls": 8,
+      "max_total_tokens": 12000,
+      "notes": "Multi-node synthesis: requires reading /core/services/seo-content to find applied-to clients, then drilling into at least 2-3 of those clients to surface scope. Tests whether the typed-edge vocabulary (applied-to, served-by) is informative enough on its own."
+    },
+    {
+      "id": "seo-patterns-deployed",
+      "question": "What SEO patterns has EA formalized, and where have they been deployed in client work?",
+      "must_include": ["SEO Analysis Routine"],
+      "must_not_include": [],
+      "signals": [
+        "names the SEO Analysis Routine as a formalized pattern",
+        "mentions the service-page-workflow-template as the other pattern under /patterns/seo",
+        "identifies that the analysis routine is deployed at /clients/definite/seo (or names Definite as the first deployment)",
+        "correctly reports that the patterns are still in draft status if drilling into them"
+      ],
+      "max_calls": 8,
+      "max_total_tokens": 12000,
+      "notes": "Pattern lookup with applies-pattern backlinks: from /patterns/seo, find the patterns; for each, follow incoming references to find where deployed. Tests whether the patterns subtree's deliberate use of cross-references (applies-pattern incoming edges) is traversable."
+    },
+    {
+      "id": "projects-spandrel-vs-cannon",
+      "question": "What three internal projects is EA building, and what makes Spandrel different from Context Cannon?",
+      "must_include": ["Spandrel", "Context Cannon", "Flux"],
+      "must_not_include": [],
+      "signals": [
+        "lists all three projects (Spandrel, Context Cannon, Flux)",
+        "explains Spandrel as open-source markdown-to-graph framework",
+        "explains Context Cannon as the hosted/SaaS version of Spandrel",
+        "captures the relationship that Cannon is essentially hosted Spandrel — not a separate idea",
+        "doesn't conflate the two products"
+      ],
+      "max_calls": 8,
+      "max_total_tokens": 10000,
+      "notes": "Cross-collection synthesis + comparison. Spandrel and Cannon share DNA; the distinction is in deployment model. Tests whether the project-node descriptions are differentiated enough to surface the comparison without reading both bodies."
+    },
+    {
+      "id": "negative-european-healthcare",
+      "question": "Has EA ever worked with a healthcare or medical client based in Europe?",
+      "must_include": [],
+      "must_not_include": ["yes", "Brand.ai is European", "Definite is healthcare"],
+      "signals": [
+        "states clearly that no European healthcare client appears in the graph",
+        "may note Inner Balance as a US medical clinic (the closest match) but distinguishes it as US-based, not European",
+        "does not fabricate clients or geographies",
+        "phrases the negative answer confidently rather than hedging into a wrong answer"
+      ],
+      "max_calls": 6,
+      "max_total_tokens": 10000,
+      "notes": "Negative-answer test: the right answer is 'no, not in the graph.' Inner Balance is the closest match (US medical clinic, YMYL SEO) and could trip an agent into a false positive if it doesn't read the descriptions carefully. Critical that the agent doesn't hallucinate."
+    },
+    {
+      "id": "q2-2026-direction",
+      "question": "What is EA's locked Q2 2026 direction, and what is each team member responsible for?",
+      "must_include": ["Flux", "Spandrel", "Cannon"],
+      "must_not_include": [],
+      "signals": [
+        "names the three OKRs (Flux to $300 MRR, Spandrel to 100 stars + 5 active users, Cannon for internal trust + first paid external)",
+        "identifies Trevor as owning positioning/strategy across all three",
+        "identifies Robert's responsibilities (Flux onboarding/support, Spandrel external users, Cannon migrations)",
+        "identifies Segun's responsibilities (Flux outbound ops, Cannon client setup, Spandrel internal usage)",
+        "references the /core/direction/q2-2026 node as the source"
+      ],
+      "max_calls": 6,
+      "max_total_tokens": 14000,
+      "notes": "Recency-sensitive + multi-attribution: the q2-2026 doc is the canonical artifact. Body content is dense (specific KRs per project, owners per KR). Tests whether deep body content gets surfaced rather than only frontmatter."
+    },
+    {
+      "id": "ops-tools-and-runbooks",
+      "question": "What tools and runbooks make up EA's day-to-day operations infrastructure?",
+      "must_include": ["ClickUp"],
+      "must_not_include": [],
+      "signals": [
+        "lists at least four of: ClickUp, EA-OS Gateway, Google Workspace groups, OS overview, Setup MCPs runbook, Skills index",
+        "names ClickUp as the project management system",
+        "mentions the MCP setup runbook for installing agent integrations",
+        "uses /core/ops as the source",
+        "does not over-fetch into client subgraphs that aren't relevant to ops"
+      ],
+      "max_calls": 5,
+      "max_total_tokens": 10000,
+      "notes": "Hierarchy traversal into a focused subtree. /core/ops has 6 children, all leaves with informative descriptions. Tests whether the agent can stop at the right level — no need to drill into each leaf's body."
+    },
+    {
+      "id": "segun-on-definite",
+      "question": "What specifically does Segun do on the Definite engagement?",
+      "must_include": ["outbound"],
+      "must_not_include": [],
+      "signals": [
+        "describes Segun's role as outbound execution (Apollo sequences, n8n automations, or cold campaigns)",
+        "grounds the answer in Segun's profile (/core/people/segun) and/or the works-with edge from /clients/definite",
+        "may also mention the LinkedIn Constellation system under /clients/definite/constellation if drilled in",
+        "doesn't over-state Segun's scope on Definite (he's outbound-focused, not full-account)"
+      ],
+      "max_calls": 6,
+      "max_total_tokens": 10000,
+      "notes": "Edge-description reliance test. The works-with edge from /clients/definite to /core/people/segun has no description; the agent has to read both nodes' descriptions and bodies to triangulate. Tests the load-bearing case where edge descriptions are missing but the surrounding context recovers."
+    },
+    {
+      "id": "definite-vs-looker-pros-scope",
+      "question": "Both Definite and Looker Pros are EA clients in the analytics space — what distinguishes their engagement scopes?",
+      "must_include": ["Definite", "Looker Pros"],
+      "must_not_include": [],
+      "signals": [
+        "identifies Definite's scope as SEO + Content with outbound execution",
+        "identifies Looker Pros' scope as Web Dev, SEO, and SEM (broader than Definite's)",
+        "captures that Definite is the strategic/active engagement vs Looker Pros being a different shape entirely",
+        "doesn't conflate the two engagements",
+        "may note that both touch SEO but with different surrounding service mixes"
+      ],
+      "max_calls": 6,
+      "max_total_tokens": 10000,
+      "notes": "Comparison / conflict-resolution. Both clients are 'analytics-adjacent' but the engagement scopes differ. Tests whether the agent can hold two client nodes side-by-side and surface the meaningful difference, not just the surface similarity."
+    },
+    {
+      "id": "definite-positioning-collapses",
+      "question": "What are the two positioning collapses Definite's team actively works to avoid, and why does each matter?",
+      "must_include": ["BI tool", "cheaper modern data stack"],
+      "must_not_include": [],
+      "signals": [
+        "names 'It's a BI tool' as one collapse",
+        "names 'It's a cheaper modern data stack' as the other collapse",
+        "explains why the BI-tool collapse matters (mentally categorized as dashboarding, assumes underlying data system already works)",
+        "explains why the cheaper-stack collapse matters (reduces conversation to component-by-component cost comparison)",
+        "uses the /clients/definite/collapses subtree as the source"
+      ],
+      "max_calls": 10,
+      "max_total_tokens": 14000,
+      "notes": "Deep client-subgraph traversal. Definite's collapses are explicit nodes under /clients/definite/collapses with substantive descriptions. Tests whether the agent navigates into client positioning subgraphs and reads the structured positioning content rather than the parent node's body."
+    }
+  ]
+}
