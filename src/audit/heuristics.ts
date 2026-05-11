@@ -258,15 +258,9 @@ export function detectMissingEdgeDescription(
  * the type, equals the target stem, or is wholly contained as a substring of
  * one of those after trimming. This avoids false positives on descriptions
  * that *contain* the type/stem as part of a longer phrase.
- *
- * @param fromPath - Optional source-node path. Unused today; kept in the
- *   signature so future expansions (e.g. comparing description against the
- *   source path stem) don't require a breaking change.
  */
 export function detectTautologousEdgeDescription(
   link: EdgeAuditInput,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _fromPath?: string,
 ): Finding | null {
   if (link.description === null) return null;
   const desc = link.description.trim().toLowerCase();
