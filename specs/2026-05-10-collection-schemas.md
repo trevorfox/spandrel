@@ -61,7 +61,9 @@ This is the same pattern WS-B1 used for audit Findings: a small kind vocabulary;
 
 When a `schema:` block is added to a collection's `DESIGN.md` that previously had none, existing non-conforming members produce *warnings*, not errors. The compiler always exits 0. This matches the `unknown_link_type` posture introduced in 0.9.0 and the `weak_description` audit warnings introduced in WS-B1: structural opinion is advisory; the compile pipeline stays non-blocking.
 
-The alternative — fail-on-first-violation — was rejected because it makes the mechanism feel like a tax. Adoption depends on schemas being safe to add to a working graph and incrementally tightening as the existing content gets fixed. CI gating on warning *count* is a separate question; gating policy belongs to the consuming graph, not this spec.
+**Schema tightening on an existing schema follows the same posture.** Adding a new required field, narrowing an enum, or making a string pattern stricter produces warnings on members that no longer conform — never errors. The compiler doesn't distinguish "this used to validate" from "this never validated"; both are warnings, both are advisory. Authors planning a tightening can preview the impact by running `spandrel audit <root> --kinds schema_violation,missing_required_field,field_enum_violation` (using the WS-B2 vocabulary; the schema validator from WS-C3 emits these warning types) after editing the `DESIGN.md` but before fixing members.
+
+The alternative — fail-on-first-violation — was rejected for both adoption and tightening because it makes the mechanism feel like a tax. Adoption and iteration depend on schemas being safe to add and tighten on a working graph; the existing content gets fixed incrementally. CI gating on warning *count* is a separate question; gating policy belongs to the consuming graph, not this spec.
 
 ## The `graph:` key — Spandrel-specific extension
 
@@ -88,7 +90,7 @@ graph:
 Each entry's shape:
 
 - **`required: bool`** — when `true`, members without at least one outgoing edge of this `linkType` produce `missing_required_link`. Default `false` (declared but optional).
-- **`target: <path-prefix>`** — when present, edges of this `linkType` whose `to` doesn't start with the prefix produce `link_target_mismatch`. The prefix is matched as a path-string prefix (`startsWith`), trailing-slash-insensitive at the segment boundary. A `target: /teams/` matches `/teams/data` and `/teams/data/leads` but not `/teamsX/`. Absent means "any target accepted."
+- **`target: <path-prefix>`** — when present, edges of this `linkType` whose `to` doesn't start with the prefix produce `link_target_mismatch`. The prefix is matched as a path-string prefix (`startsWith`), trailing-slash-insensitive at the segment boundary. A `target: /teams/` matches `/teams/data` and `/teams/data/leads` but not `/teamsX/`. The match is **descendants-or-self**: `target: /teams/` includes the collection root `/teams` itself as a valid target, not only its descendants. The natural reading of "must point under `/teams/`" includes pointing *at* `/teams`, and authors that need descendants-only can write a deeper prefix (`target: /teams/teams-`) or pick a more specific path. Absent means "any target accepted."
 
 An empty entry (`relates-to: {}`) is meaningful in combination with `enforce: true` below — it says "this link type is in the closed vocabulary but carries no extra constraints."
 
@@ -127,7 +129,7 @@ Each entry is a path *relative to the member*. The compiler resolves each entry 
 
 Only direct subdirectories are checked — entries are single segments, not deep paths. The simpler rule keeps the vocabulary's mental model uniform: schemas govern direct children, including required sub-children. Multi-level requirements (`contracts/active`) are expressible by adding a `required_subcollections` entry to `<collection>/<member>/contracts/DESIGN.md` instead.
 
-Leaf members (`<collection>/<x>.md` with no directory form) trip `missing_required_subcollection` for every required entry, because a leaf has no children. If a collection allows both leaf and composite members, `required_subcollections` shouldn't be declared at all — or, alternatively, the `schema:` block should require the member to be a composite via convention (no standard JSON Schema keyword for this; document it in `DESIGN.md` prose).
+**`required_subcollections` applies only to composite members.** Leaf members (`<collection>/<x>.md` with no `<x>/` directory) cannot have subcollections by definition, so the rule is silently skipped for them. A collection that mixes leaf and composite members (some clients are single-file notes, others have full subdirectory structures) sees the constraint enforced on composites and ignored on leaves — no warning spam on the leaves, no special-case workaround required. If a collection wants to *require* every member to be a composite (i.e., disallow leaves entirely), that's a separate v2 concern (see "Deferred to v2" below).
 
 ### `naming`
 
@@ -152,6 +154,7 @@ The following were considered for v1 and explicitly deferred. Documented here so
 - **Cardinality constraints on links.** "Exactly one `account-lead` edge per member"; "at most three `mentions`." JSON Schema doesn't apply because edges aren't frontmatter fields directly (they're nested under `links: [...]`). Plausible v2 keys: `min?: number`, `max?: number` on each `outgoing_links` entry. Left for later because `required: true` already covers the most common case ("at least one").
 - **Alternative target lists.** "`account-lead` may point to `/people/` *or* `/teams/`." Currently `target` is a single prefix. A list form (`target: [/people/, /teams/]`) is a clean extension when needed.
 - **Federation / cross-graph consistency.** Schemas only see the local graph. Cross-graph reference validation is a federation concern, out of scope for v1 (G8).
+- **`requires_composite` (disallow leaf members).** A collection may legitimately want every member to be a composite — e.g., `/clients/` where every client gets its own directory with subcollections. v1 has no way to express "no leaves allowed" without falling back to `DESIGN.md` prose; `required_subcollections` silently skips leaves rather than rejecting them. A plausible v2 key is `graph.requires_composite: bool` (or symmetrically `requires_leaf: bool`), evaluated per member with a dedicated warning code. Left for v2 because the workaround (a prose note in `DESIGN.md` plus the natural pressure from `required_subcollections` on composites) is acceptable and the failure mode is mild.
 
 ## Warning vocabulary
 
