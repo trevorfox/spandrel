@@ -194,6 +194,47 @@ describe("validateMember — graph: outgoing_links and enforce", () => {
     expect(mismatch?.message).toContain("/teams/");
   });
 
+  it("implicitly allows `mentions` under enforce: true even when not declared", () => {
+    const schema: CollectionSchema = {
+      graph: {
+        outgoing_links: {
+          "served-by": { required: true, target: "/teams/" },
+        },
+        enforce: true,
+      },
+    };
+    const member = makeMember({
+      links: [
+        { to: "/teams/data", type: "served-by", description: "X" },
+        { to: "/topics/snowflake", type: "mentions", description: "Inline prose link" },
+      ],
+      childPaths: [],
+    });
+    const warnings = validateMember(schema, member);
+    expect(warnings.find((w) => w.code === "disallowed_link_type")).toBeUndefined();
+  });
+
+  it("allows constraining mentions explicitly when declared", () => {
+    // When mentions IS declared (with constraints), the implicit allow no
+    // longer applies — the declaration takes over. A mentions edge to a
+    // target outside the declared prefix still fires link_target_mismatch.
+    const schema: CollectionSchema = {
+      graph: {
+        outgoing_links: {
+          mentions: { target: "/topics/" },
+        },
+        enforce: true,
+      },
+    };
+    const member = makeMember({
+      links: [
+        { to: "/people/jane", type: "mentions", description: "Inline mention" },
+      ],
+    });
+    const warnings = validateMember(schema, member);
+    expect(warnings.find((w) => w.code === "link_target_mismatch")).toBeDefined();
+  });
+
   it("accepts a link pointing exactly AT the collection root (descendants-or-self)", () => {
     const schema: CollectionSchema = {
       graph: {
@@ -356,11 +397,14 @@ describe("validateMember — schema/graph independence", () => {
   });
 
   it("a malformed JSON Schema yields invalid_graph_schema (not a crash)", () => {
-    // Ajv throws on `compile` when the schema itself is malformed.
+    // Ajv throws on `compile` when the schema itself is malformed. We use an
+    // input Ajv rejects unambiguously regardless of strictness: `required`
+    // must be an array of strings, not a scalar. (Earlier drafts used
+    // `type: 42`, which can be silently ignored under `strict: false`.)
     const schema: CollectionSchema = {
       schema: {
-        // Invalid: `type` must be a string or array of strings; `42` is neither.
-        type: 42,
+        type: "object",
+        required: "not-an-array",
       } as object,
     };
     const warnings = validateMember(schema, makeMember());

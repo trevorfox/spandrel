@@ -19,13 +19,6 @@ graph:
       required: true
       target: /people/
     relates-to: {}
-    # `mentions` is the compiler-emitted type for inline-prose `[label](/path)`
-    # references in a member body. Most clients link to their own contracts/
-    # subcollection in prose, which produces a `mentions` edge. Declaring it
-    # in the closed vocabulary (with no constraints) is the canonical idiom
-    # for keeping `enforce: true` strict on declared links without flagging
-    # every prose mention.
-    mentions: {}
   enforce: true
   required_subcollections:
     - contracts

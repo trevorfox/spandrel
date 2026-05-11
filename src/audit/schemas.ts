@@ -354,12 +354,19 @@ export function validateMember(
     }
 
     if (graph.enforce === true) {
-      // Closed vocabulary: every outgoing link type must be declared.
-      // Note: `mentions` (inline-prose) edges are still emitted by the
-      // compiler. The spec doesn't carve them out explicitly; treat them
-      // like any other typed link. If a graph wants to allow ambient
-      // mentions everywhere, it adds `mentions: {}` to its declaration.
+      // Closed vocabulary: every outgoing link type must be declared,
+      // EXCEPT `mentions` — the framework's catch-all for inline-prose
+      // references. `mentions` edges are auto-emitted by the compiler
+      // for every `[label](/path)` in a member's body; making authors
+      // declare `mentions: {}` to avoid warning spam would punish them
+      // for using prose links. The implicit allow only applies when
+      // mentions is *absent* from outgoing_links; when an author
+      // declares it (with `target:` or `required:`), the declaration
+      // takes over. See WS-C1 spec § enforce.
       for (const link of member.links) {
+        if (link.type === "mentions" && !declaredTypes.has("mentions")) {
+          continue;
+        }
         if (!declaredTypes.has(link.type)) {
           warnings.push({
             path: member.path,

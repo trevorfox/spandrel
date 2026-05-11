@@ -114,6 +114,8 @@ Two degenerate-but-valid cases worth naming explicitly:
 - **`enforce: true` with no `outgoing_links` key** — equivalent to `outgoing_links: {}` (see next). Defining the closed vocabulary without listing any types means the vocabulary is empty.
 - **`enforce: true` with `outgoing_links: {}`** — members may not have any outgoing link types at all. Every outgoing edge produces `disallowed_link_type`. Unusual, but a legitimate way to say "this collection's members are leaves in the semantic graph; structure is hierarchical only." Documented so the validator doesn't reject the configuration as malformed.
 
+**`mentions` is implicitly allowed.** The `mentions` link type is the framework's catch-all for ambient references — every `[label](/path)` reference in a member's prose body becomes a `mentions` edge at compile time. Requiring authors to declare `mentions: {}` to avoid warning spam on every inline link would punish them for using prose links. Under `enforce: true`, `mentions` edges are silently accepted *unless* the collection explicitly declares `mentions` in `outgoing_links` — in which case the declaration applies (e.g. `mentions: { target: /topics/ }` would constrain the target).
+
 ### `required_subcollections`
 
 Directory invariants.
@@ -173,6 +175,8 @@ The full warning-code set introduced by collection schemas:
 | `invalid_graph_schema` | The `graph:` block itself fails meta-validation (see next section). |
 
 Each maps to a single `ValidationWarning.type` in the compiler's vocabulary; the consumer uses the type for coarse filtering and the message for the specific failure (path, expected, observed). This mirrors how `weak_description` and `weak_edge_description` already carry kind/subkind context in their messages (WS-B1, G2 decision).
+
+**`invalid_graph_schema` is a v1 umbrella code.** It surfaces four distinct failure modes: a malformed `graph:` block (typos, wrong types — the spec-intended case); a malformed `schema:` block (Ajv throws on `addSchema`); an unparseable regex in `graph.naming.child_path_pattern`; or a non-object value for either key. For v1 the single code is sufficient — the message identifies the specific failure. A future v2 may split `schema:`-side failures into a dedicated `invalid_member_schema` code if the umbrella proves too coarse in practice.
 
 ## Meta-schema for the `graph:` block (G5)
 
