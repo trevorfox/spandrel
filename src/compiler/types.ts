@@ -59,7 +59,20 @@ export interface ValidationWarning {
     | "stub_marker"             // body contains TBD/TODO/WIP/etc.
     | "thin_body"               // body shorter than threshold
     | "overlong_body"           // body longer than threshold
-    | "staleness";              // 3 freshness subkinds (subkind in message)
+    | "staleness"               // 3 freshness subkinds (subkind in message)
+    // --- Collection-schema validator warnings (WS-C3) ---
+    // Emitted by `src/audit/schemas.ts` when a DESIGN.md declares
+    // `schema:` and/or `graph:` and a member doesn't conform. Advisory;
+    // shape constraints layer on top of the framework-wide minimum.
+    | "missing_required_field"        // schema: `required` names a key the member doesn't have
+    | "field_enum_violation"          // schema: a field's value isn't in the declared `enum`
+    | "schema_violation"              // schema: any other JSON Schema failure (catch-all)
+    | "missing_required_link"         // graph: required outgoing-link type is absent
+    | "disallowed_link_type"          // graph: enforce: true + link type not declared
+    | "link_target_mismatch"          // graph: edge targets outside the declared prefix
+    | "missing_required_subcollection"// graph: required subcollection missing (composites only)
+    | "naming_violation"              // graph: stem doesn't match child_path_pattern
+    | "invalid_graph_schema";         // DESIGN's own graph: (or schema:) block is malformed
   message: string;
 }
 

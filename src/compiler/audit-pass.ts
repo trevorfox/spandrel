@@ -23,6 +23,8 @@
  * Finding layer already chose three on purpose.
  */
 
+import fs from "node:fs";
+import path from "node:path";
 import type { GraphStore } from "../storage/graph-store.js";
 import type { ValidationWarning } from "./types.js";
 import { auditNode } from "../audit/heuristics.js";
@@ -31,6 +33,14 @@ import type {
   Finding,
   NodeAuditInput,
 } from "../audit/types.js";
+import {
+  validateGraphSchema,
+  validateMember,
+  type CollectionSchema,
+  type GraphSchema,
+  type MemberValidationInput,
+  type SchemaWarning,
+} from "../audit/schemas.js";
 
 /**
  * Map a Finding kind to its ValidationWarning.type. Node-level Finding kinds
@@ -90,10 +100,19 @@ function formatFindingMessage(finding: Finding): string {
  * @param now - Optional reference time (ISO string). Injecting a fixed `now`
  *   makes audit output deterministic across runs — useful for CI and tests.
  *   Defaults to `new Date().toISOString()` captured once at function entry.
+ * @param rootDir - Optional graph root directory. When provided, the
+ *   collection-schema validator (WS-C3) can distinguish leaf members
+ *   (`/clients/foo.md`) from composite members (`/clients/foo/index.md`)
+ *   by stat'ing each member's source file. Without `rootDir`, the validator
+ *   falls back to the compiled `nodeType` — which marks zero-children
+ *   composites as `leaf`, causing `required_subcollections` to skip them.
+ *   CLI callers (`compileOnly`, `runAudit`, watcher) supply this; the
+ *   pure-store tests in `test/audit-pass.test.ts` omit it.
  */
 export async function runAuditPass(
   store: GraphStore,
   now?: string,
+  rootDir?: string,
 ): Promise<void> {
   const referenceNow = now ?? new Date().toISOString();
 
@@ -195,8 +214,200 @@ export async function runAuditPass(
     }
   }
 
+  // --- Collection-schema validation pass (WS-C3) ----------------------------
+  // After the heuristic pass, walk every DESIGN.md companion node, parse its
+  // `schema:` and `graph:` declarations, and validate each member of its
+  // containing collection. Shares the pre-computed maps above to keep the
+  // total cost O(n + m) where n is node count and m is edge count.
+  const schemaWarnings = collectSchemaWarnings(
+    allNodes,
+    nodesByPath,
+    outgoingLinks,
+    rootDir,
+  );
+  for (const sw of schemaWarnings) auditWarnings.push(sw);
+
   if (auditWarnings.length === 0) return;
 
   const existing = await store.getWarnings();
   await store.replaceWarnings([...existing, ...auditWarnings]);
+}
+
+/**
+ * Walk every `DESIGN.md` companion-file node and validate its containing
+ * collection's members against the declared `schema:` and `graph:` blocks.
+ *
+ * Identification rule (per WS-C1 spec): a companion-file node at path
+ * `<collection>/DESIGN` (with `kind: document`) governs the direct children
+ * of `<collection>`. The DESIGN node itself is exempt (it's a companion
+ * document), as are its sibling companion nodes (DESIGN, SKILL, AGENT, etc.).
+ * Subcollections are NOT inherited — `/clients/DESIGN.md`'s declarations
+ * don't apply to members of `/clients/acme/contracts/`; that subcollection
+ * needs its own `DESIGN.md`.
+ *
+ * Both halves of the declaration (`schema:` and `graph:`) are validated
+ * independently per spec — a malformed `graph:` doesn't disable the
+ * `schema:` half, and vice versa.
+ */
+function collectSchemaWarnings(
+  allNodes: Awaited<ReturnType<GraphStore["getAllNodes"]>>,
+  nodesByPath: Map<string, (typeof allNodes)[number]>,
+  outgoingLinks: Map<string, EdgeAuditInput[]>,
+  rootDir: string | undefined,
+): ValidationWarning[] {
+  const warnings: ValidationWarning[] = [];
+
+  for (const node of allNodes) {
+    // Only DESIGN companions carry collection-schema declarations. SKILL /
+    // AGENT / README are companion files too but the spec scopes the
+    // declarations to DESIGN (see "Where the declaration lives" — design.md
+    // is the documented home for collection conventions).
+    if (node.kind !== "document") continue;
+    if (!node.path.endsWith("/DESIGN")) continue;
+    if (node.parent === null) continue;
+
+    const fm = node.frontmatter;
+    const rawSchema = fm.schema;
+    const rawGraph = fm.graph;
+    if (rawSchema === undefined && rawGraph === undefined) continue;
+
+    // Meta-validate the graph: block first. Per spec strictness rule: if
+    // meta-validation fails, the graph half is disabled for this collection
+    // (the schema half is independent and still runs).
+    const collectionSchema: CollectionSchema = {};
+    if (rawSchema !== undefined && rawSchema !== null) {
+      if (typeof rawSchema !== "object" || Array.isArray(rawSchema)) {
+        warnings.push({
+          path: node.path,
+          type: "invalid_graph_schema",
+          message: `\`schema:\` must be a mapping (object), got ${
+            Array.isArray(rawSchema) ? "array" : typeof rawSchema
+          }.`,
+        });
+        // Don't set collectionSchema.schema — skip this half.
+      } else {
+        collectionSchema.schema = rawSchema as object;
+      }
+    }
+    if (rawGraph !== undefined && rawGraph !== null) {
+      const metaWarnings = validateGraphSchema(rawGraph, node.path);
+      if (metaWarnings.length > 0) {
+        for (const w of metaWarnings) {
+          warnings.push(schemaToValidation(w));
+        }
+        // Skip the graph half for this collection — partial enforcement
+        // confuses authors more than no enforcement.
+      } else {
+        collectionSchema.graph = rawGraph as GraphSchema;
+      }
+    }
+
+    // Nothing usable left after meta-validation? Move on.
+    if (
+      collectionSchema.schema === undefined &&
+      collectionSchema.graph === undefined
+    ) {
+      continue;
+    }
+
+    // The collection's root is the DESIGN node's parent (`/clients/DESIGN`'s
+    // parent is `/clients`). Direct children of that root are the members,
+    // EXCEPT for companion-file nodes (DESIGN, SKILL, etc.) which are not
+    // collection members.
+    const collectionRoot = nodesByPath.get(node.parent);
+    if (!collectionRoot) continue;
+
+    for (const memberPath of collectionRoot.children) {
+      const member = nodesByPath.get(memberPath);
+      if (!member) continue;
+      if (member.kind === "document") continue; // companion files exempt
+
+      // Determine compositeness for `required_subcollections` (per WS-C1
+      // review clarification: leaves are silently skipped).
+      //
+      // The "composite" signal we want is "has a directory form on disk"
+      // (i.e., `<member-path>/index.md`), NOT "has compiled children." A
+      // directory-form member with no subdirectories is conceptually
+      // composite — the directory exists, but the subcollections aren't
+      // there yet, which is exactly the case `required_subcollections`
+      // wants to catch.
+      //
+      // With `rootDir`, we resolve the source file to discriminate
+      // directory-form from leaf-form. Without `rootDir`, we fall back to
+      // the compiled `nodeType` — which marks zero-child composites as
+      // `leaf`, so this fallback understates compositeness. That's
+      // acceptable for the pure-store tests, which don't exercise
+      // `required_subcollections`.
+      const isComposite = isCompositeForm(rootDir, member);
+
+      // childPaths: direct children of THIS member, used by
+      // `required_subcollections` to check sub-stems. Filter out companion
+      // documents — `/clients/acme/DESIGN` shouldn't satisfy a required
+      // `contracts` subcollection.
+      const childPaths = member.children.filter((p) => {
+        const child = nodesByPath.get(p);
+        return child !== undefined && child.kind !== "document";
+      });
+
+      const memberLinks = (outgoingLinks.get(member.path) ?? []).map((l) => ({
+        to: l.to,
+        type: l.type,
+        description: l.description,
+      }));
+
+      const input: MemberValidationInput = {
+        path: member.path,
+        frontmatter: member.frontmatter,
+        links: memberLinks,
+        isComposite,
+        childPaths,
+      };
+
+      const memberWarnings = validateMember(collectionSchema, input);
+      for (const w of memberWarnings) {
+        warnings.push(schemaToValidation(w));
+      }
+    }
+  }
+
+  return warnings;
+}
+
+function schemaToValidation(w: SchemaWarning): ValidationWarning {
+  return {
+    path: w.path,
+    type: w.code,
+    message: w.message,
+  };
+}
+
+/**
+ * Determine whether a member has a directory form (`<path>/index.md` exists
+ * under `rootDir`).
+ *
+ * The "composite" signal we want here is "has a directory form on disk"
+ * (i.e., `<member-path>/index.md`), not "has compiled children." A
+ * directory-form member with no subdirectories is conceptually composite —
+ * the directory exists, but the subcollections aren't there yet, which is
+ * exactly the case `required_subcollections` wants to catch.
+ *
+ * When `rootDir` is undefined, fall back to the compiled `nodeType` — which
+ * marks zero-child composites as `leaf`, so this fallback understates
+ * compositeness. That's acceptable for the pure-store tests
+ * (`test/audit-pass.test.ts`), which don't exercise
+ * `required_subcollections`.
+ */
+function isCompositeForm(
+  rootDir: string | undefined,
+  member: { path: string; nodeType: "leaf" | "composite" },
+): boolean {
+  if (!rootDir) return member.nodeType === "composite";
+  const rel = member.path === "/" ? "" : member.path.slice(1);
+  if (rel === "") return true; // root is always composite
+  const dirIndex = path.join(rootDir, rel, "index.md");
+  if (fs.existsSync(dirIndex)) return true;
+  // No directory form — leaf member, or directory exists without index.md
+  // (rare; the compiler still treats it as a node but it's not a curated
+  // collection member). Fall back to compiled nodeType.
+  return member.nodeType === "composite";
 }

@@ -29,17 +29,31 @@ import { buildPriorityQueue, type NodeMetadata } from "./audit/priority.js";
 import type { QueueItem } from "./audit/types.js";
 
 /**
- * The six audit-pass warning types. Anything outside this set is a non-audit
+ * The audit-pass warning types. Anything outside this set is a non-audit
  * `ValidationWarning` (e.g. `broken_link`, `missing_description`) and is
  * filtered out — `spandrel audit` is exclusively an audit-findings surface.
+ *
+ * Includes both the WS-B1 heuristic warnings (description, edge, body,
+ * freshness) and the WS-C3 collection-schema validator warnings.
  */
 const AUDIT_TYPES = new Set<ValidationWarning["type"]>([
+  // WS-B1 — heuristic detectors
   "weak_description",
   "weak_edge_description",
   "stub_marker",
   "thin_body",
   "overlong_body",
   "staleness",
+  // WS-C3 — collection-schema validator
+  "missing_required_field",
+  "field_enum_violation",
+  "schema_violation",
+  "missing_required_link",
+  "disallowed_link_type",
+  "link_target_mismatch",
+  "missing_required_subcollection",
+  "naming_violation",
+  "invalid_graph_schema",
 ]);
 
 export type AuditFormat = "human" | "json";
@@ -186,7 +200,7 @@ export async function runAudit(options: AuditOptions): Promise<RunAuditResult> {
   const referenceNow = new Date().toISOString();
   const store = await compile(options.rootDir);
   await addGitMetadata(store, options.rootDir);
-  await runAuditPass(store, referenceNow);
+  await runAuditPass(store, referenceNow, options.rootDir);
 
   const allWarnings = await store.getWarnings();
   const filtered = filterAuditWarnings(allWarnings, {

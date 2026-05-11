@@ -89,6 +89,30 @@ export const nodeFrontmatterSchema = {
       description:
         "Override for `@type` inference in static-publish JSON-LD output (e.g. `Organization`, `Person`)",
     },
+    // --- Collection-schema declarations (WS-C3) ----------------------------
+    // These two keys are only meaningful on `DESIGN.md` companion-file nodes,
+    // where they declare member-frontmatter and link-semantics constraints
+    // for the surrounding collection. The framework-wide schema accepts them
+    // as opaque objects; the collection-schema validator
+    // (`src/audit/schemas.ts`) interprets their content. See
+    // `specs/2026-05-10-collection-schemas.md`.
+    //
+    // `additionalProperties: true` on this schema already permits the keys
+    // unconditionally; documenting them here surfaces the contract to
+    // consumers (typed editors, schema-aware CMS configs) and lets us pin
+    // the at-most-an-object expectation. Anywhere else they appear, the
+    // collection-schema validator simply ignores them (no warning emitted —
+    // matches the existing convention for unknown frontmatter keys).
+    schema: {
+      type: "object",
+      description:
+        "Collection-schema declaration (DESIGN.md only): a JSON Schema, Draft 2020-12, validating each member's frontmatter. Opaque to the framework-wide validator.",
+    },
+    graph: {
+      type: "object",
+      description:
+        "Collection-schema declaration (DESIGN.md only): Spandrel-specific block declaring link semantics, required subcollections, and naming patterns for collection members. See specs/2026-05-10-collection-schemas.md.",
+    },
   },
 } as const;
 
