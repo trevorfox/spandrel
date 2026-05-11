@@ -19,6 +19,7 @@ import { publish, parsePublishArgs, resolveBundleDir } from "./cli-publish.js";
 import { runMv, parseMvArgs } from "./cli-mv.js";
 import { runRm, parseRmArgs } from "./cli-rm.js";
 import { cliAudit } from "./cli-audit.js";
+import { cliEmbed } from "./cli-embed.js";
 import { emitGraph } from "./compiler/emit-graph.js";
 import { renderNodeAsMarkdown } from "./web/render-node.js";
 import { extensionToNodePath } from "./cli-routing.js";
@@ -48,6 +49,8 @@ if (command === "--version" || command === "-v" || command === "version") {
   rmCmd(args.slice(1));
 } else if (command === "audit") {
   cliAudit(args.slice(1));
+} else if (command === "embed") {
+  cliEmbed(args.slice(1));
 } else {
   console.log(`spandrel ${readPackageVersion()}
 
@@ -63,6 +66,7 @@ Commands:
   mv        Rename a node and cascade frontmatter rewrites
   rm        Delete a node; use --cascade to strip dead links from referrers
   audit     Query and filter audit findings produced during compile
+  embed     Populate the per-graph embedding store (Phase E1)
 
 Flags:
   --version, -v       Print the installed version and exit
@@ -71,7 +75,11 @@ Flags:
   --format human|json (audit) Output format (default human)
   --node <path>       (audit) Limit to a single node's findings
   --severity <level>  (audit) all | advisory | warning (default all)
-  --priority          (audit) Reserved for WS-C2; prints punt notice
+  --priority          (audit) Print findings as a ranked queue
+  --semantic          (audit) Run the missing-link detector (requires \`spandrel embed\` first)
+  --provider <name>   (embed) openai | ollama (default openai)
+  --model <name>      (embed) Override the embedding model name
+  --yes               (embed) Skip the cost-confirmation prompt
 `);
   process.exit(1);
 }
