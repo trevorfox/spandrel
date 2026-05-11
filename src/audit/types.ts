@@ -9,6 +9,8 @@
  * specs/2026-05-10-authoring-audit-heuristics.md.
  */
 
+import type { ValidationWarning } from "../compiler/types.js";
+
 export type FindingKind =
   | "toc_overlap"
   | "vague_qualifiers"
@@ -105,4 +107,52 @@ export interface NodeAuditInput {
    * staleness-vs-now checks supply their own clock.
    */
   now?: string;
+}
+
+/**
+ * One entry in a prioritized audit queue. Produced by
+ * `buildPriorityQueue` in `priority.ts`; consumed by `spandrel audit
+ * --priority` (human + JSON output) and by the `spandrel-audit` skill.
+ *
+ * The queue groups every audit `ValidationWarning` for a single node into one
+ * item, then ranks items by `score` — heavy-fan-in, stale, weak-described
+ * nodes float to the top so authors can triage the highest-blast-radius
+ * findings first. `scoreBreakdown` is included verbatim so the human-format
+ * line can show "(score: X, findings: Y, in-degree: Z, age: Wd)" without the
+ * caller doing arithmetic on the warnings list.
+ */
+export interface QueueItem {
+  /** Node path (e.g. `/clients/acme`). */
+  path: string;
+  /** Total score; higher = more urgent. Sum of weighted components. */
+  score: number;
+  /**
+   * Per-component score breakdown. The three raw inputs to the scoring formula
+   * — same units the caller can show to a user. `ageDays` is `null` when the
+   * node has no `updated` timestamp (no git history); in that case the age
+   * contribution to `score` is 0 (same as freshly updated). This is the
+   * conservative choice — we don't penalize nodes that lack git metadata.
+   */
+  scoreBreakdown: {
+    findingCount: number;
+    inDegree: number;
+    ageDays: number | null;
+  };
+  /** All audit warnings for this node, in their original (stable) order. */
+  warnings: ValidationWarning[];
+}
+
+/**
+ * Tunable weights for the priority score. Defaults in `priority.ts` aim to
+ * surface heavy-fan-in stale weak-described nodes first; in-degree dominates
+ * raw finding count because a hub node's findings cascade through every
+ * traversal that touches it.
+ */
+export interface PriorityWeights {
+  /** Multiplier on finding-count contribution. */
+  findings: number;
+  /** Multiplier on in-degree contribution. */
+  inDegree: number;
+  /** Multiplier on age-in-days contribution. */
+  age: number;
 }

@@ -259,7 +259,7 @@ describe("runAudit — --severity", () => {
   });
 });
 
-describe("runAudit — --priority punt", () => {
+describe("runAudit — --priority queue", () => {
   let root: string;
   beforeEach(() => {
     root = tmpGraph();
@@ -268,7 +268,86 @@ describe("runAudit — --priority punt", () => {
     rmrf(root);
   });
 
-  it("prints the WS-C2 punt message to stderr and exits 0 without running audit", async () => {
+  it("produces an ordered queue of QueueItem records on the multi-finding fixture", async () => {
+    const out = makeSink();
+    const err = makeSink();
+    const result = await runAudit({
+      rootDir: root,
+      priority: true,
+      stdout: out.write,
+      stderr: err.write,
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.warnings.length).toBeGreaterThan(0);
+
+    const combined = out.lines.join("\n");
+    // Numbered rank lines with score breakdown.
+    expect(combined).toMatch(/^1\. \/.+\(score: /m);
+    // At least one of the fixture's findings should appear under its node.
+    expect(combined).toMatch(/\[toc_overlap\]|\[stub_marker\]|\[weak_edge_description\.missing\]/);
+  });
+
+  it("--priority --format json produces parseable QueueItem[]", async () => {
+    const out = makeSink();
+    const err = makeSink();
+    const result = await runAudit({
+      rootDir: root,
+      priority: true,
+      format: "json",
+      stdout: out.write,
+      stderr: err.write,
+    });
+
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(out.lines.join("\n"));
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed.length).toBeGreaterThan(0);
+    for (const item of parsed) {
+      expect(typeof item.path).toBe("string");
+      expect(typeof item.score).toBe("number");
+      expect(item.scoreBreakdown).toBeDefined();
+      expect(typeof item.scoreBreakdown.findingCount).toBe("number");
+      expect(typeof item.scoreBreakdown.inDegree).toBe("number");
+      expect(Array.isArray(item.warnings)).toBe(true);
+      expect(item.warnings.length).toBe(item.scoreBreakdown.findingCount);
+    }
+    // Sorted by score descending.
+    for (let i = 1; i < parsed.length; i++) {
+      expect(parsed[i - 1].score).toBeGreaterThanOrEqual(parsed[i].score);
+    }
+  });
+
+  it("--priority --node /people/bob filters the queue to that node only", async () => {
+    const out = makeSink();
+    const err = makeSink();
+    const result = await runAudit({
+      rootDir: root,
+      priority: true,
+      format: "json",
+      node: "/people/bob",
+      stdout: out.write,
+      stderr: err.write,
+    });
+
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(out.lines.join("\n"));
+    for (const item of parsed) {
+      expect(item.path).toBe("/people/bob");
+    }
+  });
+});
+
+describe("runAudit — --priority on empty graph", () => {
+  let root: string;
+  beforeEach(() => {
+    root = emptyGraph();
+  });
+  afterEach(() => {
+    rmrf(root);
+  });
+
+  it("prints 'No audit findings.' in human mode and exits 0", async () => {
     const out = makeSink();
     const err = makeSink();
     const result = await runAudit({
@@ -280,8 +359,22 @@ describe("runAudit — --priority punt", () => {
 
     expect(result.code).toBe(0);
     expect(result.warnings.length).toBe(0);
-    expect(out.lines.length).toBe(0);
-    expect(err.lines.join("\n")).toMatch(/--priority is not yet implemented — see WS-C2/);
+    expect(out.lines.join("\n")).toMatch(/No audit findings\./);
+  });
+
+  it("emits '[]' in JSON mode", async () => {
+    const out = makeSink();
+    const err = makeSink();
+    const result = await runAudit({
+      rootDir: root,
+      priority: true,
+      format: "json",
+      stdout: out.write,
+      stderr: err.write,
+    });
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(out.lines.join("\n"));
+    expect(parsed).toEqual([]);
   });
 });
 
