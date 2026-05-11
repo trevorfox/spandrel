@@ -58,7 +58,22 @@ These are placeholder names — each gets its own spec when it's the next thing.
 
 ## Phase D — revised scope (task-fidelity first)
 
-Three workstreams, ordered:
+Four workstreams, ordered. D-0 was added after this spec's first draft when Trevor's manual EA-OS audit (logged in `SPANDREL-FEEDBACK.md`) surfaced detector mis-fire rates of 25–100% on three of the most-fired finding classes. Calibrating the harness against detectors that fire majority noise would measure noise reduction, not graph quality. D-0 fixes that upstream so D-1 onward operates on clean signal.
+
+### D-0. Detector noise reduction (precedes harness build)
+
+The manual audit on Definite and EA-OS produced documented false-positive patterns that the harness was supposed to surface but didn't need to — Trevor produced them by hand:
+
+- **`weak_edge_description.missing` on body-inline `mentions` edges that duplicate already-described typed frontmatter edges** (29 mis-fires on Definite, ~25% of remaining missing-findings).
+- **`weak_edge_description.tautologous` on body Contents/TOC list links** (79 mis-fires on Definite, **100%** of remaining tautologous findings).
+- **`topic_opening` on legitimate collection-index descriptions** (5 mis-fires on EA-OS; the "What X / How Y" framing is correct authoring at composite-with-children nodes).
+- **`stub_marker` conflates framework-scaffold (`(auto-generated stub)`) with author-TODO (`TBD`/`TODO`/`WIP`)** (16 of 34 EA-OS findings are framework-scaffold — fast cleanups that crowd substantive TODO work).
+- **`thin_body` and `weak_description.thin` over-fire on pure-container composites** (~22 of 41 EA-OS findings; containers like `cache/`, `exports/`, `data/` are a valid structural pattern, not authoring gaps).
+- **Docs prose still references lowercase `design.md` despite 0.6.0's hard error** (13 stale references in `docs/*.md` that seeded 13 lowercase companion files in EA-OS via pattern-matching).
+
+Each item gets a conservative suppression rule or subkind split documented inline with the detector's spec entry in `specs/2026-05-10-authoring-audit-heuristics.md`. Code lives in `src/audit/heuristics.ts` (suppression conditions) and `src/compiler/audit-pass.ts` (when redundancy checks need cross-node context). Tests pin the expected behavior on small synthetic fixtures.
+
+Scope: ~200 LOC of detector code + tests + spec amendments + docs sweep. One coherent PR; ships before D-1 begins.
 
 ### D-1. Task-fidelity harness
 
@@ -139,6 +154,20 @@ The harness is cheap enough to run on every cleanup PR; the semantic audit is ch
 - **Other graph types.** The harness is general — multiple task sets can coexist. After EA-OS, candidate next graphs: Flux (Trevor's outreach product knowledge graph), Cannon's own dogfood graph, a public research graph for the OSS funnel. Not blocking on this.
 - **What counts as "success" on a task.** Pure content match is brittle (LLM phrasing varies). Semantic match via LLM-as-judge is more reliable. The harness spec proposes both — exact-substring as a primary gate, LLM-as-judge for nuance. Confirmable case-by-case.
 - **Should the harness gate CI?** Once stable, a passing task-fidelity score could be a merge gate for `docs/` (or for the graphs Trevor owns). Decide after seeing variance — if score is ±5% across reruns, it's gateable; if ±20%, it's diagnostic-only.
+
+## Framework-level questions surfaced by the EA-OS audit (separate specs)
+
+D-0 is a detector tuning patch — it suppresses or refines existing rules. The same audit cycle also produced two deeper framework questions that aren't tuning. Each gets its own spec, sequenced after D-0 lands. Captured here so they don't drift back to the SPANDREL-FEEDBACK observation log unaddressed.
+
+- **Link-type classes — self-describing vs generic vocabulary.** `specs/2026-05-11-link-type-classes.md` (companion to this spec). The current `weak_edge_description.missing` rule treats every typed edge with empty description as a gap, but evidence shows two classes:
+  - **Self-describing verbs** (`leads`, `owns`, `reports-to`, `served-by`): `<source> <type> <target>` is already a complete sentence; per-edge description is optional color, not load-bearing.
+  - **Generic vocabulary** (`relates-to`, `mentions`, `references`): the type carries no semantic content; description is the only place the relationship is articulated.
+
+  Proposes extending `_links/config.yaml` with `self_describing: bool` per type, shipping a default classification for baseline types, and adding a new `vague_link_type` detector that fires when dense `relates-to`/`mentions`/`references` clusters exist alongside a non-trivial registry vocabulary. Together these change the audit's relationship to typed edges from "demand prose everywhere" to "demand the right discipline per type class."
+
+- **Body Contents-list convention — hand-authored vs `{{ children }}` directive.** `specs/2026-05-11-contents-list-rendering.md` (companion). The detector mis-fires that D-0 suppresses (#3, 79 tautologous FPs on Definite alone) are downstream of a deeper structural question: should index-page body Contents lists be hand-authored markdown, compiler-generated enumerations, or hybrid `{{ children }}` directives that the compiler resolves at build time? D-0's heading-aware suppression is a local optimum that works given the current convention; the spec analyzes whether the convention itself should change. If the framework adopts directives, D-0's TOC suppression becomes dead code; if it keeps hand-authored Contents, the suppression is permanent.
+
+These specs are captured for decision-making, not for immediate implementation. They land if/when Trevor decides the work is the highest-value next move.
 
 ## Relationship to existing docs
 
