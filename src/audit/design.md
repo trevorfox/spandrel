@@ -30,8 +30,13 @@ Cheap, pure detection functions. Three principles:
 | `detectMissingEdgeDescription` | Typed link has null/empty/whitespace description and type is not self-evident | self-evident allowlist: `["child-of", "part-of"]` |
 | `detectTautologousEdgeDescription` | Link description equals the link type or the target path stem | exact equality (case-insensitive) |
 | `detectThinEdgeDescription` | Single-word description on a typed non-`mentions` edge | ≤ 1 word after trim |
+| `detectAbsoluteStaleness` | Node hasn't been updated in N days | > 180 days |
+| `detectDifferentialStaleness` | Node updated long before median neighbor | > 365 days gap |
+| `detectHighFanInLowFreshness` | Heavily-referenced node hasn't been touched | in-degree ≥ 5, age > 365 days |
 
 Edge-level detectors all emit the same `weak_edge_description` finding kind; the specific failure mode (`missing`, `tautologous`, `thin`) lives in `detail.subkind` and is reflected in the finding message. One kind covers all three to keep the warning vocabulary small.
+
+The three staleness detectors share a single `Finding.kind = "staleness"` with `detail.subkind` distinguishing `absolute` / `differential` / `high_fanin` (G2 pattern). Freshness inputs (`updated`, `inDegree`, `neighborUpdates`, `now`) are optional on `NodeAuditInput`; detectors silently skip when their required inputs are absent.
 
 ## What this module is *not*
 

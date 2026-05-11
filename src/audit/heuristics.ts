@@ -467,6 +467,193 @@ export function detectOverlongBody(
 }
 
 /**
+ * Freshness heuristics — staleness signals based on git metadata.
+ *
+ * Three detectors share a single `staleness` Finding kind (G2 pattern, matches
+ * WS-A1's `weak_edge_description`). The conceptual issue is the same — "this
+ * node may be out of date" — so they collapse to one kind with a `subkind` in
+ * `detail` (`absolute` / `differential` / `high_fanin`).
+ *
+ * Inputs come from `addGitMetadata` in the compiler (`created`, `updated` as
+ * ISO-ish strings from simple-git) plus caller-computed `inDegree` and
+ * `neighborUpdates`. `now` is injected as a parameter so detectors stay pure
+ * and tests stay deterministic — this module never calls `new Date()`.
+ *
+ * All three detectors silently return `null` when required inputs are absent
+ * or unparseable. Bad timestamps (e.g. malformed strings) are treated as
+ * "no signal" rather than thrown — staleness is advisory, never load-bearing.
+ *
+ * The methodology and threshold rationale live in
+ * specs/2026-05-10-authoring-audit-heuristics.md ("Freshness heuristics").
+ */
+
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * Parse a timestamp string into epoch milliseconds. Returns `null` for null,
+ * undefined, empty, or unparseable input. Centralized so all freshness
+ * detectors handle bad data the same way.
+ */
+function parseTimestamp(ts: string | null | undefined): number | null {
+  if (ts === null || ts === undefined) return null;
+  const trimmed = ts.trim();
+  if (trimmed.length === 0) return null;
+  const ms = Date.parse(trimmed);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/**
+ * Absolute staleness: node hasn't been updated in `thresholdDays` days
+ * relative to `now`. The crudest freshness check — pure age, ignoring
+ * structure.
+ *
+ * Defaults to 180 days: roughly a quarter-pair. Long enough that an active
+ * doc won't trip it, short enough that an abandoned doc does. The threshold
+ * is a function arg so callers can tune per-graph (a fast-moving client
+ * directory might want 90; a stable architecture spec might want 365).
+ *
+ * @param updated - ISO timestamp from `addGitMetadata`. Null/undefined/bad → null.
+ * @param now - Reference time (also ISO). Bad → null.
+ * @param thresholdDays - Days since `updated` that trigger the finding (default 180).
+ */
+export function detectAbsoluteStaleness(
+  updated: string | null | undefined,
+  now: string,
+  thresholdDays = 180,
+): Finding | null {
+  const updatedMs = parseTimestamp(updated);
+  const nowMs = parseTimestamp(now);
+  if (updatedMs === null || nowMs === null) return null;
+
+  const ageDays = (nowMs - updatedMs) / MS_PER_DAY;
+  // Strict comparison: exactly at threshold is clean. Matches the convention
+  // used by every other detector in this module (PR #16 + WS-A2's body
+  // density). Cross-detector coherence wins over the "anything older than 6
+  // months" reading.
+  if (ageDays <= thresholdDays) return null;
+
+  return {
+    kind: "staleness",
+    severity: "advisory",
+    message: `Not updated in ${Math.floor(ageDays)} days (threshold ${thresholdDays}, subkind: absolute)`,
+    detail: {
+      subkind: "absolute",
+      ageDays: Math.floor(ageDays),
+      thresholdDays,
+    },
+  };
+}
+
+/**
+ * Differential staleness: the node was last updated significantly before the
+ * *median* of its neighbors (parent + recently-edited siblings, chosen by the
+ * caller). Catches the case where a doc is structurally surrounded by recent
+ * activity but itself sat untouched — a strong signal that the neighborhood
+ * moved on and the doc didn't.
+ *
+ * Why median rather than max:
+ * - Max is fragile to a single recent edit (one sibling's typo fix shouldn't
+ *   make every other sibling look stale).
+ * - Median requires roughly half the neighbors to be more recent, which
+ *   matches the intuition "the neighborhood as a whole has moved past me."
+ *
+ * Why a fixed-day offset rather than a ratio: ratios collapse to nonsense
+ * when timestamps span only a few days (a 2x ratio over 1 day is noise).
+ * A 365-day default offset reflects "a year of drift" — large enough that
+ * the gap is real, not a sampling artifact.
+ *
+ * @param nodeUpdated - The node's `updated` timestamp.
+ * @param neighborUpdates - Timestamps of relevant neighbors (caller-curated).
+ * @param thresholdDays - Days behind the median neighbor that trigger (default 365).
+ */
+export function detectDifferentialStaleness(
+  nodeUpdated: string | null | undefined,
+  neighborUpdates: string[],
+  thresholdDays = 365,
+): Finding | null {
+  const nodeMs = parseTimestamp(nodeUpdated);
+  if (nodeMs === null) return null;
+
+  const neighborMs = neighborUpdates
+    .map(parseTimestamp)
+    .filter((ms): ms is number => ms !== null);
+  if (neighborMs.length === 0) return null;
+
+  // Median: sort ascending, take middle (or mean of two middle values for even count).
+  const sorted = [...neighborMs].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const medianMs =
+    sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+
+  const gapDays = (medianMs - nodeMs) / MS_PER_DAY;
+  // Strict: exactly at threshold is clean. Cross-detector coherence.
+  if (gapDays <= thresholdDays) return null;
+
+  return {
+    kind: "staleness",
+    severity: "advisory",
+    message: `Last updated ${Math.floor(gapDays)} days before median neighbor (threshold ${thresholdDays}, subkind: differential)`,
+    detail: {
+      subkind: "differential",
+      gapDays: Math.floor(gapDays),
+      thresholdDays,
+      neighborCount: neighborMs.length,
+    },
+  };
+}
+
+/**
+ * High-fan-in low-freshness: a node that many others reference (high
+ * in-degree) but that hasn't been touched in a while. The combination
+ * matters — a heavily-referenced node is load-bearing in agent traversals,
+ * so its staleness cascades to every consumer. A rarely-referenced stale
+ * node is a lower priority.
+ *
+ * Defaults: `inDegreeThreshold = 5` (heuristic — at this level the node is
+ * acting as a hub, not a leaf), `daysThreshold = 365` (a year — same logic as
+ * differential: the gap has to be unambiguous).
+ *
+ * @param updated - The node's `updated` timestamp.
+ * @param now - Reference time.
+ * @param inDegree - Count of incoming references (caller-computed).
+ * @param inDegreeThreshold - Minimum in-degree to qualify as "high fan-in" (default 5).
+ * @param daysThreshold - Minimum age for the finding (default 365).
+ */
+export function detectHighFanInLowFreshness(
+  updated: string | null | undefined,
+  now: string,
+  inDegree: number,
+  inDegreeThreshold = 5,
+  daysThreshold = 365,
+): Finding | null {
+  if (inDegree < inDegreeThreshold) return null;
+
+  const updatedMs = parseTimestamp(updated);
+  const nowMs = parseTimestamp(now);
+  if (updatedMs === null || nowMs === null) return null;
+
+  const ageDays = (nowMs - updatedMs) / MS_PER_DAY;
+  // Strict on age (matches `detectAbsoluteStaleness`). `inDegree` keeps the
+  // `<` check above — exactly at the in-degree threshold still flags, by
+  // analogy with `detectThinness` (composite with >= minChildren still
+  // qualifies for the check).
+  if (ageDays <= daysThreshold) return null;
+
+  return {
+    kind: "staleness",
+    severity: "advisory",
+    message: `High-fan-in node (${inDegree} refs) not updated in ${Math.floor(ageDays)} days (subkind: high_fanin)`,
+    detail: {
+      subkind: "high_fanin",
+      ageDays: Math.floor(ageDays),
+      daysThreshold,
+      inDegree,
+      inDegreeThreshold,
+    },
+  };
+}
+
+/**
  * Run all cheap heuristics against a single node. Returns every Finding that
  * fires; an empty array means clean.
  *
@@ -529,6 +716,43 @@ export function auditNode(input: NodeAuditInput): Finding[] {
 
     const overlongFinding = detectOverlongBody(input.body);
     if (overlongFinding) findings.push(overlongFinding);
+  }
+
+  // --- Freshness detectors (WS-A3) -------------------------------------
+  // Each requires a subset of optional inputs; skip cleanly when missing.
+  // Kept as a clearly-delimited block at the end of the function so
+  // parallel-workstream rebases have a clean three-way merge.
+
+  if (input.updated !== undefined && input.updated !== null && input.now) {
+    const absFinding = detectAbsoluteStaleness(input.updated, input.now);
+    if (absFinding) findings.push(absFinding);
+  }
+
+  if (
+    input.updated !== undefined &&
+    input.updated !== null &&
+    input.neighborUpdates &&
+    input.neighborUpdates.length > 0
+  ) {
+    const diffFinding = detectDifferentialStaleness(
+      input.updated,
+      input.neighborUpdates,
+    );
+    if (diffFinding) findings.push(diffFinding);
+  }
+
+  if (
+    input.updated !== undefined &&
+    input.updated !== null &&
+    input.now &&
+    input.inDegree !== undefined
+  ) {
+    const hfFinding = detectHighFanInLowFreshness(
+      input.updated,
+      input.now,
+      input.inDegree,
+    );
+    if (hfFinding) findings.push(hfFinding);
   }
 
   return findings;
