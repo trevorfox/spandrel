@@ -53,3 +53,9 @@ Warning types in the per-node skip set: `file_too_large`, `compile_timeout`, `in
 ## Git metadata
 
 The compiler optionally enriches nodes with git history: created date, last updated date, author, and per-node commit history.
+
+## Audit pass
+
+After the tree walk, validation, and git metadata enrichment, an audit pass runs the cheap heuristics from `src/audit/` against every node and appends advisory findings to the warnings list. The pass is non-blocking — compile always exits 0 regardless of audit count — and surfaces six warning types: `weak_description`, `weak_edge_description`, `stub_marker`, `thin_body`, `overlong_body`, `staleness`. Sub-codes ride in the bracketed message prefix (e.g. `[toc_overlap]` or `[weak_edge_description.missing]`) so consumers can grep without parsing a separate detail field.
+
+`runAuditPass` is **not** called inside `compile()`. The freshness detectors need git timestamps that `addGitMetadata` populates, and `addGitMetadata` runs at CLI scope (`dev`, `mcp`, `compileOnly`) rather than inside `compile()`. Rather than restructure `compile()` to depend on git, the audit pass joins at the same scope as `addGitMetadata` and runs immediately after it. See `src/compiler/audit-pass.ts` for the bridge implementation, and `specs/2026-05-10-authoring-audit-heuristics.md` for the heuristics methodology and scope/exemption decisions (companion-document skip, link-only in-degree).

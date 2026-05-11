@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { compile } from "../src/compiler/compiler.js";
+import { runAuditPass } from "../src/compiler/audit-pass.js";
 import { buildManifest } from "../src/compiler/manifest.js";
 import { createTempDir, writeIndex } from "./test-helpers.js";
 
@@ -59,6 +60,30 @@ describe("buildManifest", () => {
     });
 
     expect(manifest.collections).toEqual(["/clients", "/projects"]);
+  });
+
+  it("includes audit-pass warning types in warningsByType counts", async () => {
+    // Compose a tiny graph that will fire `weak_description.vague_qualifiers`
+    // (description with multiple vague words) and `stub_marker` (TBD in body).
+    // The audit pass mirrors the same wiring as `compileOnly` in cli.ts.
+    writeIndex(root, { name: "Root", description: "Root" });
+    writeIndex(path.join(root, "weak"), {
+      name: "Weak",
+      description: "Various different things related to relevant stuff",
+    }, "TBD — fill in later.");
+
+    const store = await compile(root);
+    await runAuditPass(store);
+    const manifest = await buildManifest(store, { spandrelVersion: "test" });
+
+    expect(manifest.warningsByType["weak_description"]).toBeGreaterThanOrEqual(1);
+    expect(manifest.warningsByType["stub_marker"]).toBeGreaterThanOrEqual(1);
+    // warningCount should equal sum of warningsByType values.
+    const total = Object.values(manifest.warningsByType).reduce(
+      (a, b) => a + b,
+      0,
+    );
+    expect(manifest.warningCount).toBe(total);
   });
 
   it("compile throws on lowercase companion files (0.6.0 hard error)", async () => {

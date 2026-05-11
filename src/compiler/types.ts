@@ -48,7 +48,18 @@ export interface ValidationWarning {
     | "invalid_frontmatter"
     | "unknown_link_type"      // replaces undeclared_link_type
     | "underused_link_type"    // new: min_uses governance
-    | "companion_file_lowercase";
+    | "companion_file_lowercase"
+    // --- Audit-pass warnings (WS-B1) ---
+    // These come from `src/audit/` heuristics and are advisory. The specific
+    // Finding kind/subkind is encoded in the `message` as `[<kind>]` or
+    // `[<kind>.<subkind>]` so CI/skill consumers can grep without parsing
+    // a separate detail field (G6 decision: no `detail` on warnings).
+    | "weak_description"        // covers 5 node-level Finding kinds (kind in message)
+    | "weak_edge_description"   // edge descriptions (subkind in message)
+    | "stub_marker"             // body contains TBD/TODO/WIP/etc.
+    | "thin_body"               // body shorter than threshold
+    | "overlong_body"           // body longer than threshold
+    | "staleness";              // 3 freshness subkinds (subkind in message)
   message: string;
 }
 
