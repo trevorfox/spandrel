@@ -28,6 +28,24 @@ const VAGUE_WORDS = [
 const QUESTION_WORDS = ["How", "What", "Why", "Where", "When"];
 
 /**
+ * Stub-marker patterns. Each entry is `[label, pattern]`. The label is the
+ * human-readable token reported in the finding; the pattern is the regex used
+ * to detect it. Patterns are case-insensitive; word-boundaried for the
+ * acronym-style markers, literal for the parenthesized/bracketed forms (their
+ * regex specials are escaped here so the detector body stays declarative).
+ *
+ * Kept as a module-level const so the list is easy to extend without touching
+ * the detector logic.
+ */
+const STUB_MARKER_PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
+  ["TBD", /\bTBD\b/i],
+  ["TODO", /\bTODO\b/i],
+  ["WIP", /\bWIP\b/i],
+  ["(auto-generated stub)", /\(auto-generated stub\)/i],
+  ["[placeholder]", /\[placeholder\]/i],
+];
+
+/**
  * TOC enumeration: description tail (after em-dash) restates child node names.
  *
  * Anti-pattern example:
@@ -339,6 +357,116 @@ export function detectThinEdgeDescription(
 }
 
 /**
+ * Body-content heuristics — operate on the full markdown body rather than the
+ * frontmatter description. Each detector below is pure, takes the body text
+ * (plus optional context) and returns a `Finding` or null.
+ *
+ * Body is optional input on `NodeAuditInput`; these detectors are skipped
+ * entirely when callers don't provide it (see `auditNode` below).
+ */
+
+/**
+ * Stub markers in the body: `TBD`, `TODO`, `WIP`, `(auto-generated stub)`,
+ * `[placeholder]`. Authors leave these in when bootstrapping a node and forget
+ * to come back; the audit's job is to remember for them. One finding lists
+ * every marker that fires so the author sees them at a glance.
+ *
+ * Returns null if the body is null/empty/whitespace or contains no marker.
+ */
+export function detectStubMarkers(body: string | null): Finding | null {
+  if (body === null) return null;
+  if (body.trim().length === 0) return null;
+
+  const matches: string[] = [];
+  for (const [label, pattern] of STUB_MARKER_PATTERNS) {
+    if (pattern.test(body)) {
+      matches.push(label);
+    }
+  }
+  if (matches.length === 0) return null;
+
+  return {
+    kind: "stub_marker",
+    severity: "advisory",
+    message: `Body contains stub markers: ${matches.join(", ")}`,
+    detail: { matches },
+  };
+}
+
+/**
+ * Thin body: composite nodes (`hasChildren = true`) with body shorter than
+ * `compositeMinWords` and leaf nodes with body shorter than `leafMinWords`.
+ * Composites carry a heavier burden — they shape downstream traversal — so
+ * the threshold is stricter. An empty or null body is the thinnest possible
+ * body and always fires.
+ *
+ * Word count uses the same `split(/\s+/).filter(Boolean)` rule as the other
+ * detectors so totals stay consistent across the module.
+ *
+ * @param body - Full body text (markdown after frontmatter). `null` or empty
+ *   string counts as 0 words.
+ * @param hasChildren - True for composite nodes (`foo/index.md` with siblings),
+ *   false for leaves.
+ * @param compositeMinWords - Composite body shorter than this triggers
+ *   (default 50).
+ * @param leafMinWords - Leaf body shorter than this triggers (default 20).
+ */
+export function detectThinBody(
+  body: string | null,
+  hasChildren: boolean,
+  compositeMinWords = 50,
+  leafMinWords = 20,
+): Finding | null {
+  const trimmed = body === null ? "" : body.trim();
+  const wordCount =
+    trimmed.length === 0 ? 0 : trimmed.split(/\s+/).filter(Boolean).length;
+
+  const threshold = hasChildren ? compositeMinWords : leafMinWords;
+  if (wordCount >= threshold) return null;
+
+  return {
+    kind: "thin_body",
+    severity: "advisory",
+    message: `${hasChildren ? "Composite" : "Leaf"} node body is short (${wordCount} words, threshold ${threshold})`,
+    detail: {
+      wordCount,
+      threshold,
+      hasChildren,
+    },
+  };
+}
+
+/**
+ * Overlong body: > `maxWords` words. A body that long usually means the node
+ * is conflating several distinct topics and would read better decomposed into
+ * a composite with child nodes — each carrying its own slice. The threshold
+ * is generous on purpose; this is an advisory nudge, not a hard limit.
+ *
+ * Returns null on null/empty bodies and on bodies at or below the threshold.
+ *
+ * @param body - Full body text. `null` is treated as empty.
+ * @param maxWords - Body longer than this triggers (default 3000).
+ */
+export function detectOverlongBody(
+  body: string | null,
+  maxWords = 3000,
+): Finding | null {
+  if (body === null) return null;
+  const trimmed = body.trim();
+  if (trimmed.length === 0) return null;
+
+  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+  if (wordCount <= maxWords) return null;
+
+  return {
+    kind: "overlong_body",
+    severity: "advisory",
+    message: `Body is long (${wordCount} words, threshold ${maxWords}) — consider decomposing into a composite`,
+    detail: { wordCount, threshold: maxWords },
+  };
+}
+
+/**
  * Run all cheap heuristics against a single node. Returns every Finding that
  * fires; an empty array means clean.
  *
@@ -382,6 +510,25 @@ export function auditNode(input: NodeAuditInput): Finding[] {
 
     const thinEdge = detectThinEdgeDescription(link);
     if (thinEdge) findings.push(thinEdge);
+  }
+
+  // --- Body-content detectors (WS-A2) -------------------------------------
+  // Skipped when `body` is undefined so callers that only audit
+  // descriptions (e.g. older tests) keep working unchanged. `null` is a
+  // valid value distinct from `undefined`: it means "I looked, there was no
+  // body" and still gets run through the detectors (empty body fires
+  // thin_body).
+  if (input.body !== undefined) {
+    const hasChildren = input.childNames.length > 0;
+
+    const stubFinding = detectStubMarkers(input.body);
+    if (stubFinding) findings.push(stubFinding);
+
+    const thinBodyFinding = detectThinBody(input.body, hasChildren);
+    if (thinBodyFinding) findings.push(thinBodyFinding);
+
+    const overlongFinding = detectOverlongBody(input.body);
+    if (overlongFinding) findings.push(overlongFinding);
   }
 
   return findings;
