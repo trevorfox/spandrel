@@ -7,3 +7,5 @@ _site/
 _notes/
 ROADMAP.md
 CLAUDE.local.md
+test/fidelity/cache/
+test/fidelity-report.json

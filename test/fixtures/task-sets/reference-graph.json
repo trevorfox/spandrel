@@ -1,0 +1,49 @@
+{
+  "graph_label": "Pacific Consulting (reference fixture)",
+  "graph_root": "../fidelity-graphs/reference",
+  "model": "claude-sonnet-4-6",
+  "tasks": [
+    {
+      "id": "acme-account-lead",
+      "question": "Who is the account lead on the Acme Corp engagement?",
+      "must_include": ["Jane Doe"],
+      "must_not_include": ["Rahim"],
+      "signals": [
+        "names Jane Doe as the account lead explicitly",
+        "references the source node at /clients/acme-corp or /people/jane-doe",
+        "states that the account-lead role started Q2 2024 or grounds the claim in the engagement history"
+      ],
+      "max_calls": 5,
+      "max_total_tokens": 8000,
+      "notes": "Tests minimum-traversal discovery: from root, find /clients/acme-corp and surface its account-lead edge."
+    },
+    {
+      "id": "globex-team-rationale",
+      "question": "Which team serves Globex, and why was Rahim Patel assigned as the account lead?",
+      "must_include": ["data team", "logistics"],
+      "must_not_include": [],
+      "signals": [
+        "identifies the data team as serving Globex",
+        "explains Rahim was assigned because of his prior logistics-industry experience",
+        "grounds the explanation in graph content rather than guessing"
+      ],
+      "max_calls": 6,
+      "max_total_tokens": 8000,
+      "notes": "Tests edge-description reliance: the served-by edge structure is useful but the account-lead edge description is where the 'why' lives."
+    },
+    {
+      "id": "strategic-vs-growth",
+      "question": "What distinguishes Acme Corp's strategic tier from Globex's growth tier?",
+      "must_include": ["strategic", "growth"],
+      "must_not_include": [],
+      "signals": [
+        "explains that strategic tier reflects established top-revenue accounts with dedicated leads",
+        "explains that growth tier is for expansion-stage clients with runway to strategic",
+        "draws the distinction from graph content, not generic consulting knowledge"
+      ],
+      "max_calls": 6,
+      "max_total_tokens": 8000,
+      "notes": "Tests multi-node synthesis: requires reading /clients/index.md plus both client nodes to surface the tier distinction."
+    }
+  ]
+}

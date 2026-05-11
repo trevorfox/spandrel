@@ -1,0 +1,47 @@
+{
+  "graph_label": "Pacific Consulting (anti-reference fixture)",
+  "graph_root": "../fidelity-graphs/anti-reference",
+  "model": "claude-sonnet-4-6",
+  "tasks": [
+    {
+      "id": "acme-account-lead",
+      "question": "Who is the account lead on the Acme Corp engagement?",
+      "must_include": ["Jane Doe"],
+      "must_not_include": ["Rahim"],
+      "signals": [
+        "names Jane Doe as the account lead explicitly",
+        "states when she took the role or explains the engagement context"
+      ],
+      "max_calls": 5,
+      "max_total_tokens": 8000,
+      "notes": "Same question as the reference graph; here the graph's debt (TOC descriptions, stub bodies, naked edges) should make the agent struggle to answer with confidence."
+    },
+    {
+      "id": "globex-team-rationale",
+      "question": "Which team serves Globex, and why was Rahim Patel assigned as the account lead?",
+      "must_include": ["data team"],
+      "must_not_include": [],
+      "signals": [
+        "identifies the data team as serving Globex",
+        "explains why Rahim was assigned with graph-grounded reasoning",
+        "acknowledges uncertainty when the graph does not contain the rationale"
+      ],
+      "max_calls": 6,
+      "max_total_tokens": 8000,
+      "notes": "The anti-reference graph has the served-by edge but no description on it, and no body content explaining the assignment. A faithful agent should say it cannot find the rationale."
+    },
+    {
+      "id": "strategic-vs-growth",
+      "question": "What distinguishes Acme Corp's strategic tier from Globex's growth tier?",
+      "must_include": [],
+      "must_not_include": [],
+      "signals": [
+        "acknowledges that the graph does not currently distinguish the two tiers",
+        "avoids fabricating a distinction not present in graph content"
+      ],
+      "max_calls": 6,
+      "max_total_tokens": 8000,
+      "notes": "Tier frontmatter is absent here. A correct response surfaces the gap rather than inventing a distinction. No must_include — this task scores the agent's honesty."
+    }
+  ]
+}
