@@ -126,6 +126,40 @@ Detection signals scoped to what's cheaply computable from the compiled graph.
 - **Tautologous edge description:** Trimmed lowercase description equals the link `type`, the type with hyphens-as-spaces, the target path stem, or the stem with hyphens-as-spaces. Case-insensitive, equality only — substring matches do not trigger.
 - **Thin edge description:** Per typed link, single-word description and `type !== "mentions"`.
 
+### Body-content heuristics
+
+Description-level heuristics catch low-signal frontmatter; body-content heuristics catch low-signal node bodies. Authors often write a serviceable description and then leave the body as a stub, or pile so much content into one node that it should have been decomposed. These three detectors operate on the full body text (markdown after frontmatter) rather than the description.
+
+All three are cheap (regex + word-count). They live in `src/audit/heuristics.ts` alongside the description detectors and feed the same `Finding` array via `auditNode()`. Body is an optional field on `NodeAuditInput` (`body?: string | null`) so callers that only audit descriptions are unaffected — when `body` is `undefined` the detectors are skipped entirely. `null` is treated as a present-but-empty body and still runs through the detectors (an empty body always trips `thin_body`).
+
+#### Stub markers — `stub_marker`
+
+**Signal:** Body contains any of `TBD`, `TODO`, `WIP`, `(auto-generated stub)`, `[placeholder]`.
+
+**Why it fails the test:** These are the artefacts of bootstrapping a node and never returning to flesh it out. They're cheap to detect and (when found) cheap to act on — either fill in the body or remove the marker.
+
+**Detection heuristic:** Case-insensitive regex match. Acronym markers are word-boundaried (`\bTBD\b`, `\bTODO\b`, `\bWIP\b`) to avoid false positives inside other words; the parenthesized / bracketed forms are matched literally. One `Finding` per node lists every marker that fired so the author sees them at a glance.
+
+#### Thin body — `thin_body`
+
+**Signal:** Composite node (`hasChildren = true`) with body shorter than 50 words, or leaf node with body shorter than 20 words. Empty/null body always fires.
+
+**Why it fails the test:** Composites shape downstream traversal; if the index body doesn't orient the reader, every drill-down starts cold. Leaves can be terse because they're the destination, but a near-empty leaf signals a placeholder.
+
+**Detection heuristic:** Trim, split on whitespace, count tokens. Composites get the stricter threshold (50) because their leverage is higher. Thresholds are function arguments — callers can override per graph.
+
+#### Overlong body — `overlong_body`
+
+**Signal:** Body exceeds 3000 words.
+
+**Why it fails the test:** Bodies that long usually mean the node is conflating several distinct topics and would read better decomposed into a composite with child nodes each carrying its own slice. The threshold is intentionally generous — this is a nudge, not a hard limit.
+
+**Detection heuristic:** Word count > threshold (default 3000). Like the other detectors, threshold is a function argument.
+
+#### Why three distinct `FindingKind` values
+
+Unlike edge-level heuristics (which share `weak_edge_description` with a `subkind` in `detail` because all three describe the same underlying issue), the three body-content findings are conceptually distinct: presence of stub markers, body too short, and body too long. A single kind would lose information for downstream consumers (compiler warning sub-codes, CLI filtering, prioritization). Three kinds keeps the data structure honest.
+
 ### Mid-cost (LLM-as-judge or embedding-based)
 
 - **Description-vs-children semantic distance.** Embed the description and each child's `name+description`. If the description's embedding is too close to the *concatenation of child names*, it's TOC-shaped. If it's too far from any individual child's claim, it's not synthesizing them.

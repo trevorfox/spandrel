@@ -15,7 +15,10 @@ export type FindingKind =
   | "topic_opening"
   | "thin"
   | "tautology"
-  | "weak_edge_description";
+  | "weak_edge_description"
+  | "stub_marker"
+  | "thin_body"
+  | "overlong_body";
 
 export type FindingSeverity = "advisory" | "warning";
 
@@ -53,4 +56,10 @@ export interface NodeAuditInput {
    * unchanged.
    */
   links?: EdgeAuditInput[];
+  /**
+   * Full body content (markdown after frontmatter) for body-level audits.
+   * Optional — callers that only audit node-level descriptions can omit this
+   * and existing behaviour is unchanged. `null` is treated as an empty body.
+   */
+  body?: string | null;
 }

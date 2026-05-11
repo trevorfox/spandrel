@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   auditNode,
   detectMissingEdgeDescription,
+  detectOverlongBody,
+  detectStubMarkers,
   detectTautologousEdgeDescription,
   detectTautology,
+  detectThinBody,
   detectThinEdgeDescription,
   detectThinness,
   detectTocOverlap,
@@ -460,5 +463,227 @@ describe("auditNode (integration)", () => {
       childNames: ["Philosophy", "Hypothesis", "Content Model", "Architecture", "Patterns"],
     });
     expect(findings).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Body-content heuristics (WS-A2)
+// ---------------------------------------------------------------------------
+
+describe("detectStubMarkers", () => {
+  it("flags TBD as a stub marker", () => {
+    const finding = detectStubMarkers("This section is TBD until we decide.");
+    expect(finding?.kind).toBe("stub_marker");
+    expect(finding?.detail?.matches).toContain("TBD");
+  });
+
+  it("flags TODO as a stub marker", () => {
+    const finding = detectStubMarkers("TODO: write a real explanation here");
+    expect(finding?.kind).toBe("stub_marker");
+    expect(finding?.detail?.matches).toContain("TODO");
+  });
+
+  it("flags WIP as a stub marker", () => {
+    const finding = detectStubMarkers("Status: WIP — not yet ready.");
+    expect(finding?.kind).toBe("stub_marker");
+    expect(finding?.detail?.matches).toContain("WIP");
+  });
+
+  it("flags `(auto-generated stub)` literal", () => {
+    const finding = detectStubMarkers(
+      "Some node body. (auto-generated stub) Replace me.",
+    );
+    expect(finding?.kind).toBe("stub_marker");
+    expect(finding?.detail?.matches).toContain("(auto-generated stub)");
+  });
+
+  it("flags `[placeholder]` literal", () => {
+    const finding = detectStubMarkers("Intro paragraph [placeholder] follow-up.");
+    expect(finding?.kind).toBe("stub_marker");
+    expect(finding?.detail?.matches).toContain("[placeholder]");
+  });
+
+  it("matches stub markers case-insensitively", () => {
+    const finding = detectStubMarkers("tbd: todo this later");
+    expect(finding?.kind).toBe("stub_marker");
+    const matches = finding?.detail?.matches as string[];
+    expect(matches).toContain("TBD");
+    expect(matches).toContain("TODO");
+  });
+
+  it("reports multiple stub markers in one finding", () => {
+    const finding = detectStubMarkers(
+      "TODO: explain. TBD: confirm. WIP placeholder paragraph.",
+    );
+    expect(finding?.kind).toBe("stub_marker");
+    const matches = finding?.detail?.matches as string[];
+    expect(matches).toContain("TODO");
+    expect(matches).toContain("TBD");
+    expect(matches).toContain("WIP");
+  });
+
+  it("does not flag words that contain marker substrings (word boundary)", () => {
+    // `TBD`, `TODO`, `WIP` embedded inside larger words (`TBDriver`, `TODOS`,
+    // `WIPing`) must not fire because `\b` is enforced. Without word
+    // boundaries, this body would trip all three markers.
+    const finding = detectStubMarkers(
+      "The TBDriver class extends BaseDriver and tracks unsorted TODOS in a queue. WIPing the disk reformats it.",
+    );
+    expect(finding).toBeNull();
+  });
+
+  it("returns null on null body", () => {
+    expect(detectStubMarkers(null)).toBeNull();
+  });
+
+  it("returns null on empty / whitespace body", () => {
+    expect(detectStubMarkers("")).toBeNull();
+    expect(detectStubMarkers("   \n  ")).toBeNull();
+  });
+});
+
+describe("detectThinBody", () => {
+  it("flags empty body on a leaf", () => {
+    const finding = detectThinBody("", false);
+    expect(finding?.kind).toBe("thin_body");
+    expect(finding?.detail?.wordCount).toBe(0);
+  });
+
+  it("flags null body on a composite", () => {
+    const finding = detectThinBody(null, true);
+    expect(finding?.kind).toBe("thin_body");
+    expect(finding?.detail?.wordCount).toBe(0);
+  });
+
+  it("flags a leaf body just under the leaf threshold (19 words)", () => {
+    const body = Array(19).fill("word").join(" ");
+    const finding = detectThinBody(body, false);
+    expect(finding?.kind).toBe("thin_body");
+    expect(finding?.detail?.wordCount).toBe(19);
+    expect(finding?.detail?.threshold).toBe(20);
+  });
+
+  it("does not flag a leaf body exactly at the leaf threshold (20 words)", () => {
+    const body = Array(20).fill("word").join(" ");
+    const finding = detectThinBody(body, false);
+    expect(finding).toBeNull();
+  });
+
+  it("flags a composite body just under the composite threshold (49 words)", () => {
+    const body = Array(49).fill("word").join(" ");
+    const finding = detectThinBody(body, true);
+    expect(finding?.kind).toBe("thin_body");
+    expect(finding?.detail?.wordCount).toBe(49);
+    expect(finding?.detail?.threshold).toBe(50);
+  });
+
+  it("does not flag a composite body exactly at the composite threshold (50 words)", () => {
+    const body = Array(50).fill("word").join(" ");
+    const finding = detectThinBody(body, true);
+    expect(finding).toBeNull();
+  });
+
+  it("applies the stricter threshold for composites versus leaves", () => {
+    const body = Array(30).fill("word").join(" "); // 30 words
+    // 30 < 50 (composite threshold) → flags as composite
+    expect(detectThinBody(body, true)?.kind).toBe("thin_body");
+    // 30 >= 20 (leaf threshold) → does not flag as leaf
+    expect(detectThinBody(body, false)).toBeNull();
+  });
+
+  it("honours custom thresholds", () => {
+    const body = Array(5).fill("word").join(" "); // 5 words
+    // Default leaf threshold 20 → flags
+    expect(detectThinBody(body, false)?.kind).toBe("thin_body");
+    // Custom leaf threshold 5 → does not flag (exact threshold)
+    expect(detectThinBody(body, false, 50, 5)).toBeNull();
+  });
+});
+
+describe("detectOverlongBody", () => {
+  it("flags a body just over the default 3000-word threshold", () => {
+    const body = Array(3001).fill("word").join(" ");
+    const finding = detectOverlongBody(body);
+    expect(finding?.kind).toBe("overlong_body");
+    expect(finding?.detail?.wordCount).toBe(3001);
+  });
+
+  it("does not flag a body exactly at the threshold (3000 words)", () => {
+    const body = Array(3000).fill("word").join(" ");
+    expect(detectOverlongBody(body)).toBeNull();
+  });
+
+  it("does not flag a short body", () => {
+    expect(detectOverlongBody("Just a few words here.")).toBeNull();
+  });
+
+  it("returns null on null body", () => {
+    expect(detectOverlongBody(null)).toBeNull();
+  });
+
+  it("returns null on empty / whitespace body", () => {
+    expect(detectOverlongBody("")).toBeNull();
+    expect(detectOverlongBody("   ")).toBeNull();
+  });
+
+  it("honours a custom threshold", () => {
+    const body = Array(50).fill("word").join(" ");
+    // Default threshold 3000 → does not flag
+    expect(detectOverlongBody(body)).toBeNull();
+    // Custom threshold 40 → flags
+    expect(detectOverlongBody(body, 40)?.kind).toBe("overlong_body");
+  });
+});
+
+describe("auditNode body integration (WS-A2)", () => {
+  it("returns no body findings when body is undefined (back-compat)", () => {
+    const findings = auditNode({
+      name: "Spandrel",
+      description:
+        "What Spandrel believes about agent-friendly knowledge graphs — structure emerges from content rather than being imposed; conversational coherence with agents is the design target; instruction stays separate from knowledge; paths are addresses",
+      childNames: ["Philosophy", "Hypothesis", "Content Model", "Architecture", "Patterns"],
+    });
+    // No body kinds should appear.
+    const kinds = findings.map((f) => f.kind);
+    expect(kinds).not.toContain("stub_marker");
+    expect(kinds).not.toContain("thin_body");
+    expect(kinds).not.toContain("overlong_body");
+  });
+
+  it("combines body-level findings with description-level findings", () => {
+    // Description that already triggers topic_opening + thin (composite, < 8
+    // words, "How"-opening) plus a TBD-marked thin body on a composite node.
+    const findings = auditNode({
+      name: "Deployment",
+      description: "How to run Spandrel",
+      childNames: [
+        "Local Development",
+        "Static + flat-file MCP",
+        "Production deployment",
+      ],
+      body: "TBD — fill this in.",
+    });
+    const kinds = findings.map((f) => f.kind);
+    // Description-level findings still fire.
+    expect(kinds).toContain("topic_opening");
+    expect(kinds).toContain("thin");
+    // Body-level findings also fire: TBD marker + thin body (< 50 composite
+    // threshold).
+    expect(kinds).toContain("stub_marker");
+    expect(kinds).toContain("thin_body");
+  });
+
+  it("treats `body: null` as a present-but-empty body that fires thin_body", () => {
+    const findings = auditNode({
+      name: "Acme",
+      description:
+        "Acme — Enterprise SaaS client, onboarded Q2 2025, $2.4M ARR, primary account lead is Jane",
+      childNames: [],
+      body: null,
+    });
+    const kinds = findings.map((f) => f.kind);
+    expect(kinds).toContain("thin_body");
+    expect(kinds).not.toContain("stub_marker");
+    expect(kinds).not.toContain("overlong_body");
   });
 });
