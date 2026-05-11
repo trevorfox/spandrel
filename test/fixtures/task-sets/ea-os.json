@@ -106,7 +106,7 @@
         "uses /core/ops as the source",
         "does not over-fetch into client subgraphs that aren't relevant to ops"
       ],
-      "max_calls": 5,
+      "max_calls": 7,
       "max_total_tokens": 10000,
       "notes": "Hierarchy traversal into a focused subtree. /core/ops has 6 children, all leaves with informative descriptions. Tests whether the agent can stop at the right level — no need to drill into each leaf's body."
     },
@@ -118,7 +118,6 @@
       "signals": [
         "describes Segun's role as outbound execution (Apollo sequences, n8n automations, or cold campaigns)",
         "grounds the answer in Segun's profile (/core/people/segun) and/or the works-with edge from /clients/definite",
-        "may also mention the LinkedIn Constellation system under /clients/definite/constellation if drilled in",
         "doesn't over-state Segun's scope on Definite (he's outbound-focused, not full-account)"
       ],
       "max_calls": 6,
