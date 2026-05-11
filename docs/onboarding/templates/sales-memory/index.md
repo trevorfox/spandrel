@@ -4,6 +4,7 @@ description: Institutional memory across accounts, deals, and commitments. Tier-
 links:
   - to: /onboarding/templates
     type: part-of
+    description: Tier-2 stub template for sales orgs past founder-led selling — tracks accounts, deals, commitments, and competitive context across tools
 ---
 
 # Sales memory template (stub)

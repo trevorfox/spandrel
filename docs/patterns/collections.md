@@ -4,10 +4,13 @@ description: Top-level collections as domain nouns — structuring entity types 
 links:
   - to: /content-model/nodes
     type: relates-to
+    description: A collection is a composite node whose children share a common shape — its `index.md` is a node, its members are nodes, and the directory itself is the address
   - to: /content-model/design-md
     type: relates-to
+    description: A collection's DESIGN.md is the contract for members — required frontmatter, expected links, anti-patterns, and (optionally) `schema:` + `graph:` validation blocks
   - to: /patterns/frameworks
     type: relates-to
+    description: When a user has no native structure yet, a framework (Dunford, OKRs, RACI, bowtie, 5-whys, service blueprint) can seed the top-level collection vocabulary
 ---
 
 # Collections Pattern

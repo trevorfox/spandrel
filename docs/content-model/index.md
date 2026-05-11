@@ -4,8 +4,10 @@ description: What Spandrel knowledge graphs are made of — markdown Things addr
 links:
   - to: /philosophy
     type: relates-to
+    description: Philosophy fixes the design targets; the content model is the concrete shape that realizes them — paths-as-addresses, markdown-as-interface, intent over configuration
   - to: /patterns
     type: relates-to
+    description: Content model defines the primitives (nodes, links, paths, companions); patterns are the conventions authors use to combine them
 ---
 
 # Content Model

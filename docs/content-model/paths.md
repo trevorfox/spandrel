@@ -4,10 +4,13 @@ description: Paths as addresses — file location is graph identity, no indirect
 links:
   - to: /philosophy
     type: relates-to
+    description: Paths-as-addresses is one of the load-bearing philosophical commitments — no ID layer, no envelope, file location is the identity
   - to: /content-model/nodes
     type: relates-to
+    description: Every node has a path; moving the markdown file changes the node's path and therefore its identity
   - to: /patterns/placement
     type: relates-to
+    description: Where you put a file determines its address — placement is the authoring discipline for choosing a node's location in the tree
 ---
 
 # Paths

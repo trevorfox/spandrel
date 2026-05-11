@@ -1,11 +1,13 @@
 ---
 name: Nodes
-description: How Things are represented as files — leaf nodes (foo.md) vs composite nodes (foo/index.md)
+description: Leaf (foo.md) vs composite (foo/index.md), directory wins on conflict. Every node carries `name` + `description` in frontmatter; optional `kind: document` plus `navigable: false` demote reference material out of default listings. Uppercase companions (DESIGN/SKILL/AGENT/README/CLAUDE/AGENTS) compile as document children of their containing composite since 0.5.0.
 links:
   - to: /content-model/paths
     type: relates-to
+    description: A node's file path is its graph address — moving the file changes the node's identity
   - to: /patterns/collections
     type: relates-to
+    description: Sibling nodes under a composite parent form a collection; the parent's DESIGN.md is where collection-wide conventions and (optionally) schemas live
 ---
 
 # Nodes

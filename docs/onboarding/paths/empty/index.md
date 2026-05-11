@@ -4,8 +4,10 @@ description: User has a purpose but no existing content — template selection d
 links:
   - to: /onboarding/paths
     type: part-of
+    description: One of five entry paths; the empty path skips inventory and goes straight to template / framework selection
   - to: /onboarding/templates
     type: recommends
+    description: Empty paths rely heaviest on templates — with no existing content to mirror, a Tier-1 template is the fastest way to a usable skeleton
 ---
 
 # Empty path

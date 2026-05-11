@@ -4,10 +4,13 @@ description: Founder wiki that grows into sales, product, and support surfaces a
 links:
   - to: /onboarding/templates
     type: part-of
+    description: Tier-1 template for early SaaS teams; the founder-wiki entry point in the Tier-1 lineup
   - to: /onboarding/templates/product-strategy
     type: grows-into
+    description: As product complexity outgrows the founder wiki, the strategy template adds /pillars/, /themes/, /initiatives/, /marketing-claims/ above the existing /product/ and /releases/
   - to: /onboarding/templates/sales-memory
     type: grows-into
+    description: As sales volume grows, /customers/ promotes to a richer sales-memory shape with /deals/, /commitments/, /competitors/ added alongside
 ---
 
 # SaaS startup template

@@ -4,8 +4,10 @@ description: HTTP wire surface — path-addressed routes that mirror the file tr
 links:
   - to: /architecture/access-policy
     type: depends-on
+    description: Calls the policy on every HTTP request to resolve read level and check write authority before responding
   - to: /architecture/access
     type: relates-to
+    description: Constructs an actor from each request (header, cookie, or token per implementation) and passes it to the policy
 ---
 
 # REST

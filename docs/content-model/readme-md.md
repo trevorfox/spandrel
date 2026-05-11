@@ -4,6 +4,7 @@ description: Human-facing context files — orienting people who encounter a nod
 links:
   - to: /content-model/design-md
     type: relates-to
+    description: Sibling companion; README.md targets humans browsing the repo on GitHub, DESIGN.md targets agents and authors needing decision context
 ---
 
 # README.md

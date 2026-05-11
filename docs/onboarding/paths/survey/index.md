@@ -4,6 +4,7 @@ description: Existing directory with some shape — inventory the files before p
 links:
   - to: /onboarding/paths
     type: part-of
+    description: The directory-with-prose variant of the five entry paths; inventory the existing tree first, then propose 3–7 collections that may or may not mirror folder names
 ---
 
 # Survey path

@@ -4,8 +4,10 @@ description: spandrel dev — in-memory compilation, no setup, single user
 links:
   - to: /architecture/compiler
     type: depends-on
+    description: Local dev recompiles on every restart and watches for file changes — markdown is the source of truth, the compiler is in the request path
   - to: /architecture/storage
     type: relates-to
+    description: Local dev uses the in-memory backend — zero setup, ephemeral, rebuilt from markdown on every restart
 ---
 
 # Local Development

@@ -1,11 +1,13 @@
 ---
 name: Links
-description: How Things connect across the hierarchy via frontmatter link declarations
+description: Frontmatter `links:` array (to/type/description) declares typed edges; per-edge `description:` is the primary semantic carrier — `type` is vocabulary scaffolding. Inline `[label](/path)` produces `mentions` edges with label as description. `_links/config.yaml` is opt-in graph-local vocabulary with optional `enforce` / `min_uses` governance. Backlinks are auto-generated.
 links:
   - to: /content-model/nodes
     type: relates-to
+    description: Links are the lateral structure on top of the node hierarchy — a node can have one parent but many links
   - to: /patterns/linking
     type: relates-to
+    description: This node defines the mechanics; /patterns/linking is the authoring discipline — when to link instead of nesting, how to write per-edge descriptions
 ---
 
 # Links

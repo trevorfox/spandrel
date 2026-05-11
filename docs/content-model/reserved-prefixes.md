@@ -4,6 +4,7 @@ description: Files and directories prefixed with `_` are excluded from the graph
 links:
   - to: /content-model
     type: relates-to
+    description: The "_-prefix is excluded" rule is part of the content-model contract — consumers and compilers alike must honor it
   - to: /architecture/compiler
     type: relates-to
     description: The compiler enforces the exclusion

@@ -4,8 +4,10 @@ description: Identity, levels, and read–write axes — the access concepts enf
 links:
   - to: /architecture/access-policy
     type: relates-to
+    description: The five-level access vocabulary defined here is what the policy resolves an actor to for any given path
   - to: /patterns/progressive-disclosure
     type: relates-to
+    description: Access levels are progressive disclosure expressed at the governance layer — each higher level adds visibility, never hides
 ---
 
 # Access

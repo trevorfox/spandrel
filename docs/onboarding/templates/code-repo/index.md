@@ -4,8 +4,10 @@ description: Documenting a codebase — packages, architecture, ADRs, and domain
 links:
   - to: /onboarding/templates
     type: part-of
+    description: Tier-1 template for codebases; companion to the saas-startup, consulting-agency, personal-repo, and product-strategy Tier-1s
   - to: /onboarding/paths/code
     type: pairs-with
+    description: Template provides the collection skeleton (packages, architecture, ADRs, domains); the code path describes how to inventory and seed it — use together
 ---
 
 # Code repo template

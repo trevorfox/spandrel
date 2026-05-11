@@ -4,6 +4,7 @@ description: Company-level graph — vision, bets, priorities, org units, metric
 links:
   - to: /onboarding/templates
     type: part-of
+    description: Tier-2 stub template for company-level strategy — broader than product-strategy; covers cross-functional bets, priorities, units, and outcome metrics
 ---
 
 # Business strategy template (stub)

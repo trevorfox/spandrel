@@ -4,6 +4,7 @@ description: Strategy → roadmap → shipped features → marketing claims, wit
 links:
   - to: /onboarding/templates
     type: part-of
+    description: Tier-1 template for cross-functional product orgs; ties strategy down to shipped releases and out to public marketing claims so each can be audited against the other
 ---
 
 # Product strategy template

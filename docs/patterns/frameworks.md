@@ -4,8 +4,10 @@ description: Decomposition frameworks that can seed the top-level collection str
 links:
   - to: /patterns/collections
     type: relates-to
+    description: A framework's buckets become the graph's top-level collection skeleton — keep its vocabulary exactly (rename `/alternatives/` to `/competitors/` and you lose Dunford semantics)
   - to: /onboarding
     type: used-by
+    description: At Level 2 of onboarding, if the user lacks a native structure, the agent offers the framework menu as a fallback to seed top-level collections
 ---
 
 # Frameworks Pattern

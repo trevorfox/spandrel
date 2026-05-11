@@ -4,6 +4,7 @@ description: Regulations → policies → controls → procedures → evidence �
 links:
   - to: /onboarding/templates
     type: part-of
+    description: Tier-2 stub template for fintech / healthcare / regulated orgs; makes audit chains (regulation → policy → control → evidence) traversable instead of search-only
 ---
 
 # Regulated / audit template (stub)

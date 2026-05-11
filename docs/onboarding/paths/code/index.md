@@ -4,8 +4,10 @@ description: Documenting a code repo — source files stay out, manifests and pr
 links:
   - to: /onboarding/paths
     type: part-of
+    description: The code-source variant of the five entry paths; filters source files out of inventory and seeds from manifests and prose instead
   - to: /onboarding/templates/code-repo
     type: pairs-with
+    description: Path describes how to inventory + seed from a code repo; template describes the resulting collection skeleton (packages, architecture, ADRs, domains) — use together
 ---
 
 # Code path

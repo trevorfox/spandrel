@@ -4,8 +4,10 @@ description: Model Context Protocol wire surface — exposes the graph to AI age
 links:
   - to: /architecture/access-policy
     type: depends-on
+    description: Calls the policy on every read and write — MCP enforces nothing on its own
   - to: /architecture/access
     type: relates-to
+    description: Constructs an actor (anonymous, identified, authenticated) from each MCP connection and passes it to the policy
 ---
 
 # MCP

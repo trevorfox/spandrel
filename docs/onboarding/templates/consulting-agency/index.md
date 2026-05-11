@@ -4,6 +4,7 @@ description: Boutique practice with clients, engagements, deliverables, reusable
 links:
   - to: /onboarding/templates
     type: part-of
+    description: Tier-1 template for billable-work practices; the IP-and-engagement-memory entry point in the Tier-1 lineup
 ---
 
 # Consulting agency template

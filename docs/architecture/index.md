@@ -4,8 +4,10 @@ description: Spandrel's three phases — compile markdown to graph, store in a p
 links:
   - to: /content-model
     type: relates-to
+    description: Architecture compiles, stores, and serves whatever shape the content model declares — content-model is the input contract
   - to: /deployment
     type: relates-to
+    description: Architecture defines the moving parts; deployment chooses which subset to wire up (local dev, hosted, static-MCP, etc.)
 ---
 
 # Architecture
