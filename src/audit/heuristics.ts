@@ -12,7 +12,7 @@
  * the cases in the 2026-05-10 sweep.
  */
 
-import type { Finding, NodeAuditInput } from "./types.js";
+import type { EdgeAuditInput, Finding, NodeAuditInput } from "./types.js";
 
 const VAGUE_WORDS = [
   "various",
@@ -193,6 +193,158 @@ export function detectTautology(
 }
 
 /**
+ * Edge-level heuristics — link descriptions.
+ *
+ * Authors typically dump effort into node descriptions, then drop typed links
+ * into frontmatter with no description (or a description that just restates the
+ * type or target). That leaves the agent without a reason to traverse the edge.
+ * Each detector below emits a `weak_edge_description` Finding with a `subkind`
+ * in `detail` so a single kind covers missing / tautologous / thin cases (see
+ * G2 decision in the Phase A plan).
+ *
+ * All three are pure: take an `EdgeAuditInput` (plus optional context) and
+ * return a `Finding` or null.
+ */
+
+/**
+ * Self-evident link types whose meaning is clear from the type alone — a
+ * `child-of` edge from `/clients/acme/contracts` to `/clients/acme` doesn't
+ * need a description to be readable. Types not in this list are treated as
+ * carrying semantic load that an empty description withholds.
+ *
+ * Conservative default; callers can override per call site.
+ */
+const SELF_EVIDENT_LINK_TYPES = ["child-of", "part-of"];
+
+/**
+ * Missing edge description: null/empty/whitespace-only description on a typed
+ * link whose type isn't self-evident. Plain-English structural types
+ * (`child-of`, `part-of`) read fine without a description; semantic types
+ * (`led-by`, `served-by`, `works-with`, `mentions`, etc.) need one to tell
+ * the agent why the edge exists.
+ *
+ * @param selfEvidentTypes - Link types that don't require a description
+ *   (default `["child-of", "part-of"]`).
+ */
+export function detectMissingEdgeDescription(
+  link: EdgeAuditInput,
+  selfEvidentTypes: string[] = SELF_EVIDENT_LINK_TYPES,
+): Finding | null {
+  if (selfEvidentTypes.includes(link.type)) return null;
+
+  const desc = link.description;
+  const isMissing = desc === null || desc.trim().length === 0;
+  if (!isMissing) return null;
+
+  return {
+    kind: "weak_edge_description",
+    severity: "advisory",
+    message: `Edge of type "${link.type}" to ${link.to} has no description (subkind: missing)`,
+    detail: {
+      subkind: "missing",
+      to: link.to,
+      type: link.type,
+    },
+  };
+}
+
+/**
+ * Tautologous edge description: the description merely restates the link type
+ * (e.g. `"led-by"` description on a `led-by` edge) or the target-path stem
+ * (e.g. `"accounts"` description on `/clients/acme/accounts`).
+ *
+ * Comparison is case-insensitive and conservative: only flags when the
+ * normalized description equals the type, equals a hyphen-stripped form of
+ * the type, equals the target stem, or is wholly contained as a substring of
+ * one of those after trimming. This avoids false positives on descriptions
+ * that *contain* the type/stem as part of a longer phrase.
+ *
+ * @param fromPath - Optional source-node path. Unused today; kept in the
+ *   signature so future expansions (e.g. comparing description against the
+ *   source path stem) don't require a breaking change.
+ */
+export function detectTautologousEdgeDescription(
+  link: EdgeAuditInput,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _fromPath?: string,
+): Finding | null {
+  if (link.description === null) return null;
+  const desc = link.description.trim().toLowerCase();
+  if (desc.length === 0) return null;
+
+  const type = link.type.toLowerCase();
+  const typeAsPhrase = type.replace(/-/g, " ");
+
+  // Target path stem: last non-empty segment of `to`.
+  const segments = link.to.split("/").filter((s) => s.length > 0);
+  const stem = segments.length > 0 ? segments[segments.length - 1].toLowerCase() : "";
+  const stemAsPhrase = stem.replace(/-/g, " ");
+
+  const restatementCandidates = new Set(
+    [type, typeAsPhrase, stem, stemAsPhrase].filter((s) => s.length > 0),
+  );
+
+  let matched: string | null = null;
+  for (const candidate of restatementCandidates) {
+    if (desc === candidate) {
+      matched = candidate;
+      break;
+    }
+  }
+
+  if (matched === null) return null;
+
+  return {
+    kind: "weak_edge_description",
+    severity: "advisory",
+    message: `Edge description "${link.description}" restates its ${matched === type || matched === typeAsPhrase ? "type" : "target path"} (subkind: tautologous)`,
+    detail: {
+      subkind: "tautologous",
+      to: link.to,
+      type: link.type,
+      description: link.description,
+      matched,
+    },
+  };
+}
+
+/**
+ * Thin edge description: a single-word description on a typed edge whose type
+ * isn't `mentions`. `mentions` is the framework's catch-all for ambient
+ * references; a one-word note ("background", "context") is acceptable there.
+ * For every other typed edge, a one-word description is rarely enough to
+ * justify the link.
+ *
+ * Threshold: ≤ 1 word after trimming. Empty/missing descriptions are handled
+ * by `detectMissingEdgeDescription` and are returned as null here to avoid
+ * double-flagging.
+ */
+export function detectThinEdgeDescription(
+  link: EdgeAuditInput,
+): Finding | null {
+  if (link.type === "mentions") return null;
+  if (link.description === null) return null;
+  const trimmed = link.description.trim();
+  if (trimmed.length === 0) return null;
+
+  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+  if (wordCount > 1) return null;
+
+  return {
+    kind: "weak_edge_description",
+    severity: "advisory",
+    message: `Edge of type "${link.type}" to ${link.to} has a single-word description "${link.description}" (subkind: thin)`,
+    detail: {
+      subkind: "thin",
+      to: link.to,
+      type: link.type,
+      description: link.description,
+      wordCount,
+    },
+  };
+}
+
+/**
  * Run all cheap heuristics against a single node. Returns every Finding that
  * fires; an empty array means clean.
  *
@@ -201,6 +353,9 @@ export function detectTautology(
  */
 export function auditNode(input: NodeAuditInput): Finding[] {
   const findings: Finding[] = [];
+
+  // --- Node-level detectors -----------------------------------------------
+  // Add new node-level detector calls here.
 
   const tocFinding = detectTocOverlap(input.description, input.childNames);
   if (tocFinding) findings.push(tocFinding);
@@ -219,6 +374,21 @@ export function auditNode(input: NodeAuditInput): Finding[] {
 
   const tautologyFinding = detectTautology(input.description, input.name);
   if (tautologyFinding) findings.push(tautologyFinding);
+
+  // --- Edge-level detectors -----------------------------------------------
+  // Iterate the optional `links` array; nodes without typed-link metadata
+  // skip this block entirely. Add new edge-level detector calls here.
+
+  for (const link of input.links ?? []) {
+    const missing = detectMissingEdgeDescription(link);
+    if (missing) findings.push(missing);
+
+    const tautologous = detectTautologousEdgeDescription(link);
+    if (tautologous) findings.push(tautologous);
+
+    const thinEdge = detectThinEdgeDescription(link);
+    if (thinEdge) findings.push(thinEdge);
+  }
 
   return findings;
 }

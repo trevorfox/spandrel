@@ -14,7 +14,8 @@ export type FindingKind =
   | "vague_qualifiers"
   | "topic_opening"
   | "thin"
-  | "tautology";
+  | "tautology"
+  | "weak_edge_description";
 
 export type FindingSeverity = "advisory" | "warning";
 
@@ -25,6 +26,20 @@ export interface Finding {
   detail?: Record<string, unknown>;
 }
 
+/**
+ * One outgoing typed link from a node, in the shape the edge-level heuristics
+ * consume. `type` is the link type (e.g. `child-of`, `led-by`, `mentions`);
+ * `description` is the per-link description string, or `null` when absent.
+ */
+export interface EdgeAuditInput {
+  /** The target path the link points to (e.g. `/clients/acme-corp`). */
+  to: string;
+  /** The link type (e.g. `child-of`, `led-by`, `mentions`). */
+  type: string;
+  /** Per-link description text; `null` or empty string when absent. */
+  description: string | null;
+}
+
 export interface NodeAuditInput {
   /** The node's `name` frontmatter value. */
   name: string;
@@ -32,4 +47,10 @@ export interface NodeAuditInput {
   description: string;
   /** Names of direct children (for composite nodes); `[]` for leaves. */
   childNames: string[];
+  /**
+   * Outgoing typed links for edge-level audits. Optional — callers that only
+   * audit node-level descriptions can omit this and existing behaviour is
+   * unchanged.
+   */
+  links?: EdgeAuditInput[];
 }

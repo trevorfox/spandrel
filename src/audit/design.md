@@ -27,6 +27,11 @@ Cheap, pure detection functions. Three principles:
 | `detectTopicOpening` | Description starts with How/What/Why and is short | ≤ 15 words total |
 | `detectThinness` | Composite node has very short description | < 8 words |
 | `detectTautology` | Description restates the node's own name with little else | < 5 other substantive words |
+| `detectMissingEdgeDescription` | Typed link has null/empty/whitespace description and type is not self-evident | self-evident allowlist: `["child-of", "part-of"]` |
+| `detectTautologousEdgeDescription` | Link description equals the link type or the target path stem | exact equality (case-insensitive) |
+| `detectThinEdgeDescription` | Single-word description on a typed non-`mentions` edge | ≤ 1 word after trim |
+
+Edge-level detectors all emit the same `weak_edge_description` finding kind; the specific failure mode (`missing`, `tautologous`, `thin`) lives in `detail.subkind` and is reflected in the finding message. One kind covers all three to keep the warning vocabulary small.
 
 ## What this module is *not*
 
