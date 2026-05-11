@@ -25,4 +25,4 @@ Level 1 of `ONBOARDING.md` asks the user to list every source upfront, then clas
 
 ## Rubric
 
-Every path file has the same five sections so they're comparable. The rubric an author uses when adding a new path lives in this collection's `design.md` companion file.
+Every path file has the same five sections so they're comparable. The rubric an author uses when adding a new path lives in this collection's `DESIGN.md` companion file.

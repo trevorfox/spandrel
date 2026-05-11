@@ -102,6 +102,38 @@ describe("detectTopicOpening", () => {
     );
     expect(finding).toBeNull();
   });
+
+  it("suppresses on composites with ≥3 children (item #6)", () => {
+    // Collection-index "How X" framing is correct authoring for a composite
+    // that introduces a real subtree.
+    const finding = detectTopicOpening(
+      "How the practice runs — ClickUp, Google Workspace, automation",
+      undefined,
+      true,
+      5,
+    );
+    expect(finding).toBeNull();
+  });
+
+  it("still fires on a leaf with the same description (item #6 isn't over-suppressing)", () => {
+    const finding = detectTopicOpening(
+      "How the practice runs — ClickUp, Google Workspace, automation",
+      undefined,
+      false,
+      0,
+    );
+    expect(finding?.kind).toBe("topic_opening");
+  });
+
+  it("still fires on a composite with <3 children", () => {
+    const finding = detectTopicOpening(
+      "How the practice runs — ClickUp, Google Workspace, automation",
+      undefined,
+      true,
+      2,
+    );
+    expect(finding?.kind).toBe("topic_opening");
+  });
 });
 
 describe("detectThinness", () => {
@@ -121,6 +153,41 @@ describe("detectThinness", () => {
       true,
     );
     expect(finding).toBeNull();
+  });
+
+  it("suppresses thin on container composites with ≥3 substantive children (item #8)", () => {
+    // Composite with a brief 7-word description but ≥3 children whose own
+    // descriptions average ≥8 words → suppression applies.
+    const finding = detectThinness(
+      "Internal services — what EA sells", // 6 words
+      true,
+      undefined,
+      4,
+      12,
+    );
+    expect(finding).toBeNull();
+  });
+
+  it("still fires when child descriptions average below the substance threshold", () => {
+    const finding = detectThinness(
+      "Internal services — what EA sells",
+      true,
+      undefined,
+      4,
+      3,
+    );
+    expect(finding?.kind).toBe("thin");
+  });
+
+  it("still fires on a composite with <3 children regardless of child substance", () => {
+    const finding = detectThinness(
+      "Internal services — what EA sells",
+      true,
+      undefined,
+      2,
+      20,
+    );
+    expect(finding?.kind).toBe("thin");
   });
 });
 
@@ -441,8 +508,13 @@ describe("auditNode (integration)", () => {
     expect(kinds).toContain("toc_overlap");
   });
 
-  it("reproduces the 2026-05-10 sweep findings on /deployment/index.md", () => {
-    // Original (pre-PR-#14) state of /deployment/index.md
+  it("does not fire topic_opening on a composite with ≥3 children (item #6 suppression)", () => {
+    // The pre-PR-#14 state of /deployment/index.md was a composite with three
+    // children. Item #6 from SPANDREL-FEEDBACK.md suppresses `topic_opening`
+    // on composites whose children give the description its real meaning —
+    // a collection-index "How X" framing is correct authoring there. The
+    // detector still fires on the same description when it's a leaf (see
+    // detectTopicOpening unit tests).
     const findings = auditNode({
       name: "Deployment",
       description:
@@ -454,8 +526,7 @@ describe("auditNode (integration)", () => {
       ],
     });
     const kinds = findings.map((f) => f.kind);
-    // Should detect topic_opening (≤ 15 words, starts with "How")
-    expect(kinds).toContain("topic_opening");
+    expect(kinds).not.toContain("topic_opening");
   });
 
   it("returns no findings on a substantive description", () => {
@@ -474,74 +545,95 @@ describe("auditNode (integration)", () => {
 // ---------------------------------------------------------------------------
 
 describe("detectStubMarkers", () => {
-  it("flags TBD as a stub marker", () => {
-    const finding = detectStubMarkers("This section is TBD until we decide.");
-    expect(finding?.kind).toBe("stub_marker");
-    expect(finding?.detail?.matches).toContain("TBD");
+  it("flags TBD as an author_todo stub marker", () => {
+    const findings = detectStubMarkers("This section is TBD until we decide.");
+    expect(findings).toHaveLength(1);
+    expect(findings[0].kind).toBe("stub_marker");
+    expect(findings[0].detail?.subkind).toBe("author_todo");
+    expect(findings[0].detail?.matches).toContain("TBD");
   });
 
-  it("flags TODO as a stub marker", () => {
-    const finding = detectStubMarkers("TODO: write a real explanation here");
-    expect(finding?.kind).toBe("stub_marker");
-    expect(finding?.detail?.matches).toContain("TODO");
+  it("flags TODO as an author_todo stub marker", () => {
+    const findings = detectStubMarkers("TODO: write a real explanation here");
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail?.subkind).toBe("author_todo");
+    expect(findings[0].detail?.matches).toContain("TODO");
   });
 
-  it("flags WIP as a stub marker", () => {
-    const finding = detectStubMarkers("Status: WIP — not yet ready.");
-    expect(finding?.kind).toBe("stub_marker");
-    expect(finding?.detail?.matches).toContain("WIP");
+  it("flags WIP as an author_todo stub marker", () => {
+    const findings = detectStubMarkers("Status: WIP — not yet ready.");
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail?.subkind).toBe("author_todo");
+    expect(findings[0].detail?.matches).toContain("WIP");
   });
 
-  it("flags `(auto-generated stub)` literal", () => {
-    const finding = detectStubMarkers(
+  it("flags `(auto-generated stub)` as framework_scaffold", () => {
+    const findings = detectStubMarkers(
       "Some node body. (auto-generated stub) Replace me.",
     );
-    expect(finding?.kind).toBe("stub_marker");
-    expect(finding?.detail?.matches).toContain("(auto-generated stub)");
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail?.subkind).toBe("framework_scaffold");
+    expect(findings[0].detail?.matches).toContain("(auto-generated stub)");
   });
 
-  it("flags `[placeholder]` literal", () => {
-    const finding = detectStubMarkers("Intro paragraph [placeholder] follow-up.");
-    expect(finding?.kind).toBe("stub_marker");
-    expect(finding?.detail?.matches).toContain("[placeholder]");
+  it("flags `[placeholder]` as template_placeholder", () => {
+    const findings = detectStubMarkers("Intro paragraph [placeholder] follow-up.");
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail?.subkind).toBe("template_placeholder");
+    expect(findings[0].detail?.matches).toContain("[placeholder]");
   });
 
   it("matches stub markers case-insensitively", () => {
-    const finding = detectStubMarkers("tbd: todo this later");
-    expect(finding?.kind).toBe("stub_marker");
-    const matches = finding?.detail?.matches as string[];
+    const findings = detectStubMarkers("tbd: todo this later");
+    expect(findings).toHaveLength(1);
+    // Both TBD and TODO are author_todo → one finding with both labels.
+    expect(findings[0].detail?.subkind).toBe("author_todo");
+    const matches = findings[0].detail?.matches as string[];
     expect(matches).toContain("TBD");
     expect(matches).toContain("TODO");
   });
 
-  it("reports multiple stub markers in one finding", () => {
-    const finding = detectStubMarkers(
-      "TODO: explain. TBD: confirm. WIP placeholder paragraph.",
+  it("groups same-subkind markers into one finding", () => {
+    const findings = detectStubMarkers(
+      "TODO: explain. TBD: confirm. WIP later.",
     );
-    expect(finding?.kind).toBe("stub_marker");
-    const matches = finding?.detail?.matches as string[];
+    expect(findings).toHaveLength(1);
+    expect(findings[0].detail?.subkind).toBe("author_todo");
+    const matches = findings[0].detail?.matches as string[];
     expect(matches).toContain("TODO");
     expect(matches).toContain("TBD");
     expect(matches).toContain("WIP");
+  });
+
+  it("emits separate findings for different subkinds", () => {
+    // Mixed framework_scaffold + author_todo + template_placeholder → 3 findings.
+    const findings = detectStubMarkers(
+      "Initial body (auto-generated stub). TODO: finish. Section: [placeholder].",
+    );
+    expect(findings).toHaveLength(3);
+    const subkinds = findings.map((f) => f.detail?.subkind);
+    expect(subkinds).toContain("framework_scaffold");
+    expect(subkinds).toContain("author_todo");
+    expect(subkinds).toContain("template_placeholder");
   });
 
   it("does not flag words that contain marker substrings (word boundary)", () => {
     // `TBD`, `TODO`, `WIP` embedded inside larger words (`TBDriver`, `TODOS`,
     // `WIPing`) must not fire because `\b` is enforced. Without word
     // boundaries, this body would trip all three markers.
-    const finding = detectStubMarkers(
+    const findings = detectStubMarkers(
       "The TBDriver class extends BaseDriver and tracks unsorted TODOS in a queue. WIPing the disk reformats it.",
     );
-    expect(finding).toBeNull();
+    expect(findings).toEqual([]);
   });
 
-  it("returns null on null body", () => {
-    expect(detectStubMarkers(null)).toBeNull();
+  it("returns empty array on null body", () => {
+    expect(detectStubMarkers(null)).toEqual([]);
   });
 
-  it("returns null on empty / whitespace body", () => {
-    expect(detectStubMarkers("")).toBeNull();
-    expect(detectStubMarkers("   \n  ")).toBeNull();
+  it("returns empty array on empty / whitespace body", () => {
+    expect(detectStubMarkers("")).toEqual([]);
+    expect(detectStubMarkers("   \n  ")).toEqual([]);
   });
 });
 
@@ -592,6 +684,25 @@ describe("detectThinBody", () => {
     expect(detectThinBody(body, true)?.kind).toBe("thin_body");
     // 30 >= 20 (leaf threshold) → does not flag as leaf
     expect(detectThinBody(body, false)).toBeNull();
+  });
+
+  it("suppresses on container composites — empty body + ≥3 substantive children (item #8)", () => {
+    // Composite with 0-word body but 4 children whose descriptions average
+    // 12 words → container composite → suppression applies.
+    const finding = detectThinBody("", true, 50, 20, 4, 12);
+    expect(finding).toBeNull();
+  });
+
+  it("still fires on a composite when children are below substance threshold", () => {
+    const finding = detectThinBody("", true, 50, 20, 4, 3);
+    expect(finding?.kind).toBe("thin_body");
+  });
+
+  it("still fires on a leaf with 0-word body even when no children present", () => {
+    // Container suppression is composite-only; leaves never have children
+    // to defer content to.
+    const finding = detectThinBody("", false, 50, 20, 0, 0);
+    expect(finding?.kind).toBe("thin_body");
   });
 
   it("honours custom thresholds", () => {
@@ -654,16 +765,13 @@ describe("auditNode body integration (WS-A2)", () => {
   });
 
   it("combines body-level findings with description-level findings", () => {
-    // Description that already triggers topic_opening + thin (composite, < 8
-    // words, "How"-opening) plus a TBD-marked thin body on a composite node.
+    // Description triggers topic_opening + thin (composite with < 3 children
+    // so item #6's suppression doesn't kick in, < 8 words, "How"-opening).
+    // Body trips stub_marker (TBD) + thin_body (< 50-word composite threshold).
     const findings = auditNode({
       name: "Deployment",
       description: "How to run Spandrel",
-      childNames: [
-        "Local Development",
-        "Static + flat-file MCP",
-        "Production deployment",
-      ],
+      childNames: ["Local Development", "Static + flat-file MCP"],
       body: "TBD — fill this in.",
     });
     const kinds = findings.map((f) => f.kind);
@@ -872,12 +980,13 @@ describe("detectHighFanInLowFreshness", () => {
 describe("auditNode (freshness integration)", () => {
   it("combines freshness findings with description-level findings", () => {
     // Description trips `topic_opening`; git metadata trips absolute staleness
-    // and high-fan-in staleness simultaneously.
+    // and high-fan-in staleness simultaneously. Two children — below item
+    // #6's ≥3 suppression threshold so topic_opening still fires.
     const findings = auditNode({
       name: "Deployment",
       description:
         "How to run Spandrel — local development and production patterns",
-      childNames: ["Local", "Static", "Hosted"],
+      childNames: ["Local", "Static"],
       updated: daysBeforeNow(400),
       now: NOW,
       inDegree: 10,

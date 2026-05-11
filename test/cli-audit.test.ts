@@ -96,7 +96,9 @@ describe("runAudit — default invocation", () => {
     const combined = out.lines.join("\n");
     // Should see at least one of each fixture-induced finding type.
     expect(combined).toMatch(/\[weak_edge_description\.missing\]/);
-    expect(combined).toMatch(/\[stub_marker\]/);
+    // stub_marker now carries a subkind (item #7); the fixture's TBD body
+    // surfaces as `[stub_marker.author_todo]`.
+    expect(combined).toMatch(/\[stub_marker\.author_todo\]/);
     // weak_description's TOC subkind fires on /people because the description
     // enumerates the children's names.
     expect(combined).toMatch(/\[toc_overlap\]/);

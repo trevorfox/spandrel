@@ -81,16 +81,16 @@ Question: "Why are we building the webhook retry system?"
 
 Three hops from an engineering ticket to the board-level pillar.
 
-## design.md starters
+## DESIGN.md starters
 
-- `/pillars/design.md` — top-level strategic themes. Frontmatter: `name`, `description`, `status` (active/retired), `timeframe` (e.g. "2025-2026"). Body: the strategic bet in plain language. Anti-pattern: more than five active pillars at once.
-- `/themes/design.md` — PM-level groupings. Frontmatter: `name`, `description`, `status`, `laddering-to` link to a pillar. Anti-pattern: themes that don't ladder anywhere.
-- `/initiatives/design.md` — epic-sized work. Frontmatter: `name`, `description`, `status` (proposed/active/shipped/abandoned), `laddering-to` link to a theme, optional `target-milestone`. Body: scope, success criteria. Anti-pattern: initiatives that bundle independent work — split them.
-- `/specs/design.md` — design docs. Frontmatter: `name`, `description`, `status`, `details` link to an initiative, optional `authored-by`. Body: the spec itself. Anti-pattern: specs with no initiative.
-- `/releases/design.md` — shipped things. Frontmatter: `name`, `description`, `date`, `version`. Link `implements` to specs or initiatives. Anti-pattern: changelog-style lumping.
-- `/features/design.md` — customer-facing capability (superset of release contents). Frontmatter: `name`, `description`, `status`, `for-audience` link(s). Link to implementing releases via `implements` backlinks.
-- `/marketing-claims/design.md` — public assertions. Frontmatter: `name`, `description`, `surface` (pricing-page / blog / sales-deck / etc.), `date`, `status` (draft/published/retracted). Link `backed-by` to features/releases, `announces` to specific releases. Anti-pattern: claims without `backed-by` edges — those are the claims that go stale silently.
-- `/audiences/design.md` — who we're building for. Frontmatter: `name`, `description`, optional `segment`. Body: what this audience needs, how they find us. Anti-pattern: audiences too broad ("users") or too narrow ("Acme's IT team").
+- `/pillars/DESIGN.md` — top-level strategic themes. Frontmatter: `name`, `description`, `status` (active/retired), `timeframe` (e.g. "2025-2026"). Body: the strategic bet in plain language. Anti-pattern: more than five active pillars at once.
+- `/themes/DESIGN.md` — PM-level groupings. Frontmatter: `name`, `description`, `status`, `laddering-to` link to a pillar. Anti-pattern: themes that don't ladder anywhere.
+- `/initiatives/DESIGN.md` — epic-sized work. Frontmatter: `name`, `description`, `status` (proposed/active/shipped/abandoned), `laddering-to` link to a theme, optional `target-milestone`. Body: scope, success criteria. Anti-pattern: initiatives that bundle independent work — split them.
+- `/specs/DESIGN.md` — design docs. Frontmatter: `name`, `description`, `status`, `details` link to an initiative, optional `authored-by`. Body: the spec itself. Anti-pattern: specs with no initiative.
+- `/releases/DESIGN.md` — shipped things. Frontmatter: `name`, `description`, `date`, `version`. Link `implements` to specs or initiatives. Anti-pattern: changelog-style lumping.
+- `/features/DESIGN.md` — customer-facing capability (superset of release contents). Frontmatter: `name`, `description`, `status`, `for-audience` link(s). Link to implementing releases via `implements` backlinks.
+- `/marketing-claims/DESIGN.md` — public assertions. Frontmatter: `name`, `description`, `surface` (pricing-page / blog / sales-deck / etc.), `date`, `status` (draft/published/retracted). Link `backed-by` to features/releases, `announces` to specific releases. Anti-pattern: claims without `backed-by` edges — those are the claims that go stale silently.
+- `/audiences/DESIGN.md` — who we're building for. Frontmatter: `name`, `description`, optional `segment`. Body: what this audience needs, how they find us. Anti-pattern: audiences too broad ("users") or too narrow ("Acme's IT team").
 
 ## Example frontmatter
 

@@ -33,6 +33,70 @@ import type {
   Finding,
   NodeAuditInput,
 } from "../audit/types.js";
+
+/**
+ * Headings that signal a navigational/TOC section. Body-inline links inside
+ * one of these H2/H3 sections are TOC conventions — the anchor text is the
+ * leaf slug for human navigation, the substantive description lives on the
+ * corresponding frontmatter typed edge. Item #3 from SPANDREL-FEEDBACK.md.
+ *
+ * Case-insensitive prefix match — "## Contents", "### Members", "## Index of
+ * pages", and "## Subcollections" all qualify.
+ */
+const TOC_HEADING_RE = /^(contents|members|index|subcollection)\b/i;
+
+/**
+ * Walk a node's body markdown and return the set of links that sit inside a
+ * TOC-style H2/H3 section. The returned set uses a `${href}|${anchorText}`
+ * key — the same shape the audit-pass uses to mark `EdgeAuditInput.fromTocSection`
+ * when building the audit input. Used by item #3's heading-aware suppression.
+ *
+ * The walker is deliberately lightweight: it scans line by line tracking the
+ * most recent H2/H3 heading, and treats every internal-path link (`[label](/path)`)
+ * inside a matching section as TOC-sourced. Lines inside fenced code blocks
+ * are skipped (matching the compiler's stripCodeFromMarkdown behavior).
+ */
+function collectTocLinks(body: string): Set<string> {
+  const result = new Set<string>();
+  if (!body) return result;
+
+  const lines = body.split(/\r?\n/);
+  let inFence = false;
+  let inTocSection = false;
+  const linkRe = /\[([^\]]*)\]\(([^)]+)\)/g;
+
+  for (const line of lines) {
+    // Track fenced code blocks (``` or ~~~). Heading lines inside a fence
+    // shouldn't switch sections, and links inside a fence shouldn't count.
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+
+    // Detect H2 / H3 headings and update section state.
+    const headingMatch = /^(#{2,3})\s+(.+?)\s*$/.exec(line);
+    if (headingMatch) {
+      const headingText = headingMatch[2];
+      inTocSection = TOC_HEADING_RE.test(headingText);
+      continue;
+    }
+
+    if (!inTocSection) continue;
+
+    // Inside a TOC section — record every internal-path link.
+    let m: RegExpExecArray | null;
+    linkRe.lastIndex = 0;
+    while ((m = linkRe.exec(line)) !== null) {
+      const anchorText = m[1] ?? "";
+      const href = m[2] ?? "";
+      if (!href.startsWith("/")) continue;
+      result.add(`${href}|${anchorText}`);
+    }
+  }
+
+  return result;
+}
 import {
   validateGraphSchema,
   validateMember,
@@ -145,6 +209,24 @@ export async function runAuditPass(
     outgoingLinks.set(edge.from, list);
   }
 
+  // Per-node set of "described-typed targets" used by item #2's redundancy
+  // suppression: for every node, the set of target paths reached by a
+  // non-`mentions` typed edge whose description carries content. When a
+  // `mentions` edge from that same node duplicates one of those targets,
+  // it's redundant with the typed declaration and should not contribute to
+  // weak_edge_description findings.
+  const describedTypedTargets = new Map<string, Set<string>>();
+  for (const [from, links] of outgoingLinks) {
+    const targets = new Set<string>();
+    for (const link of links) {
+      if (link.type === "mentions") continue;
+      if (link.description === null) continue;
+      if (link.description.trim().length === 0) continue;
+      targets.add(link.to);
+    }
+    if (targets.size > 0) describedTypedTargets.set(from, targets);
+  }
+
   // Index nodes by path for parent/sibling lookup.
   const nodesByPath = new Map<string, (typeof allNodes)[number]>();
   for (const node of allNodes) {
@@ -179,10 +261,25 @@ export async function runAuditPass(
     // child by path and use its `name` (frontmatter) — the audit's TOC
     // detector wants display names, not path segments.
     const childNames: string[] = [];
+    // Track child descriptions to compute the container-composite
+    // suppression signal (item #8). Skip companion documents — their
+    // descriptions come from `defaultDescription()` and don't reflect
+    // authored content.
+    const childDescriptionWordCounts: number[] = [];
     for (const childPath of node.children) {
       const child = nodesByPath.get(childPath);
-      if (child) childNames.push(child.name);
+      if (!child) continue;
+      childNames.push(child.name);
+      if (child.kind === "document") continue;
+      const desc = child.description ?? "";
+      const wc = desc.trim().split(/\s+/).filter(Boolean).length;
+      childDescriptionWordCounts.push(wc);
     }
+    const avgChildDescriptionWords =
+      childDescriptionWordCounts.length > 0
+        ? childDescriptionWordCounts.reduce((a, b) => a + b, 0) /
+          childDescriptionWordCounts.length
+        : undefined;
 
     // Body: `content` is the parsed markdown body (post-frontmatter). When
     // the node has no body, `content` is "" — pass it through so the
@@ -191,11 +288,43 @@ export async function runAuditPass(
     // but here we always have *something* to audit.
     const body: string = node.content;
 
+    // --- Edge filtering for items #2 and #3 ---------------------------
+    // Item #2 (mentions-edge redundancy): a `mentions` edge whose target
+    // already has a same-source typed edge with a non-empty description
+    // is a body-inline reference where the substantive description lives
+    // on the typed declaration. Drop the edge from audit input so it
+    // doesn't generate weak_edge_description findings.
+    //
+    // Item #3 (TOC heading-aware suppression): body-inline `mentions`
+    // edges whose href + anchor-text matches a link inside a TOC heading
+    // section (H2/H3 named "Contents" / "Members" / "Index" /
+    // "Subcollection") are navigational TOC links — the description is
+    // intentionally the leaf slug, not authoring negligence. We mark
+    // them `fromTocSection: true`, then filter them out before the
+    // detector ever sees them.
+    const tocLinks = collectTocLinks(body);
+    const sourceTypedTargets = describedTypedTargets.get(node.path);
+    const rawLinks = outgoingLinks.get(node.path) ?? [];
+    const filteredLinks: EdgeAuditInput[] = [];
+    for (const link of rawLinks) {
+      if (link.type === "mentions") {
+        if (sourceTypedTargets && sourceTypedTargets.has(link.to)) {
+          continue; // item #2 — redundant with described typed edge
+        }
+        const key = `${link.to}|${link.description ?? ""}`;
+        if (tocLinks.has(key)) {
+          continue; // item #3 — link sits inside a TOC heading section
+        }
+      }
+      filteredLinks.push(link);
+    }
+
     const input: NodeAuditInput = {
       name: node.name,
       description: node.description,
       childNames,
-      links: outgoingLinks.get(node.path) ?? [],
+      avgChildDescriptionWords,
+      links: filteredLinks,
       body,
       updated: node.updated,
       created: node.created,

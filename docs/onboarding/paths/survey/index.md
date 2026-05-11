@@ -49,7 +49,7 @@ Propose 3–7 collections. Show which existing directories feed into each collec
 ## Seeding
 
 1. Create the target repo (new directory, or adopt the existing one).
-2. Create collection directories with `index.md` and `design.md`.
+2. Create collection directories with `index.md` and `DESIGN.md`.
 3. **Write one exemplar node per collection** — see [guardrails](/onboarding/guardrails). Pick one existing file per collection, convert it to Spandrel shape (frontmatter, inline links), and use it as the reference for the fan-out.
 4. Fan out parallel agents to classify the rest of the corpus. Each agent:
    - Reads a batch of source files

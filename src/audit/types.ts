@@ -46,6 +46,18 @@ export interface EdgeAuditInput {
   type: string;
   /** Per-link description text; `null` or empty string when absent. */
   description: string | null;
+  /**
+   * True when this edge was extracted from a body-inline link inside a
+   * navigational heading section (H2/H3 named "Contents", "Members",
+   * "Index", or "Subcollection"). Such sections are TOC conventions —
+   * the link's anchor text is meant to be the leaf slug, and the
+   * substantive description lives on the corresponding frontmatter
+   * typed edge. Detectors should suppress findings on these.
+   *
+   * Optional — callers that don't track heading provenance leave it
+   * undefined, and detectors treat the edge as a normal prose mention.
+   */
+  fromTocSection?: boolean;
 }
 
 export interface NodeAuditInput {
@@ -55,6 +67,16 @@ export interface NodeAuditInput {
   description: string;
   /** Names of direct children (for composite nodes); `[]` for leaves. */
   childNames: string[];
+  /**
+   * Average word count across direct children's descriptions. Used by the
+   * container-composite suppression rule (item #8): when a composite has
+   * ≥3 children carrying substantive descriptions (avg ≥8 words), it's
+   * acting as a coordinator and `thin_body` / `weak_description.thin`
+   * should not fire on its own brevity. Optional — when omitted, the
+   * suppression rule treats the composite as a non-container and runs
+   * normally.
+   */
+  avgChildDescriptionWords?: number;
   /**
    * Outgoing typed links for edge-level audits. Optional — callers that only
    * audit node-level descriptions can omit this and existing behaviour is

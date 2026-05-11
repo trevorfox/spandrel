@@ -81,16 +81,16 @@ Question: "Why does our billing flow work the way it does?"
 
 Three hops from root to the business reason behind the code. That's the product.
 
-## design.md starters
+## DESIGN.md starters
 
-Each collection should ship a starter `design.md`. Rough outline:
+Each collection should ship a starter `DESIGN.md`. Rough outline:
 
-- `/company/design.md` — company-level nodes include vision statements, strategic bets, positioning docs. Frontmatter: `name`, `description`, `status` (draft/active/archived), links to relevant decisions. Anti-pattern: mixing company strategy with team operations.
-- `/product/design.md` — a well-formed product node describes one capability. Frontmatter: `name`, `description`, `stability` (alpha/beta/ga), `owns` link to a team member. Link to implementing releases. Anti-pattern: bundling multiple capabilities into one node.
-- `/customers/design.md` — each customer is a Thing. Frontmatter: `name`, `description`, `status` (prospect/active/churned), `tier`, `owns` link to an account owner on the team. Anti-pattern: tracking deal-stage fields here — those belong in a future `/deals/` collection.
-- `/team/design.md` — each team member is a Thing. Frontmatter: `name`, `description`, `role`, `start-date`. Anti-pattern: personal HR data — this is the public graph, not HRIS.
-- `/decisions/design.md` — one decision per node. Frontmatter: `name`, `description`, `date`, `status` (proposed/active/superseded). Body: context, decision, consequences. Anti-pattern: editing past decisions — supersede them.
-- `/releases/design.md` — one release per node. Frontmatter: `name`, `description`, `date`, `version`. Link to implementing decisions and affected product nodes. Anti-pattern: changelog-style lists; extract each change into a linked node instead.
+- `/company/DESIGN.md` — company-level nodes include vision statements, strategic bets, positioning docs. Frontmatter: `name`, `description`, `status` (draft/active/archived), links to relevant decisions. Anti-pattern: mixing company strategy with team operations.
+- `/product/DESIGN.md` — a well-formed product node describes one capability. Frontmatter: `name`, `description`, `stability` (alpha/beta/ga), `owns` link to a team member. Link to implementing releases. Anti-pattern: bundling multiple capabilities into one node.
+- `/customers/DESIGN.md` — each customer is a Thing. Frontmatter: `name`, `description`, `status` (prospect/active/churned), `tier`, `owns` link to an account owner on the team. Anti-pattern: tracking deal-stage fields here — those belong in a future `/deals/` collection.
+- `/team/DESIGN.md` — each team member is a Thing. Frontmatter: `name`, `description`, `role`, `start-date`. Anti-pattern: personal HR data — this is the public graph, not HRIS.
+- `/decisions/DESIGN.md` — one decision per node. Frontmatter: `name`, `description`, `date`, `status` (proposed/active/superseded). Body: context, decision, consequences. Anti-pattern: editing past decisions — supersede them.
+- `/releases/DESIGN.md` — one release per node. Frontmatter: `name`, `description`, `date`, `version`. Link to implementing decisions and affected product nodes. Anti-pattern: changelog-style lists; extract each change into a linked node instead.
 
 ## Example frontmatter
 
