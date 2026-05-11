@@ -66,6 +66,7 @@
     "d3-force": "^3.0.0",
     "d3-selection": "^3.0.0",
     "d3-transition": "^3.0.1",
+    "fastembed": "^2.1.0",
     "globby": "^14.1.0",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.1",

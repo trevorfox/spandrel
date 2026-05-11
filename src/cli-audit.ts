@@ -94,9 +94,12 @@ export interface AuditOptions {
    */
   semantic?: boolean;
   /**
-   * Phase E1 — embedding model name to read from the store. Defaults to
-   * `text-embedding-3-small` so the default `spandrel embed` run can be
-   * audited without any flag. Must match the model the embed pass wrote.
+   * Phase E1 — embedding model name to read from the store. When omitted,
+   * the audit pass auto-detects: if the store contains exactly one model,
+   * that's used; if it contains multiple, the call errors with a message
+   * asking the user to pass `--semantic-model <name>`. This eliminates the
+   * "must remember to pass --semantic-model when using a non-default
+   * provider" footgun.
    */
   semanticModel?: string;
   /**
@@ -124,8 +127,6 @@ export interface RunAuditResult {
   /** The filtered warning set that was printed — useful for programmatic callers. */
   warnings: ValidationWarning[];
 }
-
-const DEFAULT_SEMANTIC_MODEL = "text-embedding-3-small";
 
 /**
  * Normalize a `--node` value to a leading-slash absolute path so callers can
@@ -249,7 +250,10 @@ export async function runAudit(options: AuditOptions): Promise<RunAuditResult> {
       await store.getAllNodes(),
       await store.getEdges(),
       {
-        model: options.semanticModel ?? DEFAULT_SEMANTIC_MODEL,
+        // When the caller didn't specify a model, `runSemanticPass`
+        // auto-detects from the store (single model in store → that;
+        // multiple → error asking the user to pick).
+        model: options.semanticModel,
         similarityThreshold: options.similarityThreshold,
         maxCandidatesPerNode: options.maxCandidatesPerNode,
       },
@@ -480,9 +484,11 @@ function parseIntFlag(name: string, value: string): number {
  *
  * Pre-conditions checked:
  *  - `<rootDir>/_audit/embeddings.db` must exist.
- *  - The DB must contain at least one row for `model`.
+ *  - If `opts.model` is omitted, the store must contain exactly one model.
+ *    Zero → "run spandrel embed"; multiple → "pass --semantic-model".
+ *  - The DB must contain at least one row for the resolved model.
  *  - Every embeddable (non-companion) node's current content hash must be
- *    represented in the store under `model`. Stale → error pointing at
+ *    represented in the store under that model. Stale → error pointing at
  *    `spandrel embed`.
  */
 function runSemanticPass(
@@ -490,7 +496,12 @@ function runSemanticPass(
   nodes: Array<import("./compiler/types.js").SpandrelNode>,
   edges: Array<import("./compiler/types.js").SpandrelEdge>,
   opts: {
-    model: string;
+    /**
+     * When omitted, auto-detect from the store. Required only when the store
+     * holds multiple models (e.g. user has embedded with both local and
+     * OpenAI providers and we can't guess intent).
+     */
+    model?: string;
     similarityThreshold?: number;
     maxCandidatesPerNode?: number;
   },
@@ -505,15 +516,39 @@ function runSemanticPass(
 
   const store = openStore(rootDir);
   try {
-    const embeddings = store.getAllForGraph(opts.model);
+    // Resolve which embedding model to read. The simple ergonomic win: when
+    // the store holds exactly one model, use it. This eliminates the
+    // "remembered to pass --semantic-model when using a non-default provider"
+    // footgun called out in PR #33's open questions.
+    let model: string;
+    if (opts.model) {
+      model = opts.model;
+    } else {
+      const distinct = store.getDistinctModels();
+      if (distinct.length === 0) {
+        return {
+          warnings: [],
+          error: `--semantic: embedding store at ${dbPath} is empty. Run \`spandrel embed ${rootDir}\` first to populate embeddings.`,
+        };
+      }
+      if (distinct.length > 1) {
+        return {
+          warnings: [],
+          error: `--semantic: embedding store contains multiple models (${distinct.join(", ")}); pass --semantic-model <name> to disambiguate.`,
+        };
+      }
+      model = distinct[0];
+    }
+
+    const embeddings = store.getAllForGraph(model);
     if (embeddings.size === 0) {
       return {
         warnings: [],
-        error: `--semantic: embedding store at ${dbPath} contains no rows for model "${opts.model}". Run \`spandrel embed ${rootDir}\` first to populate embeddings.`,
+        error: `--semantic: embedding store at ${dbPath} contains no rows for model "${model}". Run \`spandrel embed ${rootDir}\` first to populate embeddings.`,
       };
     }
 
-    const hashes = store.getAllHashesForGraph(opts.model);
+    const hashes = store.getAllHashesForGraph(model);
     const embeddable = nodes.filter((n) => n.kind !== "document");
     const stale: string[] = [];
     for (const n of embeddable) {

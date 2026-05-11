@@ -214,6 +214,89 @@ describe("runAudit({ semantic: true }) — mock provider end-to-end", () => {
     }
   });
 
+  it("auto-detects the embedding model when only one is in the store", async () => {
+    // No --semantic-model passed. The store has exactly one model
+    // ("mock-deterministic"), so audit should pick it without complaint.
+    const eOut = makeSink();
+    const eErr = makeSink();
+    await runEmbed({
+      rootDir: root,
+      providerOverride: makeDeterministicProvider(),
+      yes: true,
+      stdout: eOut.write,
+      stderr: eErr.write,
+    });
+
+    const out = makeSink();
+    const err = makeSink();
+    const r = await runAudit({
+      rootDir: root,
+      semantic: true,
+      // semanticModel intentionally omitted — auto-detect path.
+      similarityThreshold: 0.5,
+      kinds: ["missing_link"],
+      stdout: out.write,
+      stderr: err.write,
+    });
+    expect(r.code).toBe(0);
+    expect(r.warnings.filter((w) => w.type === "missing_link").length).toBeGreaterThan(0);
+  });
+
+  it("errors with a disambiguation hint when the store has multiple models", async () => {
+    // Embed with two distinct mock providers, leaving the store with two
+    // model namespaces.
+    const eOut = makeSink();
+    const eErr = makeSink();
+    const providerA: import("../src/audit/embedding-provider.js").EmbeddingProvider = {
+      model: "mock-a",
+      dim: 32,
+      async embed(texts) {
+        return texts.map(() => {
+          const v = new Float32Array(32);
+          v[0] = 0.1;
+          return v;
+        });
+      },
+    };
+    const providerB: import("../src/audit/embedding-provider.js").EmbeddingProvider = {
+      model: "mock-b",
+      dim: 32,
+      async embed(texts) {
+        return texts.map(() => {
+          const v = new Float32Array(32);
+          v[0] = 0.2;
+          return v;
+        });
+      },
+    };
+    await runEmbed({
+      rootDir: root,
+      providerOverride: providerA,
+      yes: true,
+      stdout: eOut.write,
+      stderr: eErr.write,
+    });
+    await runEmbed({
+      rootDir: root,
+      providerOverride: providerB,
+      yes: true,
+      stdout: eOut.write,
+      stderr: eErr.write,
+    });
+
+    const out = makeSink();
+    const err = makeSink();
+    const r = await runAudit({
+      rootDir: root,
+      semantic: true,
+      // No semanticModel — should error with disambiguation hint.
+      stdout: out.write,
+      stderr: err.write,
+    });
+    expect(r.code).toBe(1);
+    expect(err.lines.join("\n")).toMatch(/multiple models.*mock-a.*mock-b.*--semantic-model/);
+  });
+
   it("errors with a stale-store hint when a node's content changes", async () => {
     // Embed.
     const eOut = makeSink();

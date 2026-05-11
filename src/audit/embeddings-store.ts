@@ -101,6 +101,14 @@ export interface EmbeddingsStore {
    */
   getAllHashesForGraph(model: string): Map<string, string>;
   /**
+   * Return every distinct model name with at least one row in the store.
+   * Used by `spandrel audit --semantic` to auto-detect which model to read
+   * when `--semantic-model` isn't passed — if exactly one is present, that's
+   * the obvious choice; if multiple, the caller errors out and asks the
+   * user to disambiguate.
+   */
+  getDistinctModels(): string[];
+  /**
    * Total row count, for diagnostics.
    */
   count(): number;
@@ -217,6 +225,10 @@ export function openStore(
     `SELECT COUNT(*) AS n FROM node_embeddings`,
   );
 
+  const distinctModelsStmt = db.prepare(
+    `SELECT DISTINCT model FROM node_embeddings ORDER BY model`,
+  );
+
   return {
     get(p, hash, model) {
       const row = getStmt.get(p, hash, model) as
@@ -262,6 +274,10 @@ export function openStore(
         out.set(r.path, r.contentHash);
       }
       return out;
+    },
+    getDistinctModels() {
+      const rows = distinctModelsStmt.all() as Array<{ model: string }>;
+      return rows.map((r) => r.model);
     },
     count() {
       const row = countStmt.get() as { n: number };

@@ -1,12 +1,16 @@
 /**
  * Embedding provider abstraction — pluggable text → vector adapters.
  *
- * Phase E1 (spec: `specs/2026-05-11-phase-e1-missing-link-detection.md`). Two
+ * Phase E1 (spec: `specs/2026-05-11-phase-e1-missing-link-detection.md`). Three
  * v1 adapters:
  *
- * - **OpenAI** (default) — `text-embedding-3-small` (1536 dim). Requires
+ * - **Local** (default) — `fast-all-MiniLM-L6-v2` (384 dim), JS-native ONNX
+ *   runtime via `fastembed`. Zero setup; downloads the model file to
+ *   `~/.cache/spandrel/embeddings/` on first use (~25MB). No API key, no
+ *   service. Subsequent runs are local + free.
+ * - **OpenAI** (opt-in) — `text-embedding-3-small` (1536 dim). Requires
  *   `OPENAI_API_KEY`. Batches up to 100 texts per request.
- * - **Ollama** (local) — `nomic-embed-text` (768 dim). No batching API;
+ * - **Ollama** (opt-in) — `nomic-embed-text` (768 dim). No batching API;
  *   one HTTP call per text. Host configurable via `OLLAMA_HOST`.
  *
  * The provider interface is intentionally minimal — every adapter takes a
@@ -14,11 +18,25 @@
  * (the `spandrel embed` CLI) handles content-hash invalidation, store
  * upserts, and progress reporting.
  *
+ * **Package choice for the local provider**: `fastembed` (v2.1.0). Picked over
+ * `@huggingface/transformers` because `transformers` pulls in `sharp` (~80MB
+ * image-processing native dep) and `onnxruntime-web` (browser runtime) we
+ * don't need for sentence embeddings; `fastembed` is purpose-built for
+ * embeddings (5 deps, 109KB unpacked) and exposes a focused
+ * `FlagEmbedding.init({model, cacheDir}).embed(texts)` API. The transitive
+ * `onnxruntime-node` is large (~200MB on macOS) regardless of which we pick
+ * — that's the ONNX runtime itself, not the wrapper.
+ *
  * Truncation: model context windows vary (8K tokens for OpenAI-3-small;
- * smaller for Ollama models). v1 uses a conservative character-based proxy
- * (~24K chars) and truncates body from the end while always keeping
- * `name + "\n\n" + description`. Documented per-provider.
+ * 512 tokens for MiniLM; ~8K for Ollama). v1 uses a conservative
+ * character-based proxy (~24K chars) and truncates body from the end while
+ * always keeping `name + "\n\n" + description`. The local MiniLM provider
+ * is also configured with `maxLength: 512` so the tokenizer hard-clips
+ * anything that slips through.
  */
+
+import os from "node:os";
+import path from "node:path";
 
 /**
  * Provider contract — all implementations must respect input → output order.
@@ -242,6 +260,195 @@ export function createOllamaProvider(opts?: {
       const out: Float32Array[] = [];
       for (const t of texts) {
         out.push(await embedOne(t));
+      }
+      return out;
+    },
+  };
+}
+
+// =====================================================================
+// Local (in-process JS-native) adapter
+// =====================================================================
+
+/**
+ * Default model name reported to the embedding store. We use the canonical
+ * HuggingFace name (not the `fast-` prefixed string `fastembed` uses
+ * internally) so the store's `model` column is portable: if a future
+ * provider switches libraries, the cached embeddings remain semantically
+ * tagged with the right model.
+ *
+ * The mapping `LocalModelChoice` → `(fastembed-enum, dim, canonical-name)`
+ * lives in `LOCAL_MODELS` below.
+ */
+export const LOCAL_DEFAULT_MODEL = "Xenova/all-MiniLM-L6-v2";
+const LOCAL_DEFAULT_DIM = 384;
+/**
+ * Where the model file lives on disk. Standard XDG cache path. macOS uses
+ * `~/Library/Caches/...` natively but the XDG convention (`~/.cache/...`)
+ * works fine on Darwin and matches what the rest of the Spandrel ecosystem
+ * (test/fidelity cache, etc.) does.
+ */
+export function defaultLocalCacheDir(): string {
+  const xdgCache =
+    process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache");
+  return path.join(xdgCache, "spandrel", "embeddings");
+}
+
+/**
+ * Map of canonical model name → (fastembed enum value, dim). The CLI accepts
+ * either form (canonical or fastembed-prefixed); we always emit the canonical
+ * name to the store so cached embeddings are library-portable.
+ */
+interface LocalModelSpec {
+  /** What fastembed expects in `model: EmbeddingModel.<...>`. */
+  fastembedEnum: string;
+  dim: number;
+}
+const LOCAL_MODELS: Record<string, LocalModelSpec> = {
+  "Xenova/all-MiniLM-L6-v2": {
+    fastembedEnum: "fast-all-MiniLM-L6-v2",
+    dim: 384,
+  },
+  // Aliases — `fastembed`'s internal names map here too, so users who pass
+  // them via `--model` aren't tripped up by the prefix mismatch.
+  "fast-all-MiniLM-L6-v2": {
+    fastembedEnum: "fast-all-MiniLM-L6-v2",
+    dim: 384,
+  },
+};
+
+/**
+ * Test seam — the actual `fastembed` import is lazy + injectable so unit tests
+ * don't have to materialize the ONNX runtime. Production callers leave this
+ * undefined; tests pass a mock factory.
+ */
+export interface LocalEmbedderHandle {
+  /** Yield rows of `number[]` embeddings as batches complete. */
+  embed(texts: string[], batchSize?: number): AsyncIterable<number[][]>;
+}
+export type LocalEmbedderFactory = (opts: {
+  fastembedEnum: string;
+  cacheDir: string;
+  showDownloadProgress: boolean;
+}) => Promise<LocalEmbedderHandle>;
+
+/**
+ * Default factory — lazily imports `fastembed` and constructs a
+ * `FlagEmbedding` handle. Imported dynamically so the module load (and the
+ * ~200MB onnxruntime-node native build) only kicks in when the local
+ * provider is actually used. Unit tests skip the import entirely by passing
+ * `embedderFactory`.
+ */
+const defaultLocalEmbedderFactory: LocalEmbedderFactory = async ({
+  fastembedEnum,
+  cacheDir,
+  showDownloadProgress,
+}) => {
+  // Dynamic import — keeps `fastembed` out of the require graph for users
+  // who only use OpenAI or Ollama.
+  const fs = await import("node:fs");
+  // fastembed's tar/extract step ENOENTs if the cache dir doesn't exist;
+  // ensure it before handing off.
+  fs.mkdirSync(cacheDir, { recursive: true });
+  const fe = await import("fastembed");
+  const { FlagEmbedding, EmbeddingModel } = fe as unknown as {
+    FlagEmbedding: {
+      init(opts: {
+        model: string;
+        cacheDir: string;
+        maxLength?: number;
+        showDownloadProgress?: boolean;
+      }): Promise<LocalEmbedderHandle>;
+    };
+    EmbeddingModel: Record<string, string>;
+  };
+  // Resolve the enum value at runtime — TypeScript doesn't know the values
+  // exist on the imported enum without redeclaring the whole module.
+  const modelEnumValue =
+    Object.values(EmbeddingModel).find((v) => v === fastembedEnum) ??
+    fastembedEnum;
+  return FlagEmbedding.init({
+    model: modelEnumValue,
+    cacheDir,
+    maxLength: 512,
+    showDownloadProgress,
+  });
+};
+
+/**
+ * Create a local JS-native embedding provider. Zero setup: downloads the
+ * model on first use, caches in `~/.cache/spandrel/embeddings/`, then runs
+ * everything in-process.
+ *
+ * @param opts.model        Canonical model name (default
+ *                          `Xenova/all-MiniLM-L6-v2`). Accepts fastembed's
+ *                          internal name too.
+ * @param opts.cacheDir     Override the on-disk cache directory.
+ * @param opts.showDownloadProgress
+ *                          Pass-through to fastembed's progress bar. Default
+ *                          `true` for interactive runs; the CLI sets it to
+ *                          `false` when stdout isn't a TTY.
+ * @param opts.embedderFactory
+ *                          Test seam — inject a mock implementation.
+ */
+export function createLocalProvider(opts?: {
+  model?: string;
+  cacheDir?: string;
+  showDownloadProgress?: boolean;
+  embedderFactory?: LocalEmbedderFactory;
+}): EmbeddingProvider {
+  const canonicalModel = opts?.model ?? LOCAL_DEFAULT_MODEL;
+  const spec = LOCAL_MODELS[canonicalModel];
+  if (!spec) {
+    throw new Error(
+      `Local provider: unknown model "${canonicalModel}". Known: ${Object.keys(LOCAL_MODELS).join(", ")}`,
+    );
+  }
+  // Always emit the canonical name as the store's `model` column, even when
+  // the user passed the fastembed-internal alias — keeps the store portable.
+  const reportedModel =
+    canonicalModel.startsWith("fast-") ? LOCAL_DEFAULT_MODEL : canonicalModel;
+  const dim = spec.dim ?? LOCAL_DEFAULT_DIM;
+  const cacheDir = opts?.cacheDir ?? defaultLocalCacheDir();
+  const showDownloadProgress = opts?.showDownloadProgress ?? true;
+  const factory = opts?.embedderFactory ?? defaultLocalEmbedderFactory;
+
+  let handle: LocalEmbedderHandle | null = null;
+  async function getHandle(): Promise<LocalEmbedderHandle> {
+    if (handle) return handle;
+    handle = await factory({
+      fastembedEnum: spec.fastembedEnum,
+      cacheDir,
+      showDownloadProgress,
+    });
+    return handle;
+  }
+
+  return {
+    model: reportedModel,
+    dim,
+    async embed(texts: string[]): Promise<Float32Array[]> {
+      if (texts.length === 0) return [];
+      const truncated = texts.map(truncateForEmbedding);
+      const h = await getHandle();
+      // fastembed yields `number[][]` in chunks of `batchSize`; we
+      // accumulate in input order. The library promises FIFO chunks.
+      const out: Float32Array[] = [];
+      const BATCH = 16;
+      for await (const chunk of h.embed(truncated, BATCH)) {
+        for (const vec of chunk) {
+          if (vec.length !== dim) {
+            throw new Error(
+              `Local provider: expected dim=${dim}, got ${vec.length}`,
+            );
+          }
+          out.push(Float32Array.from(vec));
+        }
+      }
+      if (out.length !== truncated.length) {
+        throw new Error(
+          `Local provider: expected ${truncated.length} vectors, got ${out.length}`,
+        );
       }
       return out;
     },

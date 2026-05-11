@@ -77,7 +77,7 @@ Flags:
   --severity <level>  (audit) all | advisory | warning (default all)
   --priority          (audit) Print findings as a ranked queue
   --semantic          (audit) Run the missing-link detector (requires \`spandrel embed\` first)
-  --provider <name>   (embed) openai | ollama (default openai)
+  --provider <name>   (embed) local | openai | ollama (default local — no setup required)
   --model <name>      (embed) Override the embedding model name
   --yes               (embed) Skip the cost-confirmation prompt
 `);

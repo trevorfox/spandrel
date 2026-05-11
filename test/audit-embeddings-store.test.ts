@@ -147,6 +147,14 @@ describe("EmbeddingsStore — getAllForGraph and getAllHashesForGraph", () => {
     expect(hashes.get("/a")).toBe("ha");
     expect(hashes.get("/b")).toBe("hb");
   });
+
+  it("getDistinctModels returns each model present in the store, sorted", () => {
+    expect(store.getDistinctModels()).toEqual([]);
+    store.upsert("/a", "h", "model-z", 2, mkVec([1, 0]), "2026-05-11T00:00:00Z");
+    store.upsert("/b", "h", "model-a", 2, mkVec([0, 1]), "2026-05-11T00:00:00Z");
+    store.upsert("/c", "h", "model-a", 2, mkVec([1, 1]), "2026-05-11T00:00:00Z");
+    expect(store.getDistinctModels()).toEqual(["model-a", "model-z"]);
+  });
 });
 
 describe("EmbeddingsStore — error cases", () => {

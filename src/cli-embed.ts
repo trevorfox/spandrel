@@ -8,8 +8,15 @@
  * store. The store lives at `<graphRoot>/_audit/embeddings.db` (gitignored
  * by default).
  *
+ * Provider default: `local` — runs `fastembed`'s ONNX MiniLM in-process. No
+ * API key, no service. First-run downloads the ~25MB model file to
+ * `~/.cache/spandrel/embeddings/`. OpenAI and Ollama remain explicit opt-ins
+ * (`--provider openai|ollama`); we deliberately do NOT auto-select OpenAI
+ * when `OPENAI_API_KEY` is set — that would surprise users who don't expect
+ * API charges.
+ *
  * Cost gating: OpenAI provider prompts `[Y/n]` when the estimated cost is
- * ≥ $0.10. Ollama is local/free → no prompt. `--yes` always skips.
+ * ≥ $0.10. Local and Ollama are free → no prompt. `--yes` always skips.
  *
  * Companion-file nodes (`kind: "document"`) are skipped — they're reference
  * material, not graph content, and we want the missing-link detector to
@@ -22,21 +29,22 @@ import { compile } from "./compiler/compiler.js";
 import {
   computeContentHash,
   openStore,
-  type EmbeddingsStore,
 } from "./audit/embeddings-store.js";
 import {
+  createLocalProvider,
   createOllamaProvider,
   createOpenAIProvider,
+  defaultLocalCacheDir,
   type EmbeddingProvider,
 } from "./audit/embedding-provider.js";
 import type { SpandrelNode } from "./compiler/types.js";
 
-export type EmbedProvider = "openai" | "ollama";
+export type EmbedProvider = "local" | "openai" | "ollama";
 
 export interface EmbedOptions {
   /** Graph root directory. Required. */
   rootDir: string;
-  /** Provider name. Default `"openai"`. */
+  /** Provider name. Default `"local"`. */
   provider?: EmbedProvider;
   /** Override the model name. Falls back to the provider default. */
   model?: string;
@@ -77,7 +85,7 @@ export interface EmbedResult {
  * lands at ~$0.50 — over.
  */
 function estimateCostDollars(provider: EmbedProvider, nodeCount: number): number {
-  if (provider === "ollama") return 0;
+  if (provider === "ollama" || provider === "local") return 0;
   return nodeCount * 0.0001;
 }
 
@@ -128,20 +136,42 @@ export async function runEmbed(options: EmbedOptions): Promise<EmbedResult> {
   }
 
   // Provider selection. `providerOverride` is the test seam (deterministic
-  // vectors). Production goes through `createOpenAIProvider` / `createOllamaProvider`.
-  const providerName: EmbedProvider = options.provider ?? "openai";
+  // vectors). Production goes through `createLocalProvider` (default) /
+  // `createOpenAIProvider` / `createOllamaProvider`. Default is `local` —
+  // zero-setup JS-native ONNX runtime, no API key required. OpenAI and
+  // Ollama are explicit opt-ins to avoid surprising users with API charges
+  // or service dependencies they didn't ask for.
+  const providerName: EmbedProvider = options.provider ?? "local";
   let provider: EmbeddingProvider;
   if (options.providerOverride) {
     provider = options.providerOverride;
   } else if (providerName === "openai") {
     provider = createOpenAIProvider({ model: options.model });
-  } else {
+  } else if (providerName === "ollama") {
     provider = createOllamaProvider({ model: options.model });
+  } else {
+    // Local provider: surface the one-time setup messaging up front so the
+    // user knows what's about to happen if the model isn't cached.
+    const cacheDir = defaultLocalCacheDir();
+    stdout(
+      `Provider: local (fastembed, in-process ONNX). Cache: ${cacheDir}`,
+    );
+    stdout(
+      `First-time setup downloads the model (~25MB) if not already cached.`,
+    );
+    provider = createLocalProvider({
+      model: options.model,
+      // Only show the fastembed progress bar when stdout is a TTY (and the
+      // caller hasn't redirected stdout). Programmatic callers + tests get
+      // the silent path.
+      showDownloadProgress: options.stdout === undefined && process.stdout.isTTY,
+    });
   }
 
-  // Cost gating — Ollama is free, so we skip the prompt entirely there. The
-  // OpenAI threshold ($0.10) avoids friction for the typical sub-thousand-node
-  // graph while still flagging "this is the day you embed a huge corpus".
+  // Cost gating — only OpenAI has real cost. Local and Ollama are free, so
+  // we skip the prompt entirely there. The $0.10 threshold avoids friction
+  // for typical sub-thousand-node graphs while still flagging "this is the
+  // day you embed a huge corpus".
   const estCost = estimateCostDollars(providerName, targets.length);
   if (!options.yes && providerName === "openai" && estCost >= 0.10) {
     stdout(
@@ -278,9 +308,9 @@ export function parseEmbedArgs(argv: string[]): EmbedOptions {
 }
 
 function parseProvider(value: string): EmbedProvider {
-  if (value === "openai" || value === "ollama") return value;
+  if (value === "local" || value === "openai" || value === "ollama") return value;
   throw new Error(
-    `--provider must be one of: openai, ollama (got "${value}")`,
+    `--provider must be one of: local, openai, ollama (got "${value}")`,
   );
 }
 
