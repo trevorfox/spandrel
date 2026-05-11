@@ -111,5 +111,5 @@ This is the single most common parse error when agents write rich descriptions i
 - [ ] `spandrel --version` matches repo
 - [ ] No empty directories: `find <kb-root> -type d -empty`
 - [ ] `spandrel compile <kb-root>` reports zero warnings
-- [ ] Every top-level collection has an `index.md` and a `design.md`
+- [ ] Every top-level collection has an `index.md` and a `DESIGN.md`
 - [ ] At least one exemplar member per collection; other members match its shape

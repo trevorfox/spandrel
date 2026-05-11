@@ -73,12 +73,12 @@ Question: "Why does our API route auth through Supabase, and what else depends o
 
 Four hops from root to "why" + "what it affected" + "what's changed since."
 
-## design.md starters
+## DESIGN.md starters
 
-- `/packages/design.md` (or `/services/design.md`, etc.) — each module is a Thing. Frontmatter: `name` (from manifest, optionally unscoped), `description` (from manifest or README first paragraph), optional `owns` link to team, `depends-on` links to sibling modules (seeded automatically). Body: the module's README content. Anti-pattern: duplicating source code in the body.
-- `/architecture/design.md` — each doc is a Thing. Frontmatter: `name`, `description`, `status` (draft/accepted/archived), `realized-by` links to implementing modules. Use directory-form nodes (`/architecture/overview/index.md`) when a doc has sub-sections worth promoting.
-- `/adrs/design.md` — each ADR is a leaf or composite node. Frontmatter: `name` (the ADR's title), `description` (one-line summary), `date`, `status` (proposed/accepted/superseded/deprecated), `affects` links, optional `supersedes` link. Preserve the original ID in the filename (`0007-sso-federation.md`). Anti-pattern: editing an accepted ADR — supersede with a new one.
-- `/domains/design.md` — each domain concept is a Thing. Frontmatter: `name`, `description`, optional `owns` link to team. Body: what this domain means in the context of this codebase, how it's conceptually bounded. Link to `implements` / `realized-by` edges from modules.
+- `/packages/DESIGN.md` (or `/services/DESIGN.md`, etc.) — each module is a Thing. Frontmatter: `name` (from manifest, optionally unscoped), `description` (from manifest or README first paragraph), optional `owns` link to team, `depends-on` links to sibling modules (seeded automatically). Body: the module's README content. Anti-pattern: duplicating source code in the body.
+- `/architecture/DESIGN.md` — each doc is a Thing. Frontmatter: `name`, `description`, `status` (draft/accepted/archived), `realized-by` links to implementing modules. Use directory-form nodes (`/architecture/overview/index.md`) when a doc has sub-sections worth promoting.
+- `/adrs/DESIGN.md` — each ADR is a leaf or composite node. Frontmatter: `name` (the ADR's title), `description` (one-line summary), `date`, `status` (proposed/accepted/superseded/deprecated), `affects` links, optional `supersedes` link. Preserve the original ID in the filename (`0007-sso-federation.md`). Anti-pattern: editing an accepted ADR — supersede with a new one.
+- `/domains/DESIGN.md` — each domain concept is a Thing. Frontmatter: `name`, `description`, optional `owns` link to team. Body: what this domain means in the context of this codebase, how it's conceptually bounded. Link to `implements` / `realized-by` edges from modules.
 
 ## Example frontmatter
 

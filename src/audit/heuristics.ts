@@ -28,21 +28,33 @@ const VAGUE_WORDS = [
 const QUESTION_WORDS = ["How", "What", "Why", "Where", "When"];
 
 /**
- * Stub-marker patterns. Each entry is `[label, pattern]`. The label is the
- * human-readable token reported in the finding; the pattern is the regex used
- * to detect it. Patterns are case-insensitive; word-boundaried for the
- * acronym-style markers, literal for the parenthesized/bracketed forms (their
- * regex specials are escaped here so the detector body stays declarative).
+ * Stub-marker patterns. Each entry is `[label, subkind, pattern]`. The label
+ * is the human-readable token reported in the finding; subkind classifies
+ * the origin (framework_scaffold / template_placeholder / author_todo); the
+ * pattern is the regex used to detect it. Patterns are case-insensitive;
+ * word-boundaried for the acronym-style markers, literal for the
+ * parenthesized/bracketed forms.
  *
- * Kept as a module-level const so the list is easy to extend without touching
- * the detector logic.
+ * Subkind split (item #7 from SPANDREL-FEEDBACK.md): authors triaging stub
+ * findings care which kind of stub it is — a `(auto-generated stub)` is the
+ * framework's own scaffolding output (one-paragraph cleanup), a `[placeholder]`
+ * is template-substitution work, and a `TODO`/`TBD`/`WIP` is a real authoring
+ * pause. The Finding kind stays `stub_marker`; `detail.subkind` distinguishes,
+ * matching the existing G2 pattern (`weak_edge_description`, `staleness`).
  */
-const STUB_MARKER_PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
-  ["TBD", /\bTBD\b/i],
-  ["TODO", /\bTODO\b/i],
-  ["WIP", /\bWIP\b/i],
-  ["(auto-generated stub)", /\(auto-generated stub\)/i],
-  ["[placeholder]", /\[placeholder\]/i],
+type StubSubkind =
+  | "framework_scaffold"
+  | "template_placeholder"
+  | "author_todo";
+
+const STUB_MARKER_PATTERNS: ReadonlyArray<
+  readonly [string, StubSubkind, RegExp]
+> = [
+  ["TBD", "author_todo", /\bTBD\b/i],
+  ["TODO", "author_todo", /\bTODO\b/i],
+  ["WIP", "author_todo", /\bWIP\b/i],
+  ["(auto-generated stub)", "framework_scaffold", /\(auto-generated stub\)/i],
+  ["[placeholder]", "template_placeholder", /\[placeholder\]/i],
 ];
 
 /**
@@ -131,11 +143,23 @@ export function detectVagueQualifiers(
  * "What Spandrel believes about agent-friendly knowledge graphs..." with
  * 35 words). The word-count threshold separates them.
  *
+ * **Container-composite suppression (item #6 from SPANDREL-FEEDBACK.md).**
+ * Collection-index nodes legitimately introduce themselves with "What X" /
+ * "How Y" framing — that's correct authoring for a `/core/services/index.md`
+ * or `/core/ops/index.md`. When `hasChildren === true` and `childCount >= 3`,
+ * the description is doing topic-introduction work for a real subtree and
+ * the detector skips. Leaf nodes (no children) and small composites still
+ * trip the detector — those are the genuine "topic but no substance" cases.
+ *
  * @param maxWords - Description with question-word opening shorter than this triggers (default 15)
+ * @param hasChildren - True if the node has children (composite). Used by the suppression rule.
+ * @param childCount - Direct child count. Suppression triggers at ≥3.
  */
 export function detectTopicOpening(
   description: string,
   maxWords = 15,
+  hasChildren = false,
+  childCount = 0,
 ): Finding | null {
   const words = description.split(/\s+/).filter(Boolean);
   if (words.length === 0) return null;
@@ -143,6 +167,10 @@ export function detectTopicOpening(
 
   if (!QUESTION_WORDS.includes(firstWord)) return null;
   if (words.length > maxWords) return null;
+
+  // Container-composite suppression: collection-index "What X / How Y"
+  // framing is correct authoring at the collection level.
+  if (hasChildren && childCount >= 3) return null;
 
   return {
     kind: "topic_opening",
@@ -157,24 +185,51 @@ export function detectTopicOpening(
  * giving the reader enough to decide whether to drill in. Leaves can get away
  * with terse descriptions because there's nowhere to drill.
  *
+ * **Container-composite suppression (item #8 from SPANDREL-FEEDBACK.md).**
+ * Some composites are pure coordinators — their job is to group children
+ * whose descriptions carry the substantive content. A short description
+ * on a composite with ≥3 substantive children (average child description
+ * ≥`childSubstanceMinWords` words) is correct authoring, not an authoring
+ * gap. Suppress in that case so the detector stays focused on under-authored
+ * composites with too-few or too-thin children.
+ *
  * @param minWords - Composite description shorter than this triggers (default 8)
+ * @param childCount - Direct child count. Container suppression requires ≥3.
+ * @param avgChildDescriptionWords - Mean word count across child descriptions.
+ *   Container suppression requires ≥`childSubstanceMinWords`. Optional; when
+ *   omitted (undefined), suppression is disabled.
+ * @param childSubstanceMinWords - Average-child-words threshold for the
+ *   container suppression (default 8).
  */
 export function detectThinness(
   description: string,
   hasChildren: boolean,
   minWords = 8,
+  childCount = 0,
+  avgChildDescriptionWords?: number,
+  childSubstanceMinWords = 8,
 ): Finding | null {
   if (!hasChildren) return null;
   const wordCount = description.split(/\s+/).filter(Boolean).length;
-  if (wordCount < minWords) {
-    return {
-      kind: "thin",
-      severity: "advisory",
-      message: `Description is short (${wordCount} words) for a composite node`,
-      detail: { wordCount },
-    };
+  if (wordCount >= minWords) return null;
+
+  // Container-composite suppression: ≥3 children whose descriptions are
+  // themselves substantive (≥8 words avg) means the children carry the
+  // weight and the parent's brevity is correct.
+  if (
+    childCount >= 3 &&
+    avgChildDescriptionWords !== undefined &&
+    avgChildDescriptionWords >= childSubstanceMinWords
+  ) {
+    return null;
   }
-  return null;
+
+  return {
+    kind: "thin",
+    severity: "advisory",
+    message: `Description is short (${wordCount} words) for a composite node`,
+    detail: { wordCount },
+  };
 }
 
 /**
@@ -368,29 +423,47 @@ export function detectThinEdgeDescription(
 /**
  * Stub markers in the body: `TBD`, `TODO`, `WIP`, `(auto-generated stub)`,
  * `[placeholder]`. Authors leave these in when bootstrapping a node and forget
- * to come back; the audit's job is to remember for them. One finding lists
- * every marker that fires so the author sees them at a glance.
+ * to come back; the audit's job is to remember for them.
  *
- * Returns null if the body is null/empty/whitespace or contains no marker.
+ * Subkind split (item #7 from SPANDREL-FEEDBACK.md): markers are grouped by
+ * origin — `framework_scaffold` for `(auto-generated stub)` (Spandrel's own
+ * scaffolding emits this), `template_placeholder` for `[placeholder]`
+ * (template-substitution work), and `author_todo` for `TBD` / `TODO` / `WIP`
+ * (real authoring pauses). Each subkind that fires produces its own Finding
+ * (with `detail.subkind` set), so a body containing both `(auto-generated stub)`
+ * and `TODO` emits two findings — authors can triage by category.
+ *
+ * Returns empty array if the body is null/empty/whitespace or contains no
+ * marker. `detectStubMarkers` is the only detector that can emit multiple
+ * Findings per call — callers should spread the result into their findings
+ * array. (Single-Finding callers can `.shift()` or wrap.)
  */
-export function detectStubMarkers(body: string | null): Finding | null {
-  if (body === null) return null;
-  if (body.trim().length === 0) return null;
+export function detectStubMarkers(body: string | null): Finding[] {
+  if (body === null) return [];
+  if (body.trim().length === 0) return [];
 
-  const matches: string[] = [];
-  for (const [label, pattern] of STUB_MARKER_PATTERNS) {
+  // Group matches by subkind so each subkind that fires emits exactly one
+  // finding even when multiple author_todo acronyms (TBD + TODO) appear.
+  const matchesBySubkind = new Map<StubSubkind, string[]>();
+  for (const [label, subkind, pattern] of STUB_MARKER_PATTERNS) {
     if (pattern.test(body)) {
-      matches.push(label);
+      const list = matchesBySubkind.get(subkind) ?? [];
+      list.push(label);
+      matchesBySubkind.set(subkind, list);
     }
   }
-  if (matches.length === 0) return null;
+  if (matchesBySubkind.size === 0) return [];
 
-  return {
-    kind: "stub_marker",
-    severity: "advisory",
-    message: `Body contains stub markers: ${matches.join(", ")}`,
-    detail: { matches },
-  };
+  const findings: Finding[] = [];
+  for (const [subkind, matches] of matchesBySubkind) {
+    findings.push({
+      kind: "stub_marker",
+      severity: "advisory",
+      message: `Body contains stub markers: ${matches.join(", ")} (subkind: ${subkind})`,
+      detail: { subkind, matches },
+    });
+  }
+  return findings;
 }
 
 /**
@@ -403,6 +476,15 @@ export function detectStubMarkers(body: string | null): Finding | null {
  * Word count uses the same `split(/\s+/).filter(Boolean)` rule as the other
  * detectors so totals stay consistent across the module.
  *
+ * **Container-composite suppression (item #8 from SPANDREL-FEEDBACK.md).**
+ * Mirror of the suppression in `detectThinness`: a composite with ≥3
+ * substantive children (avg child description ≥8 words) is a coordinator
+ * whose body legitimately stays thin because the children carry the
+ * content. Suppress for that shape so authors aren't pushed to write
+ * throat-clearing prose ("This collection contains... see children
+ * below..."). Leaves keep the leaf threshold unchanged — they have no
+ * children to defer to.
+ *
  * @param body - Full body text (markdown after frontmatter). `null` or empty
  *   string counts as 0 words.
  * @param hasChildren - True for composite nodes (`foo/index.md` with siblings),
@@ -410,12 +492,20 @@ export function detectStubMarkers(body: string | null): Finding | null {
  * @param compositeMinWords - Composite body shorter than this triggers
  *   (default 50).
  * @param leafMinWords - Leaf body shorter than this triggers (default 20).
+ * @param childCount - Direct child count. Container suppression needs ≥3.
+ * @param avgChildDescriptionWords - Mean child-description word count.
+ *   Container suppression needs ≥`childSubstanceMinWords`. Optional;
+ *   omitted disables suppression.
+ * @param childSubstanceMinWords - Avg-child-words threshold (default 8).
  */
 export function detectThinBody(
   body: string | null,
   hasChildren: boolean,
   compositeMinWords = 50,
   leafMinWords = 20,
+  childCount = 0,
+  avgChildDescriptionWords?: number,
+  childSubstanceMinWords = 8,
 ): Finding | null {
   const trimmed = body === null ? "" : body.trim();
   const wordCount =
@@ -423,6 +513,17 @@ export function detectThinBody(
 
   const threshold = hasChildren ? compositeMinWords : leafMinWords;
   if (wordCount >= threshold) return null;
+
+  // Container-composite suppression: composites whose substantive children
+  // carry the content should not be flagged for thin bodies.
+  if (
+    hasChildren &&
+    childCount >= 3 &&
+    avgChildDescriptionWords !== undefined &&
+    avgChildDescriptionWords >= childSubstanceMinWords
+  ) {
+    return null;
+  }
 
   return {
     kind: "thin_body",
@@ -672,12 +773,23 @@ export function auditNode(input: NodeAuditInput): Finding[] {
   const vagueFinding = detectVagueQualifiers(input.description);
   if (vagueFinding) findings.push(vagueFinding);
 
-  const topicFinding = detectTopicOpening(input.description);
+  const hasChildren = input.childNames.length > 0;
+  const childCount = input.childNames.length;
+
+  const topicFinding = detectTopicOpening(
+    input.description,
+    undefined,
+    hasChildren,
+    childCount,
+  );
   if (topicFinding) findings.push(topicFinding);
 
   const thinFinding = detectThinness(
     input.description,
-    input.childNames.length > 0,
+    hasChildren,
+    undefined,
+    childCount,
+    input.avgChildDescriptionWords,
   );
   if (thinFinding) findings.push(thinFinding);
 
@@ -706,12 +818,17 @@ export function auditNode(input: NodeAuditInput): Finding[] {
   // body" and still gets run through the detectors (empty body fires
   // thin_body).
   if (input.body !== undefined) {
-    const hasChildren = input.childNames.length > 0;
+    const stubFindings = detectStubMarkers(input.body);
+    for (const f of stubFindings) findings.push(f);
 
-    const stubFinding = detectStubMarkers(input.body);
-    if (stubFinding) findings.push(stubFinding);
-
-    const thinBodyFinding = detectThinBody(input.body, hasChildren);
+    const thinBodyFinding = detectThinBody(
+      input.body,
+      hasChildren,
+      undefined,
+      undefined,
+      childCount,
+      input.avgChildDescriptionWords,
+    );
     if (thinBodyFinding) findings.push(thinBodyFinding);
 
     const overlongFinding = detectOverlongBody(input.body);

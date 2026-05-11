@@ -47,4 +47,4 @@ metrics/        — outcome metrics tied to priorities
 
 ## Stub status
 
-This template ships as a starting shape. Expand it as you use it — extension hints, example traversal, and `design.md` starters per collection are still to be written.
+This template ships as a starting shape. Expand it as you use it — extension hints, example traversal, and `DESIGN.md` starters per collection are still to be written.

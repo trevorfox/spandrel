@@ -91,7 +91,11 @@ describe("runAuditPass", () => {
     expect(edgeWarning?.message).toContain("[weak_edge_description.missing]");
   });
 
-  it("emits a stub_marker warning when the body contains TBD", async () => {
+  it("emits a stub_marker warning with author_todo subkind when the body contains TBD", async () => {
+    // Item #7 from SPANDREL-FEEDBACK.md split stub_marker into subkinds:
+    // `author_todo` (TBD/TODO/WIP), `framework_scaffold`
+    // (`(auto-generated stub)`), `template_placeholder` (`[placeholder]`).
+    // The message prefix is `[stub_marker.<subkind>]`.
     const node = makeNode({
       path: "/notes/draft",
       name: "Draft note",
@@ -105,7 +109,7 @@ describe("runAuditPass", () => {
     const warnings = await store.getWarnings();
     const stub = warnings.find((w) => w.type === "stub_marker");
     expect(stub).toBeDefined();
-    expect(stub?.message).toContain("[stub_marker]");
+    expect(stub?.message).toContain("[stub_marker.author_todo]");
     expect(stub?.message.toLowerCase()).toContain("tbd");
   });
 
@@ -274,5 +278,278 @@ describe("runAuditPass", () => {
     );
     expect(highFanin).toBeDefined();
     expect(highFanin?.message).toContain("[staleness.high_fanin]");
+  });
+
+  // ---------------------------------------------------------------------------
+  // Item #2 — mentions-edge redundancy suppression
+  // ---------------------------------------------------------------------------
+
+  it("suppresses weak_edge_description on a mentions edge whose target has a described typed edge (item #2)", async () => {
+    // Definite-style fixture from SPANDREL-FEEDBACK.md §2: a scenario node
+    // declares a typed `manifests-in` edge with a substantive description,
+    // then the body prose references the same target as an inline link
+    // (extracted as a `mentions` edge). The detector should not fire — the
+    // relationship is already described.
+    const source = makeNode({
+      path: "/scenarios/outgrown",
+      name: "Outgrown spreadsheets",
+      description:
+        "A scenario describing the moment a team outgrows ad-hoc spreadsheet analysis",
+      content:
+        "Tool-stage: [`patchwork`](/icp/patchwork) primarily, sometimes other choices.",
+    });
+    const target = makeNode({
+      path: "/icp/patchwork",
+      name: "Patchwork",
+      description: "Patchwork tool-stage — duct-taped BI on a starter analytics stack",
+    });
+    const edges: SpandrelEdge[] = [
+      // Typed frontmatter edge with description — substantive.
+      {
+        from: source.path,
+        to: target.path,
+        type: "link",
+        linkType: "manifests-in",
+        description: "Outgrown scenarios most often manifest in patchwork stacks",
+      },
+      // Same source, same target, mentions edge from body — no description.
+      {
+        from: source.path,
+        to: target.path,
+        type: "link",
+        linkType: "mentions",
+        description: "patchwork",
+      },
+    ];
+    const store = await storeWithNodes([source, target], edges);
+
+    await runAuditPass(store);
+
+    const warnings = await store.getWarnings();
+    const edgeFindings = warnings.filter(
+      (w) =>
+        w.path === source.path && w.type === "weak_edge_description",
+    );
+    // No findings should fire on the mentions edge — typed edge already
+    // described.
+    expect(edgeFindings).toEqual([]);
+  });
+
+  it("still fires weak_edge_description.missing on mentions edges that don't duplicate a described typed edge (item #2 isn't over-suppressing)", async () => {
+    const source = makeNode({
+      path: "/scenarios/a",
+      name: "A",
+      description: "A scenario whose body mentions a topic with no typed declaration",
+      content: "We touched on [analytics](/topics/analytics) briefly.",
+    });
+    const target = makeNode({
+      path: "/topics/analytics",
+      name: "Analytics",
+      description: "Analytics — what teams want when they want better dashboards",
+    });
+    const edges: SpandrelEdge[] = [
+      // ONLY the mentions edge, with no description. No same-target typed
+      // edge — so suppression doesn't apply.
+      {
+        from: source.path,
+        to: target.path,
+        type: "link",
+        linkType: "mentions",
+        description: undefined,
+      },
+    ];
+    const store = await storeWithNodes([source, target], edges);
+
+    await runAuditPass(store);
+
+    const warnings = await store.getWarnings();
+    const missing = warnings.find(
+      (w) =>
+        w.path === source.path &&
+        w.type === "weak_edge_description" &&
+        w.message.includes("[weak_edge_description.missing]"),
+    );
+    expect(missing).toBeDefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Item #3 — TOC heading-aware body-link suppression
+  // ---------------------------------------------------------------------------
+
+  it("suppresses weak_edge_description on a mentions edge sitting under a `## Contents` heading (item #3)", async () => {
+    const parent = makeNode({
+      path: "/product/capabilities",
+      name: "Capabilities",
+      description: "Product capabilities — the things the product can do for an end user",
+      content:
+        "Some intro paragraph that doesn't list children explicitly.\n\n" +
+        "## Contents\n\n" +
+        "- [ai-agent](/product/capabilities/ai-agent)\n" +
+        "- [connector-library](/product/capabilities/connector-library)\n",
+    });
+    const child1 = makeNode({
+      path: "/product/capabilities/ai-agent",
+      name: "AI agent",
+      description: "AI agent that reads, writes, and acts on the analytics stack",
+    });
+    const child2 = makeNode({
+      path: "/product/capabilities/connector-library",
+      name: "Connector library",
+      description: "Library of pre-built data connectors covering common SaaS sources",
+    });
+    const edges: SpandrelEdge[] = [
+      // Mentions edges as the compiler would extract them from the body —
+      // anchor text is the leaf slug (TOC convention).
+      {
+        from: parent.path,
+        to: child1.path,
+        type: "link",
+        linkType: "mentions",
+        description: "ai-agent",
+      },
+      {
+        from: parent.path,
+        to: child2.path,
+        type: "link",
+        linkType: "mentions",
+        description: "connector-library",
+      },
+    ];
+    const store = await storeWithNodes([parent, child1, child2], edges);
+
+    await runAuditPass(store);
+
+    const warnings = await store.getWarnings();
+    const tocFindings = warnings.filter(
+      (w) =>
+        w.path === parent.path && w.type === "weak_edge_description",
+    );
+    expect(tocFindings).toEqual([]);
+  });
+
+  it("still fires weak_edge_description on body links outside a TOC heading section (item #3 isn't over-suppressing)", async () => {
+    const parent = makeNode({
+      path: "/product/capabilities",
+      name: "Capabilities",
+      description: "Product capabilities — the things the product can do for an end user",
+      content:
+        "Some intro paragraph that mentions [ai-agent](/product/capabilities/ai-agent) in prose, not under a TOC heading.",
+    });
+    const child = makeNode({
+      path: "/product/capabilities/ai-agent",
+      name: "AI agent",
+      description: "AI agent that reads, writes, and acts on the analytics stack",
+    });
+    const edges: SpandrelEdge[] = [
+      {
+        from: parent.path,
+        to: child.path,
+        type: "link",
+        linkType: "mentions",
+        description: "ai-agent",
+      },
+    ];
+    const store = await storeWithNodes([parent, child], edges);
+
+    await runAuditPass(store);
+
+    const warnings = await store.getWarnings();
+    // The mentions edge sits in prose (not under a TOC heading), so
+    // weak_edge_description.tautologous still fires — the description
+    // equals the target stem.
+    const proseFindings = warnings.filter(
+      (w) =>
+        w.path === parent.path && w.type === "weak_edge_description",
+    );
+    expect(proseFindings.length).toBeGreaterThan(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Item #8 — container-composite suppression for thin_body + weak_description.thin
+  // ---------------------------------------------------------------------------
+
+  it("suppresses thin_body on a container composite with ≥3 substantive children (item #8)", async () => {
+    // A 0-word body composite with 4 children whose descriptions average ≥8
+    // words is a valid coordinator pattern; thin_body should not fire.
+    const parent = makeNode({
+      path: "/core/identity",
+      name: "Identity",
+      description:
+        "Mission, values, vision, and the public-facing story of the practice — short on body, deep in children",
+      children: [
+        "/core/identity/mission",
+        "/core/identity/values",
+        "/core/identity/vision",
+        "/core/identity/story",
+      ],
+      content: "",
+    });
+    const children = ["mission", "values", "vision", "story"].map((slug) =>
+      makeNode({
+        path: `/core/identity/${slug}`,
+        name: slug,
+        parent: parent.path,
+        description: `The ${slug} of the practice — twelve word minimum statement that anchors authoring choices and review`,
+      }),
+    );
+    const store = await storeWithNodes([parent, ...children]);
+
+    await runAuditPass(store);
+
+    const warnings = await store.getWarnings();
+    const thinBody = warnings.find(
+      (w) => w.path === parent.path && w.type === "thin_body",
+    );
+    expect(thinBody).toBeUndefined();
+  });
+
+  it("still fires thin_body on a leaf with 0-word body (item #8 isn't over-suppressing leaves)", async () => {
+    const leaf = makeNode({
+      path: "/notes/empty",
+      name: "Empty note",
+      description: "An empty note with body deliberately stubbed and a long-enough description here",
+      content: "",
+      children: [],
+    });
+    const store = await storeWithNodes([leaf]);
+
+    await runAuditPass(store);
+
+    const warnings = await store.getWarnings();
+    const thinBody = warnings.find(
+      (w) => w.path === leaf.path && w.type === "thin_body",
+    );
+    expect(thinBody).toBeDefined();
+  });
+
+  it("still fires thin_body on a composite whose children's descriptions are themselves thin", async () => {
+    const parent = makeNode({
+      path: "/core/identity",
+      name: "Identity",
+      description: "Identity coordinator with thin children whose descriptions don't carry the weight either",
+      children: [
+        "/core/identity/mission",
+        "/core/identity/values",
+        "/core/identity/vision",
+      ],
+      content: "",
+    });
+    const children = ["mission", "values", "vision"].map((slug) =>
+      makeNode({
+        path: `/core/identity/${slug}`,
+        name: slug,
+        parent: parent.path,
+        description: "stub",
+      }),
+    );
+    const store = await storeWithNodes([parent, ...children]);
+
+    await runAuditPass(store);
+
+    const warnings = await store.getWarnings();
+    const thinBody = warnings.find(
+      (w) => w.path === parent.path && w.type === "thin_body",
+    );
+    expect(thinBody).toBeDefined();
   });
 });

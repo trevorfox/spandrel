@@ -72,14 +72,14 @@ Question: "How did we approach Globex's positioning work, and what framework did
 
 Four hops from root to methodology + its application + the team who applied it.
 
-## design.md starters
+## DESIGN.md starters
 
-- `/clients/design.md` — each client is a Thing. Frontmatter: `name`, `description`, `industry`, `status` (active/paused/former), `led-by` link to lead consultant. Anti-pattern: engagement-specific details (timelines, fees) — those live on the engagement.
-- `/engagements/design.md` — each engagement is a Thing. Frontmatter: `name`, `description`, `status`, `start-date`, `end-date` (if applicable), `for-client` link, `led-by` link. Anti-pattern: bundling multiple concurrent workstreams into one node — split them.
-- `/people/design.md` — includes both consultants and client-side contacts; use `works-at` to distinguish. Frontmatter: `name`, `description`, `role`.
-- `/deliverables/design.md` — one deliverable per node. Frontmatter: `name`, `description`, `date`, `for-client`, `produced-in` (engagement), optional `derived-from`. Anti-pattern: treating every PowerPoint as a deliverable — only the ones worth referencing later.
-- `/frameworks/design.md` — each framework is a Thing. Frontmatter: `name`, `description`, `status` (draft/active/retired). Body: the methodology itself. Link to `applied-framework` backlinks implicitly via the edge. Anti-pattern: half-finished frameworks — mark as draft.
-- `/decisions/design.md` — standard decision log. Frontmatter: `name`, `description`, `date`, `status`. Body: context, decision, consequences. Supersede rather than edit.
+- `/clients/DESIGN.md` — each client is a Thing. Frontmatter: `name`, `description`, `industry`, `status` (active/paused/former), `led-by` link to lead consultant. Anti-pattern: engagement-specific details (timelines, fees) — those live on the engagement.
+- `/engagements/DESIGN.md` — each engagement is a Thing. Frontmatter: `name`, `description`, `status`, `start-date`, `end-date` (if applicable), `for-client` link, `led-by` link. Anti-pattern: bundling multiple concurrent workstreams into one node — split them.
+- `/people/DESIGN.md` — includes both consultants and client-side contacts; use `works-at` to distinguish. Frontmatter: `name`, `description`, `role`.
+- `/deliverables/DESIGN.md` — one deliverable per node. Frontmatter: `name`, `description`, `date`, `for-client`, `produced-in` (engagement), optional `derived-from`. Anti-pattern: treating every PowerPoint as a deliverable — only the ones worth referencing later.
+- `/frameworks/DESIGN.md` — each framework is a Thing. Frontmatter: `name`, `description`, `status` (draft/active/retired). Body: the methodology itself. Link to `applied-framework` backlinks implicitly via the edge. Anti-pattern: half-finished frameworks — mark as draft.
+- `/decisions/DESIGN.md` — standard decision log. Frontmatter: `name`, `description`, `date`, `status`. Body: context, decision, consequences. Supersede rather than edit.
 
 ## Example frontmatter
 

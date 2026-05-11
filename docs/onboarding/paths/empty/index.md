@@ -45,7 +45,7 @@ Skip the "what's your existing structure?" question — there's no existing cont
 ## Seeding
 
 1. Create the repo: new directory, `git init`, write root `index.md` with `name` and `description` from the purpose statement.
-2. Create each collection directory with `index.md` and `design.md`. The `design.md` comes from the template if one was picked, or is written fresh.
+2. Create each collection directory with `index.md` and `DESIGN.md`. The `DESIGN.md` comes from the template if one was picked, or is written fresh.
 3. Seed **three example Things per collection** — placeholder nodes the user can replace. Real data beats placeholders: ask the user to name three clients / projects / decisions / whatever their collections hold, and create those as the examples.
 4. Write the knowledge repo's `README.md`.
 5. Compile. Walk the graph.

@@ -66,12 +66,12 @@ Question: "What was the original thought that led to my current writing project?
 
 Three hops from root to the seed idea of an ongoing project.
 
-## design.md starters
+## DESIGN.md starters
 
-- `/notes/design.md` — each note is one atomic idea. Frontmatter: `name` (a sentence capturing the idea), `description` (one-line restatement), `date`. Body: a paragraph, maybe two. Anti-pattern: notes longer than a page — split them.
-- `/projects/design.md` — each project is a Thing with scope and status. Frontmatter: `name`, `description`, `status` (active/paused/done/abandoned), `start-date`. Body: what the project is, current state, links to `part-of` notes.
-- `/references/design.md` — each reference is an external source. Frontmatter: `name`, `description` (what this source is about, in your own words), `url` or `citation`, `date-read`. Body: key takeaways in your own words — not a copy of the source.
-- `/decisions/design.md` — personal decision log. Frontmatter: `name`, `description`, `date`, `status`. Body: what decision, why, what trade-offs. Supersede rather than edit.
+- `/notes/DESIGN.md` — each note is one atomic idea. Frontmatter: `name` (a sentence capturing the idea), `description` (one-line restatement), `date`. Body: a paragraph, maybe two. Anti-pattern: notes longer than a page — split them.
+- `/projects/DESIGN.md` — each project is a Thing with scope and status. Frontmatter: `name`, `description`, `status` (active/paused/done/abandoned), `start-date`. Body: what the project is, current state, links to `part-of` notes.
+- `/references/DESIGN.md` — each reference is an external source. Frontmatter: `name`, `description` (what this source is about, in your own words), `url` or `citation`, `date-read`. Body: key takeaways in your own words — not a copy of the source.
+- `/decisions/DESIGN.md` — personal decision log. Frontmatter: `name`, `description`, `date`, `status`. Body: what decision, why, what trade-offs. Supersede rather than edit.
 
 ## Example frontmatter
 

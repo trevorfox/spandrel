@@ -41,6 +41,8 @@ Three patterns surfaced repeatedly in the 2026-05-10 sweep. All three are forms 
 
 **Detection heuristic:** Description matches `^(How|What|Why) [A-Z][a-z]+ (works|is|does|are)\b` and is shorter than 15 words total.
 
+**Container-composite suppression (item #6 from `SPANDREL-FEEDBACK.md`).** A composite node with three or more children is doing collection-index work — "What X" / "How Y" framing on a real subtree is *correct* authoring, not a substance deficit. The detector skips when `hasChildren === true && childCount >= 3`. Leaf nodes still trip the detector when their description names only the topic; small composites (≤ 2 children) still trip because the child set is too small to justify a topic-introduction frame. The threshold mirrors the TOC detector's `minMatches` (≥ 3 children = collection-shape).
+
 ### 3. Vague qualifiers
 
 **Signal:** Description contains "various", "different", "related", "relevant", "covers", "discusses".
@@ -64,6 +66,10 @@ Three substance-deficit patterns surface in edge descriptions, parallel to the n
 **Exemption — self-evident structural types.** A small allowlist of link types reads fine without a description because the type alone carries the full meaning. The default allowlist is `["child-of", "part-of"]`: a `child-of` edge from `/clients/acme/contracts` to `/clients/acme` doesn't need a description to be clear. Callers can override the allowlist; everything outside it is treated as carrying semantic load that an empty description withholds.
 
 **Detection heuristic:** `description === null || description.trim().length === 0`, and `type` is not in the self-evident-types allowlist (default `["child-of", "part-of"]`).
+
+**Mentions-edge redundancy suppression (item #2 from `SPANDREL-FEEDBACK.md`).** When a `mentions` edge shares its source and target with a non-`mentions` typed edge that *already carries* a non-empty description, the relationship is described — the `mentions` is a body-inline navigation reference, not an under-authored typed declaration. The audit pass filters such redundant `mentions` edges out of the audit input before the detectors run, so all three `weak_edge_description.*` subkinds (`missing`, `tautologous`, `thin`) are suppressed in one place. Same-source / same-target / typed-edge-described is the conjunction; absence of any one of the three lets the detector fire. The filter lives in `audit-pass.ts` rather than in the detectors themselves so the detectors stay pure.
+
+**TOC heading-aware suppression (item #3 from `SPANDREL-FEEDBACK.md`).** Body-inline `mentions` edges sitting inside an H2 or H3 section whose heading text matches `/^(contents|members|index|subcollection)\b/i` are navigational TOC links — the anchor text is the leaf slug for human readability, and the substantive description lives on the matching frontmatter typed edge (if it exists). The audit pass tracks heading provenance via a body walker (`collectTocLinks` in `audit-pass.ts`) and marks affected edges, then filters them out before the detectors run. Compiler behavior is unchanged — the edges are still extracted and visible to other graph consumers; only the audit ignores them. This positions the suppression as an audit-level pragmatic fix while the deeper convention question (`{{ children }}` directives vs. hand-authored Contents lists) is settled separately.
 
 ### 5. Tautologous edge description
 
@@ -138,7 +144,15 @@ All three are cheap (regex + word-count). They live in `src/audit/heuristics.ts`
 
 **Why it fails the test:** These are the artefacts of bootstrapping a node and never returning to flesh it out. They're cheap to detect and (when found) cheap to act on — either fill in the body or remove the marker.
 
-**Detection heuristic:** Case-insensitive regex match. Acronym markers are word-boundaried (`\bTBD\b`, `\bTODO\b`, `\bWIP\b`) to avoid false positives inside other words; the parenthesized / bracketed forms are matched literally. One `Finding` per node lists every marker that fired so the author sees them at a glance.
+**Detection heuristic:** Case-insensitive regex match. Acronym markers are word-boundaried (`\bTBD\b`, `\bTODO\b`, `\bWIP\b`) to avoid false positives inside other words; the parenthesized / bracketed forms are matched literally. The detector returns one `Finding` *per subkind that fires* (not one per match) so authors can triage by category.
+
+**Subkind split (item #7 from `SPANDREL-FEEDBACK.md`).** Three subkinds, distinguishing origin:
+
+- **`framework_scaffold`** — matches `(auto-generated stub)`. Emitted by Spandrel's own scaffolding tools when creating a composite. Cleanup cost: one paragraph of first-pass authoring.
+- **`template_placeholder`** — matches `[placeholder]`. Awaiting template substitution. Cleanup cost: name the specific thing.
+- **`author_todo`** — matches `TBD` / `TODO` / `WIP`. A human author paused mid-write. Cleanup cost: finish the in-progress section.
+
+All three share the `stub_marker` kind (no breaking change for consumers); the subkind goes in `detail.subkind` and surfaces in the audit-pass message prefix as `[stub_marker.<subkind>]`, matching the existing G2 pattern (`weak_edge_description`, `staleness`). A body that trips multiple subkinds (e.g., `(auto-generated stub)` plus `TODO`) emits one finding per subkind — same-subkind acronyms (`TBD` and `TODO` together) collapse to a single `author_todo` finding with both labels in `detail.matches`.
 
 #### Thin body — `thin_body`
 
@@ -147,6 +161,8 @@ All three are cheap (regex + word-count). They live in `src/audit/heuristics.ts`
 **Why it fails the test:** Composites shape downstream traversal; if the index body doesn't orient the reader, every drill-down starts cold. Leaves can be terse because they're the destination, but a near-empty leaf signals a placeholder.
 
 **Detection heuristic:** Trim, split on whitespace, count tokens. Composites get the stricter threshold (50) because their leverage is higher. Thresholds are function arguments — callers can override per graph.
+
+**Container-composite suppression (item #8 from `SPANDREL-FEEDBACK.md`).** Some composites are pure coordinators — their body legitimately stays thin because the children carry the substantive content. Forcing a 50-word body on every composite would push authors to write throat-clearing prose ("This collection contains... see children below..."), which adds zero signal. The detector suppresses when `hasChildren === true && childCount >= 3 && avgChildDescriptionWords >= 8`. The 8-word threshold is conservative — it catches Trevor's documented EA-OS container cases (composites with four+ children whose descriptions average 12+ words) without aggressively suppressing nodes that genuinely need more body content. The same rule applies to `detectThinness` (the description-level detector for short composite descriptions) — a coordinator composite with substantive children is correct authoring; the description's job is to name the topic, not to duplicate the children's claims. Leaves never trigger the suppression because there are no children to defer to.
 
 #### Overlong body — `overlong_body`
 

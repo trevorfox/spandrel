@@ -102,7 +102,7 @@ docs/knowledge/
 ├── README.md
 ├── packages/
 │   ├── index.md
-│   ├── design.md
+│   ├── DESIGN.md
 │   ├── core/index.md        # depends-on /packages/utils
 │   ├── cli/index.md         # depends-on /packages/core
 │   └── utils/index.md

@@ -47,9 +47,9 @@ One walkthrough of navigating the graph from root to a specific leaf, showing pr
 
 ## Optional sections
 
-### `design.md` starters
+### `DESIGN.md` starters
 
-If the template wants to ship `design.md` files for each collection (strong signal for Tier-1 templates), include them as an appendix or as separate companion files inside the template's directory.
+If the template wants to ship `DESIGN.md` files for each collection (strong signal for Tier-1 templates), include them as an appendix or as separate companion files inside the template's directory.
 
 ## Anti-patterns
 

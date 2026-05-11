@@ -9,7 +9,7 @@ links:
 
 # Templates
 
-A template is a pre-authored mini-graph: collection skeleton, edge vocabulary, day-one question list, starter `design.md` files. Pick one during Level 2 if the scenario fits; adapt collection names to your vocabulary; react rather than design from scratch.
+A template is a pre-authored mini-graph: collection skeleton, edge vocabulary, day-one question list, starter `DESIGN.md` files. Pick one during Level 2 if the scenario fits; adapt collection names to your vocabulary; react rather than design from scratch.
 
 ## Tier-1 templates
 
@@ -31,8 +31,8 @@ Skeleton + edge vocabulary + day-one questions. Fewer examples, no prose expansi
 
 ## How to use
 
-The rubric each template follows lives in this collection's `design.md` companion file. During Level 2 of onboarding, the agent shows the menu; the user picks one, rejects all (custom), or combines two (rare, usually harmful — prefer one).
+The rubric each template follows lives in this collection's `DESIGN.md` companion file. During Level 2 of onboarding, the agent shows the menu; the user picks one, rejects all (custom), or combines two (rare, usually harmful — prefer one).
 
 ## Extending
 
-Adding a new template: follow the rubric in `design.md`, match the voice of existing Tier-1 templates, and link from this index. Templates are standalone — don't reference each other except where one is a clear evolution path from another (e.g., `saas-startup` grows into `product-strategy`).
+Adding a new template: follow the rubric in `DESIGN.md`, match the voice of existing Tier-1 templates, and link from this index. Templates are standalone — don't reference each other except where one is a clear evolution path from another (e.g., `saas-startup` grows into `product-strategy`).

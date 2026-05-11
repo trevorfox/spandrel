@@ -19,7 +19,7 @@ One-page summary of Spandrel primitives. If you're onboarding for the first time
 - **Thing** — a node in the graph. Has `name` and `description` in frontmatter, plus optional `links` and domain-specific fields.
 - **Leaf node** — `foo.md`. No children possible.
 - **Composite node** — `foo/index.md`. Directory with children, companion files, sub-collections. Directory wins if both exist.
-- **Collection** — a directory holding Things of the same type, named with a plural noun (`/clients/`, `/decisions/`). Has an `index.md` describing the collection and a [`design.md`](/content-model/design-md) describing what a well-formed member looks like.
+- **Collection** — a directory holding Things of the same type, named with a plural noun (`/clients/`, `/decisions/`). Has an `index.md` describing the collection and a [`DESIGN.md`](/content-model/design-md) describing what a well-formed member looks like.
 - **Path** — the directory path is the node's identity. Renaming is an explicit, expensive operation.
 
 ## Frontmatter
@@ -51,7 +51,7 @@ Skills are graph nodes, not files in `.claude/skills/`. They live under `/skills
 
 ## Companion files
 
-Files that travel with a node but don't compile as nodes themselves: `design.md`, `SKILL.md`, `AGENT.md`, `README.md`. `design.md` is the authoring guide for a collection; the rest are documentation conventions.
+Files that travel with a node but don't compile as nodes themselves: `DESIGN.md`, `SKILL.md`, `AGENT.md`, `README.md`. `DESIGN.md` is the authoring guide for a collection; the rest are documentation conventions.
 
 ## System directories
 
