@@ -49,6 +49,40 @@ Three patterns surfaced repeatedly in the 2026-05-10 sweep. All three are forms 
 
 **Detection heuristic:** Word-list match. Each occurrence subtracts from substance score; ≥2 → flag.
 
+## Edge-description heuristics
+
+Node descriptions get the lion's share of authoring effort. Link descriptions get whatever's left over — and that's the problem. The agent traversing an edge needs to know *why* it should drill from this node to that one; the link type tells it what kind of relationship exists, but not what's distinctive about *this* instance of it. A node like `/clients/acme` with twenty links — `led-by /people/jane`, `served-by /teams/data`, `mentions /topics/snowflake` — gives the agent a dense local map only when each edge carries a real claim. Empty, restated, or one-word descriptions hand the agent twenty nearly-identical signals.
+
+Three substance-deficit patterns surface in edge descriptions, parallel to the node-level ones above. All three emit a single `weak_edge_description` finding kind, with the specific failure mode carried in `detail.subkind` (`missing`, `tautologous`, or `thin`) and reflected in `message`. The one-kind-with-subkind shape (a deliberate decision, captured here for posterity) keeps the warning vocabulary small while still letting tooling filter or count by subkind.
+
+### 4. Missing edge description
+
+**Signal:** Description is `null`, empty, or whitespace-only on a typed link.
+
+**Why it fails the test:** The link type tells the reader the *category* of relationship (`led-by`, `served-by`, `works-with`); the description tells them the *specifics* (who, since when, for what scope). With no description, the agent gets a category and a target — not a reason to traverse.
+
+**Exemption — self-evident structural types.** A small allowlist of link types reads fine without a description because the type alone carries the full meaning. The default allowlist is `["child-of", "part-of"]`: a `child-of` edge from `/clients/acme/contracts` to `/clients/acme` doesn't need a description to be clear. Callers can override the allowlist; everything outside it is treated as carrying semantic load that an empty description withholds.
+
+**Detection heuristic:** `description === null || description.trim().length === 0`, and `type` is not in the self-evident-types allowlist (default `["child-of", "part-of"]`).
+
+### 5. Tautologous edge description
+
+**Signal:** Description merely restates the link type (`"led-by"` on a `led-by` edge) or the target-path stem (`"accounts"` on `/clients/acme/accounts`).
+
+**Why it fails the test:** Same shape as node-level tautology — the description duplicates information the reader already has. The link's `type` field and `to` field are visible in any list view; restating them adds zero signal.
+
+**Detection heuristic:** Conservative equality match, case-insensitive. The trimmed lowercase description equals one of: the link type, the link type with hyphens replaced by spaces, the target path's last segment, or that segment with hyphens replaced by spaces. Substring matches do *not* trigger — `"led by Jane since 2024"` contains `"led by"` but is clearly substantive and should not be flagged. Conservatism here matters more than recall; false positives on real descriptions train authors to ignore the audit.
+
+### 6. Thin edge description
+
+**Signal:** Single-word description on a typed edge whose type isn't `mentions`.
+
+**Why it fails the test:** One word is rarely enough to justify a typed relationship. `"Jane"` on a `led-by` edge tells the reader nothing they can't see by following the link.
+
+**Exemption — `mentions`.** The `mentions` link type is the framework's catch-all for ambient references; a one-word note (`"context"`, `"background"`) is acceptable there because the relationship itself is loose by design. For every other typed edge, one word fails the substance test.
+
+**Detection heuristic:** `description.trim().split(/\s+/).length ≤ 1` and `type !== "mentions"`. Empty or null descriptions are handled by the missing-edge detector (so the thin detector returns null on those to avoid double-flagging).
+
 ## Improvement patterns
 
 Three reliable templates, all derived from the sweep:
@@ -88,6 +122,9 @@ Detection signals scoped to what's cheaply computable from the compiled graph.
 - **Topic-style opening:** Regex `^(How|What|Why) [A-Z]\w+ (works|is|does|are)\b`.
 - **Thinness:** `len(description.split()) < 8` on a composite node with ≥ 3 children.
 - **Tautology:** Description contains the node's own name verbatim and adds < 5 other content words.
+- **Missing edge description:** Per typed link, `description` is null/empty/whitespace and `type` is not in the self-evident-types allowlist (default `["child-of", "part-of"]`).
+- **Tautologous edge description:** Trimmed lowercase description equals the link `type`, the type with hyphens-as-spaces, the target path stem, or the stem with hyphens-as-spaces. Case-insensitive, equality only — substring matches do not trigger.
+- **Thin edge description:** Per typed link, single-word description and `type !== "mentions"`.
 
 ### Mid-cost (LLM-as-judge or embedding-based)
 
