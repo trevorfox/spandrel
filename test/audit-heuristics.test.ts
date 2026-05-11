@@ -523,10 +523,11 @@ describe("detectStubMarkers", () => {
   });
 
   it("does not flag words that contain marker substrings (word boundary)", () => {
-    // "tbdriver" / "TODOS" inside other words must not fire because \b is
-    // enforced. Use an obviously substantive body.
+    // `TBD`, `TODO`, `WIP` embedded inside larger words (`TBDriver`, `TODOS`,
+    // `WIPing`) must not fire because `\b` is enforced. Without word
+    // boundaries, this body would trip all three markers.
     const finding = detectStubMarkers(
-      "The team broke down the brittle subdocument workflow and reassembled it.",
+      "The TBDriver class extends BaseDriver and tracks unsorted TODOS in a queue. WIPing the disk reformats it.",
     );
     expect(finding).toBeNull();
   });
