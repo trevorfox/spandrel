@@ -55,7 +55,8 @@
     "dev:web": "vite --config src/web/app/vite.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:fidelity": "tsx test/fidelity/run.ts"
+    "test:fidelity": "tsx test/fidelity/run.ts",
+    "render:diagrams": "tsx scripts/render-architecture.ts"
   },
   "dependencies": {
     "ajv": "^8.20.0",
@@ -74,7 +75,11 @@
     "simple-git": "^3.27.0"
   },
   "devDependencies": {
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/source-serif-4": "^5.2.9",
     "@modelcontextprotocol/sdk": "1.26.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/d3-drag": "^3.0.7",
     "@types/d3-force": "^3.0.10",
@@ -84,6 +89,8 @@
     "@types/jsdom": "^28.0.1",
     "@types/node": "^22.15.3",
     "jsdom": "^29.1.1",
+    "satori": "^0.26.0",
+    "satori-html": "^0.3.2",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vite": "^8.0.10",
