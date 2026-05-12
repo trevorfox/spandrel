@@ -57,4 +57,20 @@ describe("stripNulls", () => {
     expect(stripNulls(42)).toBe(42);
     expect(stripNulls(null)).toBe(null);
   });
+
+  it("passes non-plain objects through untouched", () => {
+    // Defer to JSON.stringify's own serialization for Date, Map, etc.
+    // Without the prototype guard these would reduce to {} via Object.entries.
+    const date = new Date("2026-05-11T00:00:00Z");
+    expect(stripNulls(date)).toBe(date);
+
+    class Custom {
+      constructor(public name: string) {}
+    }
+    const instance = new Custom("x");
+    expect(stripNulls(instance)).toBe(instance);
+
+    const map = new Map([["k", "v"]]);
+    expect(stripNulls(map)).toBe(map);
+  });
 });
