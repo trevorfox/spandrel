@@ -72,7 +72,14 @@ export interface ValidationWarning {
     | "link_target_mismatch"          // graph: edge targets outside the declared prefix
     | "missing_required_subcollection"// graph: required subcollection missing (composites only)
     | "naming_violation"              // graph: stem doesn't match child_path_pattern
-    | "invalid_graph_schema";         // DESIGN's own graph: (or schema:) block is malformed
+    | "invalid_graph_schema"          // DESIGN's own graph: (or schema:) block is malformed
+    // --- Semantic-tier audit warnings (Phase E1) ---
+    // Emitted by `spandrel audit --semantic` after `spandrel embed` has
+    // populated the per-graph embedding store. Advisory; surfaces pairs of
+    // nodes that are semantically close but graph-distant (no link-type
+    // edge connects them). See `src/audit/missing-links.ts` and the spec
+    // at `specs/2026-05-11-phase-e1-missing-link-detection.md`.
+    | "missing_link";                 // pair semantically close, no link edge
   message: string;
 }
 

@@ -22,11 +22,17 @@
  */
 
 import path from "node:path";
+import fs from "node:fs";
 import { compile, addGitMetadata } from "./compiler/compiler.js";
 import { runAuditPass } from "./compiler/audit-pass.js";
 import type { ValidationWarning } from "./compiler/types.js";
 import { buildPriorityQueue, type NodeMetadata } from "./audit/priority.js";
 import type { QueueItem } from "./audit/types.js";
+import {
+  computeContentHash,
+  openStore,
+} from "./audit/embeddings-store.js";
+import { findMissingLinks } from "./audit/missing-links.js";
 
 /**
  * The audit-pass warning types. Anything outside this set is a non-audit
@@ -54,6 +60,9 @@ const AUDIT_TYPES = new Set<ValidationWarning["type"]>([
   "missing_required_subcollection",
   "naming_violation",
   "invalid_graph_schema",
+  // Phase E1 — semantic-tier detector. Surfaces only when `--semantic` runs,
+  // but the type is in the registry so `--kinds missing_link` works too.
+  "missing_link",
 ]);
 
 export type AuditFormat = "human" | "json";
@@ -77,6 +86,32 @@ export interface AuditOptions {
    * dominates). Same compile pipeline + filters as the flat mode.
    */
   priority?: boolean;
+  /**
+   * Phase E1 — run the semantic-tier missing-link detector in addition to
+   * the cheap audit pass. Requires that `spandrel embed <root>` has been run
+   * first; errors out with a clear message otherwise (or when the store is
+   * stale — any node's current content hash isn't in the cache).
+   */
+  semantic?: boolean;
+  /**
+   * Phase E1 — embedding model name to read from the store. When omitted,
+   * the audit pass auto-detects: if the store contains exactly one model,
+   * that's used; if it contains multiple, the call errors with a message
+   * asking the user to pass `--semantic-model <name>`. This eliminates the
+   * "must remember to pass --semantic-model when using a non-default
+   * provider" footgun.
+   */
+  semanticModel?: string;
+  /**
+   * Phase E1 — cosine similarity threshold for missing-link candidates.
+   * Default `0.75` per spec.
+   */
+  similarityThreshold?: number;
+  /**
+   * Phase E1 — max missing-link candidates emitted per source node.
+   * Default `5`.
+   */
+  maxCandidatesPerNode?: number;
   /**
    * Optional output sinks for tests. Defaults route to process.stdout/stderr.
    * Tests can pass capturing functions to assert on output without touching
@@ -202,7 +237,34 @@ export async function runAudit(options: AuditOptions): Promise<RunAuditResult> {
   await addGitMetadata(store, options.rootDir);
   await runAuditPass(store, referenceNow, options.rootDir);
 
-  const allWarnings = await store.getWarnings();
+  let allWarnings = await store.getWarnings();
+
+  // Phase E1 — optional semantic-tier pass. Reads the per-graph embedding
+  // store, runs the missing-link detector, and concatenates the resulting
+  // `missing_link` warnings before filtering. Failures (no store, stale
+  // store, model mismatch) short-circuit with exit 1 + a clear remediation
+  // hint pointing at `spandrel embed`.
+  if (options.semantic) {
+    const semResult = runSemanticPass(
+      options.rootDir,
+      await store.getAllNodes(),
+      await store.getEdges(),
+      {
+        // When the caller didn't specify a model, `runSemanticPass`
+        // auto-detects from the store (single model in store → that;
+        // multiple → error asking the user to pick).
+        model: options.semanticModel,
+        similarityThreshold: options.similarityThreshold,
+        maxCandidatesPerNode: options.maxCandidatesPerNode,
+      },
+    );
+    if (semResult.error) {
+      stderr(semResult.error);
+      return { code: 1, warnings: [] };
+    }
+    allWarnings = [...allWarnings, ...semResult.warnings];
+  }
+
   const filtered = filterAuditWarnings(allWarnings, {
     kinds: options.kinds,
     node: options.node,
@@ -338,6 +400,34 @@ export function parseAuditArgs(argv: string[]): AuditOptions {
       opts.priority = true;
     } else if (a === "--no-priority") {
       opts.priority = false;
+    } else if (a === "--semantic") {
+      opts.semantic = true;
+    } else if (a === "--no-semantic") {
+      opts.semantic = false;
+    } else if (a === "--semantic-model") {
+      opts.semanticModel = argv[++i] ?? "";
+    } else if (a.startsWith("--semantic-model=")) {
+      opts.semanticModel = a.slice("--semantic-model=".length);
+    } else if (a === "--similarity-threshold") {
+      opts.similarityThreshold = parseFloatFlag(
+        "--similarity-threshold",
+        argv[++i] ?? "",
+      );
+    } else if (a.startsWith("--similarity-threshold=")) {
+      opts.similarityThreshold = parseFloatFlag(
+        "--similarity-threshold",
+        a.slice("--similarity-threshold=".length),
+      );
+    } else if (a === "--max-candidates-per-node") {
+      opts.maxCandidatesPerNode = parseIntFlag(
+        "--max-candidates-per-node",
+        argv[++i] ?? "",
+      );
+    } else if (a.startsWith("--max-candidates-per-node=")) {
+      opts.maxCandidatesPerNode = parseIntFlag(
+        "--max-candidates-per-node",
+        a.slice("--max-candidates-per-node=".length),
+      );
     } else if (!a.startsWith("--") && rootDir === undefined) {
       rootDir = a;
     }
@@ -367,6 +457,127 @@ function parseSeverity(value: string): AuditSeverity {
   throw new Error(
     `--severity must be one of: all, advisory, warning (got "${value}")`,
   );
+}
+
+function parseFloatFlag(name: string, value: string): number {
+  const n = Number.parseFloat(value);
+  if (!Number.isFinite(n)) {
+    throw new Error(`${name} must be a number (got "${value}")`);
+  }
+  return n;
+}
+
+function parseIntFlag(name: string, value: string): number {
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n) || Number.isNaN(n)) {
+    throw new Error(`${name} must be an integer (got "${value}")`);
+  }
+  return n;
+}
+
+/**
+ * Run the Phase E1 semantic pass. Pure-ish — reads the embedding store at the
+ * graph root (the only I/O) and computes per-node content hashes to detect
+ * staleness. Returns `{ warnings }` on success, `{ error }` on a clear
+ * configuration / pre-condition failure. The CLI prints `error` to stderr
+ * and exits 1.
+ *
+ * Pre-conditions checked:
+ *  - `<rootDir>/_audit/embeddings.db` must exist.
+ *  - If `opts.model` is omitted, the store must contain exactly one model.
+ *    Zero → "run spandrel embed"; multiple → "pass --semantic-model".
+ *  - The DB must contain at least one row for the resolved model.
+ *  - Every embeddable (non-companion) node's current content hash must be
+ *    represented in the store under that model. Stale → error pointing at
+ *    `spandrel embed`.
+ */
+function runSemanticPass(
+  rootDir: string,
+  nodes: Array<import("./compiler/types.js").SpandrelNode>,
+  edges: Array<import("./compiler/types.js").SpandrelEdge>,
+  opts: {
+    /**
+     * When omitted, auto-detect from the store. Required only when the store
+     * holds multiple models (e.g. user has embedded with both local and
+     * OpenAI providers and we can't guess intent).
+     */
+    model?: string;
+    similarityThreshold?: number;
+    maxCandidatesPerNode?: number;
+  },
+): { warnings: ValidationWarning[]; error?: string } {
+  const dbPath = path.join(rootDir, "_audit", "embeddings.db");
+  if (!fs.existsSync(dbPath)) {
+    return {
+      warnings: [],
+      error: `--semantic: no embedding store found at ${dbPath}. Run \`spandrel embed ${rootDir}\` first to populate embeddings.`,
+    };
+  }
+
+  const store = openStore(rootDir);
+  try {
+    // Resolve which embedding model to read. The simple ergonomic win: when
+    // the store holds exactly one model, use it. This eliminates the
+    // "remembered to pass --semantic-model when using a non-default provider"
+    // footgun called out in PR #33's open questions.
+    let model: string;
+    if (opts.model) {
+      model = opts.model;
+    } else {
+      const distinct = store.getDistinctModels();
+      if (distinct.length === 0) {
+        return {
+          warnings: [],
+          error: `--semantic: embedding store at ${dbPath} is empty. Run \`spandrel embed ${rootDir}\` first to populate embeddings.`,
+        };
+      }
+      if (distinct.length > 1) {
+        return {
+          warnings: [],
+          error: `--semantic: embedding store contains multiple models (${distinct.join(", ")}); pass --semantic-model <name> to disambiguate.`,
+        };
+      }
+      model = distinct[0];
+    }
+
+    const embeddings = store.getAllForGraph(model);
+    if (embeddings.size === 0) {
+      return {
+        warnings: [],
+        error: `--semantic: embedding store at ${dbPath} contains no rows for model "${model}". Run \`spandrel embed ${rootDir}\` first to populate embeddings.`,
+      };
+    }
+
+    const hashes = store.getAllHashesForGraph(model);
+    const embeddable = nodes.filter((n) => n.kind !== "document");
+    const stale: string[] = [];
+    for (const n of embeddable) {
+      const wanted = computeContentHash(n);
+      const have = hashes.get(n.path);
+      if (have !== wanted) stale.push(n.path);
+    }
+    if (stale.length > 0) {
+      const preview = stale.slice(0, 3).join(", ");
+      const more = stale.length > 3 ? `, +${stale.length - 3} more` : "";
+      return {
+        warnings: [],
+        error: `--semantic: embedding store is stale (${stale.length} node(s) missing or out-of-date: ${preview}${more}). Run \`spandrel embed ${rootDir}\` first to refresh.`,
+      };
+    }
+
+    const candidates = findMissingLinks(embeddings, edges, {
+      similarityThreshold: opts.similarityThreshold,
+      maxCandidatesPerNode: opts.maxCandidatesPerNode,
+    });
+    const warnings: ValidationWarning[] = candidates.map((c) => ({
+      path: c.source,
+      type: "missing_link" as const,
+      message: `[missing_link] Considered linking to ${c.target} (cos ${c.similarity.toFixed(2)})`,
+    }));
+    return { warnings };
+  } finally {
+    store.close();
+  }
 }
 
 /**
