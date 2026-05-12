@@ -215,20 +215,35 @@ Measured wire-byte reduction on three real graphs after the impl landed in PR #3
 | EA-OS (256 nodes, ~1100 edges) | 2.0% | `navigate /` (12.3%) | `get_references` hub, `get_graph /` (0.0%) |
 | Definite (240 nodes, ~1300 edges) | 0.6% | `navigate /` (4.1%) | `get_references` hub, `get_graph /` (0.0%) |
 
-**Why the original 10–20% estimate was wrong:**
+**These three graphs are all in the "mature / audited" state.** All three have been through Phase D-0 detector tuning and a per-edge description sweep (PR #26 on Spandrel, equivalent manual passes on EA-OS and Definite). The numbers above are the *floor* — the minimum savings hygiene delivers on a graph where authors have already filled in load-bearing metadata.
 
-1. **`get_references` 0% on audited graphs.** Diagnostic on EA-OS's hub node (37 incoming edges) and Definite's hub (78 incoming edges): every single edge had non-null `linkType`, `linkDescription`, *and* target `description`. The original audit's "~40% of edges lack a description" predates Phase D-0 / PR #26's authoring sweep, which filled in load-bearing edge descriptions across these graphs. Post-cleanup, the nulls we were targeting at this layer don't exist.
+### Savings vary with graph maturity
 
-2. **`get_graph` 0%.** `DecoratedEdge` already uses `linkType?` / `description?` (optional, not nullable). `JSON.stringify` drops `undefined` keys for free — the wire format was already clean here. The original audit's claim that nulls travel on every edge in graph responses was wrong; they're `undefined`, not `null`.
+Wire-byte savings from `stripNulls` are inversely correlated with how much authoring has been done. A graph passes through phases:
 
-3. **Real wins concentrate in `get_node` / `context` / `navigate`** — specifically the top-level metadata nulls (`parent`, `content`, `created`, `updated`, `author`) on root nodes and nodes without git history. 5–12 nulls per response. Modest absolute bytes; only the `navigate` ratio is meaningful because the response is small.
+1. **Bootstrap / discovery (high savings expected).** Fresh `spandrel init` + first-pass content. Most edges have a type but no description (`linkDescription: null` everywhere). Many descriptions are placeholder or stub. No git history yet (`created`/`updated`/`author` all null). The audit's original "40%+ edges lack description" applies here. Expected hygiene impact: high — closer to the original 10–20% estimate.
 
-**Implications:**
+2. **Active authoring (moderate savings).** Descriptions filled in over time. Stub markers replaced. Git history accumulates. Some load-bearing edges still lack per-edge prose. Expected hygiene impact: medium, decreasing toward the mature floor.
+
+3. **Mature / audited (low savings — the measured state above).** Authoring sweep has filled in load-bearing edge descriptions; companion files have history. Few nulls remain for hygiene to strip. The remaining wins (`navigate`/`get_node` metadata nulls) are structural — root nodes have `parent: null`, content-omitting calls have `content: null` — and survive regardless of authoring effort.
+
+The numbers in the table are state 3. State 1 — the typical first-week experience for a new Spandrel user — was not measured here, but is structurally where hygiene's value is highest. The change is most valuable for the agents reading a graph that hasn't been audited yet — i.e., most of them.
+
+### Why the original 10–20% estimate was wrong
+
+1. **`get_references` 0% on audited graphs.** Diagnostic on EA-OS's hub node (37 incoming edges) and Definite's hub (78 incoming edges): every single edge had non-null `linkType`, `linkDescription`, *and* target `description`. The original audit's "~40% of edges lack a description" predates Phase D-0 / PR #26's authoring sweep. Post-cleanup, the nulls we were targeting at this layer don't exist on these specific graphs — but they exist on every graph that hasn't yet had that sweep.
+
+2. **`get_graph` 0%.** `DecoratedEdge` already uses `linkType?` / `description?` (optional, not nullable). `JSON.stringify` drops `undefined` keys for free — the wire format was already clean here. The audit's claim that nulls travel on every edge in graph responses was wrong; they're `undefined`, not `null`. This 0% is true across all maturity states.
+
+3. **Real wins concentrate in `get_node` / `context` / `navigate`** — specifically the top-level metadata nulls (`parent`, `content`, `created`, `updated`, `author`) on root nodes and nodes without git history. 5–12 nulls per response. Modest absolute bytes; only the `navigate` ratio is meaningful because the response is small. These wins are *structural* — they apply at every maturity state, not just bootstrap.
+
+### Implications
 
 - The impl is correct — it strips what's there. The estimate was wrong, not the implementation.
-- On uncurated graphs (the more common case for new Spandrel users before audit cleanup), savings are likely higher. We have no measurement on this case yet — could be a follow-up.
-- The dominant context-rot driver on mature graphs is not nulls. It's authored verbosity (long edge descriptions, repeated metadata). Stripping nulls does not address that; further wire-format work would need either (a) deduping repeated content across `nodes[]` and `edges[]` in graph responses, or (b) shortening edge metadata semantically — both of which touch REST or content semantics and were out of scope here.
-- Ship anyway: the change is correct, risk-free, forward-compatible (helps every uncurated graph), and the calibration finding itself is the next-spec input.
+- **The right framing is maturity-dependent**, not a single percentage. Hygiene helps most exactly when the graph is being built; helps less as the graph matures and authors fill in the data. This is appropriate: agents reading new graphs are exactly the case context-rot hurts most, and hygiene targets that case directly.
+- On *mature* graphs, the dominant context-rot driver is not nulls — it's authored verbosity (long edge descriptions, repeated metadata). Stripping nulls does not address that; further wire-format work would need either (a) deduping repeated content across `nodes[]` and `edges[]` in graph responses, or (b) shortening edge metadata semantically — both of which touch REST or content semantics and were out of scope here.
+- The next calibration step is measurement on a freshly-bootstrapped graph (or pre-audit-sweep snapshot of an existing one) to ground the bootstrap-state number empirically.
+- Ship anyway: the change is correct, risk-free, forward-compatible. The graphs it helps most are the ones we don't see day-to-day.
 
 ## Status
 
