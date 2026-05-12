@@ -56,6 +56,14 @@ The phases the reframe introduces:
 
 These are placeholder names — each gets its own spec when it's the next thing.
 
+### Delivery-side lane (parallel to Phase E)
+
+Context-pack quality has two layers: what the graph *contains* (authoring) and what the wire surface *delivers* (serialization). Phase D-E-F-G targets authoring. The delivery layer gets its own parallel lane: **context-pack hygiene** — strip null/empty/undefined fields from MCP tool responses while keeping REST schema stable. Spec: `specs/2026-05-11-context-pack-hygiene.md`.
+
+D-3 calibration data supports this prioritization. The PR #31 baseline run found that **`weak_edge_description` count does not correlate with task-fidelity outcomes** on real graphs — the EA-OS task with zero findings scored 0.88; the task with the most findings scored 0.98. That finding inverts the marginal-return curve on authoring-side detectors and shifts attention to the wire surface, where every null field eats LLM context window for no information gain. Estimated impact on MCP traversal responses: 10–20% size reduction on link-heavy calls; larger on bulk `get_graph` responses.
+
+The delivery lane is bounded and one-shot: a single `stripNulls` install at the MCP tool-response serialization boundary (`src/server/mcp.ts:152` `asTextResult`), ~80 LOC including tests. It does not have follow-on phases — once the hygiene rule ships, the wire surface is clean and the work is done. Future MCP wire improvements (if any) would be tracked separately.
+
 ## Phase D — revised scope (task-fidelity first)
 
 Four workstreams, ordered. D-0 was added after this spec's first draft when Trevor's manual EA-OS audit (logged in `SPANDREL-FEEDBACK.md`) surfaced detector mis-fire rates of 25–100% on three of the most-fired finding classes. Calibrating the harness against detectors that fire majority noise would measure noise reduction, not graph quality. D-0 fixes that upstream so D-1 onward operates on clean signal.
