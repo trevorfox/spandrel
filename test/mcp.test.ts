@@ -547,6 +547,56 @@ describe("MCP Server", () => {
     expect(data.success).toBe(false);
     expect(data.message).toContain("already exists");
   });
+
+  // Context-pack hygiene: every JSON-returning tool's response must contain no
+  // `null` and no `""` after the stripNulls pass at asTextResult. See
+  // specs/2026-05-11-context-pack-hygiene.md.
+  it("strips null and empty-string fields from JSON tool responses", async () => {
+    function walk(value: unknown, path: string, problems: string[]): void {
+      if (value === null) {
+        problems.push(`null at ${path}`);
+        return;
+      }
+      if (value === "") {
+        problems.push(`empty string at ${path}`);
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach((v, i) => walk(v, `${path}[${i}]`, problems));
+        return;
+      }
+      if (typeof value === "object") {
+        for (const [k, v] of Object.entries(value)) {
+          walk(v, `${path}.${k}`, problems);
+        }
+      }
+    }
+
+    async function callJson(name: string, args: Record<string, unknown>): Promise<unknown> {
+      const result = await client.callTool({ name, arguments: args });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      return JSON.parse(text);
+    }
+
+    // The default fixture has nodes/edges without descriptions, edges without
+    // linkType labels, and missing created/updated metadata — covers the
+    // five categories the spec calls out.
+    const tools: Array<{ name: string; args: Record<string, unknown> }> = [
+      { name: "get_node", args: { path: "/clients/acme" } },
+      { name: "get_node", args: { path: "/clients/acme", includeContent: true } },
+      { name: "context", args: { path: "/clients/acme" } },
+      { name: "get_references", args: { path: "/clients/acme", direction: "both" } },
+      { name: "navigate", args: { path: "/" } },
+      { name: "get_graph", args: { root: "/", depth: 2 } },
+    ];
+
+    for (const { name, args } of tools) {
+      const response = await callJson(name, args);
+      const problems: string[] = [];
+      walk(response, name, problems);
+      expect(problems, `${name} emitted null/empty fields: ${problems.join(", ")}`).toEqual([]);
+    }
+  });
 });
 
 describe("MCP — buildInstructions", () => {

@@ -189,7 +189,7 @@ Cannon impact: zero coordination. Cannon hosts MCP but doesn't typed-consume its
 
 ## What this guarantees
 
-- Every existing MCP tool response shrinks by the size of its absent fields. Real-graph estimate: 10–20% reduction on link-heavy responses (`get_references`, `navigate`, `get_graph`); larger on bulk responses.
+- Every existing MCP tool response shrinks by the size of its absent fields. (See "Calibration findings" below for measured impact on real graphs — the original "10–20% on link-heavy responses" estimate did not survive contact with audited graphs.)
 - The change is testable: an integration test parsing each tool's `text` response and asserting `null`-free shape catches regressions if a future change reintroduces nulls in the wire format.
 - REST consumers see no behavior change.
 
@@ -205,8 +205,34 @@ Cannon impact: zero coordination. Cannon hosts MCP but doesn't typed-consume its
 - Can ship independently of `specs/2026-05-11-link-type-classes.md` and `specs/2026-05-11-contents-list-rendering.md`. No file overlap.
 - Should land before Phase E2 work begins so the harness baseline that calibrates E2 detectors operates on the cleaner wire format.
 
+## Calibration findings (2026-05-12)
+
+Measured wire-byte reduction on three real graphs after the impl landed in PR #35. For each tool, computed `len(JSON.stringify(rawResolveOutput))` vs `len(JSON.stringify(stripNulls(rawResolveOutput)))`.
+
+| Graph | Total reduction | Best tool | Worst tool |
+|---|---|---|---|
+| Spandrel `docs/` (33 nodes, 234 edges) | 0.8% | `navigate /` (8.8%) | `get_graph /` (0.0%) |
+| EA-OS (256 nodes, ~1100 edges) | 2.0% | `navigate /` (12.3%) | `get_references` hub, `get_graph /` (0.0%) |
+| Definite (240 nodes, ~1300 edges) | 0.6% | `navigate /` (4.1%) | `get_references` hub, `get_graph /` (0.0%) |
+
+**Why the original 10–20% estimate was wrong:**
+
+1. **`get_references` 0% on audited graphs.** Diagnostic on EA-OS's hub node (37 incoming edges) and Definite's hub (78 incoming edges): every single edge had non-null `linkType`, `linkDescription`, *and* target `description`. The original audit's "~40% of edges lack a description" predates Phase D-0 / PR #26's authoring sweep, which filled in load-bearing edge descriptions across these graphs. Post-cleanup, the nulls we were targeting at this layer don't exist.
+
+2. **`get_graph` 0%.** `DecoratedEdge` already uses `linkType?` / `description?` (optional, not nullable). `JSON.stringify` drops `undefined` keys for free — the wire format was already clean here. The original audit's claim that nulls travel on every edge in graph responses was wrong; they're `undefined`, not `null`.
+
+3. **Real wins concentrate in `get_node` / `context` / `navigate`** — specifically the top-level metadata nulls (`parent`, `content`, `created`, `updated`, `author`) on root nodes and nodes without git history. 5–12 nulls per response. Modest absolute bytes; only the `navigate` ratio is meaningful because the response is small.
+
+**Implications:**
+
+- The impl is correct — it strips what's there. The estimate was wrong, not the implementation.
+- On uncurated graphs (the more common case for new Spandrel users before audit cleanup), savings are likely higher. We have no measurement on this case yet — could be a follow-up.
+- The dominant context-rot driver on mature graphs is not nulls. It's authored verbosity (long edge descriptions, repeated metadata). Stripping nulls does not address that; further wire-format work would need either (a) deduping repeated content across `nodes[]` and `edges[]` in graph responses, or (b) shortening edge metadata semantically — both of which touch REST or content semantics and were out of scope here.
+- Ship anyway: the change is correct, risk-free, forward-compatible (helps every uncurated graph), and the calibration finding itself is the next-spec input.
+
 ## Status
 
 - Spec only; code unbuilt.
 - Approximate scope: ~80 LOC (utility + tests + integration test extensions) plus the one-line install in `src/server/mcp.ts` and a paragraph in `src/server/design.md`.
 - One coherent PR.
+- **Update 2026-05-12:** Impl shipped via PR #35. Calibration findings appended above; supersede the original 10–20% estimate.

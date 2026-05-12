@@ -63,6 +63,17 @@ How response formatting affects agent performance, informed by retrieval and con
 
 **One call per orientation.** An agent's first interaction with the graph should fully orient it. Multi-hop discovery (call root → pick a child → call that → pick again) wastes tool calls on navigation boilerplate and pollutes the agent's context with intermediate results it won't need again. The root context response should make a second orientation call unnecessary.
 
+### MCP vs REST hygiene divergence
+
+MCP and REST emit different wire shapes for the same underlying graph data. This is intentional, optimized per consumer.
+
+- **MCP tool responses** drop fields whose value is `null`, `undefined`, or `""` before serialization. The single `stripNulls` pass at `asTextResult` (`src/server/mcp.ts`) walks every JSON tool response and omits absent keys. `false`, `0`, empty arrays, and empty objects are preserved — those carry meaning. LLM consumers reading the response see only meaningful keys; no context-window tokens are spent on `field: null` markers.
+- **REST responses** keep explicit `null` markers on the same fields. Typed REST consumers (Cannon, downstream TypeScript clients) treat the schema as part of the contract — `field: null` distinguishes "checked, no value" from "field omitted." Stripping it would break consumers that read `field === null` or rely on stable schema shape for typed parsing.
+
+Same data, two surfaces, two consumers. The framework optimizes for each rather than forcing one shape on both. Spec: `specs/2026-05-11-context-pack-hygiene.md`.
+
+If a future MCP tool ever needs to preserve explicit nulls in its response (e.g., a diagnostic tool whose output schema is the value), it routes around `asTextResult` and serializes manually — `stripNulls` is the default for the JSON-tool path, not a global serialization policy.
+
 ## Writer
 
 The writer in `writer.ts` handles file operations for mutations: creating markdown files with frontmatter, updating existing files, and deleting files. It operates on the file system, not on the storage layer — mutations write to markdown files, then the compiler recompiles the affected node.

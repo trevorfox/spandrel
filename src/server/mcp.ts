@@ -23,6 +23,7 @@ import {
 import { recompileNode } from "../compiler/compiler.js";
 import { moveThing, deleteThingWithReferrers } from "./mutations.js";
 import { storeToGraph } from "../storage/store-to-graph.js";
+import { stripNulls } from "./strip-nulls.js";
 import type { HistoryEntry } from "../compiler/types.js";
 
 export interface McpServerOptions {
@@ -151,7 +152,7 @@ async function filterReadable<T extends { path: string }>(
 
 function asTextResult(value: unknown): { content: Array<{ type: "text"; text: string }> } {
   return {
-    content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
+    content: [{ type: "text" as const, text: JSON.stringify(stripNulls(value), null, 2) }],
   };
 }
 
