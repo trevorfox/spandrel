@@ -1,8 +1,8 @@
 # Spandrel
 
-Spandrel turns your markdown knowledge repo into a high-fidelity context graph served over MCP — built to keep agents faithful to your structure and your domain.
+Spandrel turns your markdown knowledge repo into a high-fidelity context graph served over MCP — built to keep agents faithful to your structure and effective on your work.
 
-## Why
+## Built for knowledge
 
 Coding agents are great for authoring knowledge repos, but they are weak at retrieving knowledge. Grep, glob, and file reads suit code well, but they fare worse on institutional knowledge—rules, decisions, runbooks—where the useful answer rarely matches one obvious search string.
 
@@ -11,15 +11,31 @@ Three problems compound:
 - **Silent staleness.** Without metadata, no one knows what's load-bearing or out of date.
 - **Conflated concerns.** Instructions, knowledge, and skills crammed into the same files reduce reuse and feed hallucination.
 
-## What
+## A framework for high-fidelity agent context
 
-Two readings of the same artifact. **Authoring view:** a markdown tree compiles into a typed graph where every Thing has a name, description, and links. **Consumer view:** agents call MCP tools (`context`, `get_node`, `navigate`, `get_references`, `get_graph`) and receive shaped, governed *context packs* — sized to the question, edge types (`owns`, `depends-on`, `relates-to`) as first-class data, access permissions enforced at the wire.
+A framework for compiling markdown into a navigable, queryable, governable knowledge graph:
 
-Common shapes that fit naturally into a Spandrel graph: client and account briefs, decision logs, runbooks, playbooks, ICP definitions, skill libraries, team rosters.
+- **Compiler** — markdown tree → typed graph. Every node has a name, description, and links; every link has a type and per-edge description.
+- **MCP + REST server** — exposes the graph through `context`, `get_node`, `navigate`, `get_references`, `get_graph`. Same data, two surfaces, one access contract.
+- **Access policy** — `_access/config.yaml` defines roles and per-path read/write/admin; enforced at the wire.
+- **Audit** — `spandrel audit` flags low-signal content (weak descriptions, stub markers, thin bodies); `--semantic` surfaces missing links between concepts that read like neighbors but aren't connected.
+- **Task-fidelity harness** — measures whether structural changes to your graph actually make agents better at real tasks.
+
+Plus a browser viewer at `localhost:4000` and a static-publish bundle for read-only production hosting.
+
+Common shapes that fit naturally into a Spandrel graph: user personas, product features, client and account briefs, decision logs, runbooks, playbooks, ICP definitions, skill libraries, team rosters.
 
 ![Spandrel viewer rendering the content-model collection at spandrel.org/content-model/](assets/spandrel-content-model.png)
 
 *The browser viewer at `localhost:4000` — and at [spandrel.org/content-model/](https://spandrel.org/content-model/) — renders any node as readable markdown plus its typed edges, with a clickable d3-force graph alongside.*
+
+**See it running.** [spandrel.org](https://spandrel.org) is itself a Spandrel graph — point your agent at it before installing anything locally:
+
+```bash
+claude mcp add spandrel https://mcp.spandrel.org/mcp --transport http --scope user
+```
+
+Then ask Claude: *"Use the spandrel MCP to orient me — start at `/` and walk me through the philosophy and content model."* You'll see progressive disclosure in action: the agent navigates by following edges, reading descriptions to decide where to go next, loading content only when needed.
 
 ## Architecture
 
@@ -27,7 +43,7 @@ Common shapes that fit naturally into a Spandrel graph: client and account brief
 
 Markdown is the source of truth. The compiler builds a graph in memory; the same `AccessPolicy` instance gates every wire surface; MCP and REST are siblings, not a stack.
 
-## How
+## A toolchain, not a service
 
 A three-layer toolchain produces the artifact above:
 
@@ -45,17 +61,7 @@ Spandrel ships with tools to evaluate graph quality, so you can answer *"is this
 
 Calibration on our own graphs: a mature graph scored **0.91** baseline on a 10-task set; structural cleanup (filling load-bearing descriptions, restructuring node bodies) moved it to **0.96**. The sample is small and local to that graph — the point is you can run the same harness against yours.
 
-## Try it (hosted)
-
-Before installing anything, point your agent at the live docs MCP — [mcp.spandrel.org](https://mcp.spandrel.org) serves the [spandrel.org](https://spandrel.org) docs graph:
-
-```bash
-claude mcp add spandrel https://mcp.spandrel.org/mcp --transport http --scope user
-```
-
-Then ask Claude: *"Use the spandrel MCP to orient me — start at `/` and walk me through the philosophy and content model."* You'll see progressive disclosure in action: the agent navigates by following edges, reading descriptions to decide where to go next, loading content only when needed.
-
-## Get started (your own)
+## Get started
 
 Zero to a local MCP endpoint in five steps. For a guided walkthrough of designing a real graph, see [ONBOARDING.md](ONBOARDING.md).
 
