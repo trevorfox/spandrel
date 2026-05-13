@@ -1,30 +1,67 @@
 # Spandrel
 
-**Structured knowledge for your Claude Code agent.** CLAUDE.md, skills, rules, playbooks, domain context — you're already building a knowledge repo. Without structure, those files sprawl into monoliths that load whole into every conversation. Spandrel turns the pile into a governed graph: typed relationships, validated content, progressive disclosure, access control. Your agent navigates by following edges via MCP — hundreds of tokens per step instead of dumping every file into every turn. Better decisions, more consistent production, citable knowledge.
+Spandrel turns your markdown knowledge repo into a high-fidelity context graph served over MCP — built to keep agents faithful to your structure and effective on your work.
 
-Old technologies, new structure. Markdown, git, YAML, HTTP — none of these are new. Assembled in the right configuration, something emerges from the spaces between them: a navigable, queryable graph that both humans and agents can traverse.
+## Built for knowledge
 
-Named after the [architectural byproduct](https://en.wikipedia.org/wiki/Spandrel_(biology)) Gould & Lewontin argued becomes more interesting than the structure it emerged from. File systems weren't designed for knowledge graphs. Git wasn't designed for editorial workflow. Markdown wasn't designed for progressive disclosure. But put them together and the structure you build to hold knowledge becomes its own thing worth having.
+Coding agents are great for authoring knowledge repos, but they are weak at retrieving knowledge. Grep, glob, and file reads suit code well, but they fare worse on institutional knowledge—rules, decisions, runbooks—where the useful answer rarely matches one obvious search string.
 
-## Try it in 30 seconds
+Three problems compound:
+- **Brittle retrieval.** Grep finds strings; agents need to navigate concepts.
+- **Silent staleness.** Without metadata, no one knows what's load-bearing or out of date.
+- **Conflated concerns.** Instructions, knowledge, and skills crammed into the same files reduce reuse and feed hallucination.
 
-Before installing anything, point your agent at the hosted docs MCP:
+## A framework for high-fidelity agent context
+
+A framework for compiling markdown into a navigable, queryable, governable knowledge graph:
+
+- **Compiler** — markdown tree → typed graph. Every node has a name, description, and links; every link has a type and per-edge description.
+- **MCP + REST server** — exposes the graph through `context`, `get_node`, `navigate`, `get_references`, `get_graph`. Same data, two surfaces, one access contract.
+- **Access policy** — `_access/config.yaml` defines roles and per-path read/write/admin; enforced at the wire.
+- **Audit** — `spandrel audit` flags low-signal content (weak descriptions, stub markers, thin bodies); `--semantic` surfaces missing links between concepts that read like neighbors but aren't connected.
+- **Task-fidelity harness** — measures whether structural changes to your graph actually make agents better at real tasks.
+
+Plus a browser viewer at `localhost:4000` and a static-publish bundle for read-only production hosting.
+
+Common shapes that fit naturally into a Spandrel graph: user personas, product features, client and account briefs, decision logs, runbooks, playbooks, ICP definitions, skill libraries, team rosters.
+
+![Spandrel viewer rendering the content-model collection at spandrel.org/content-model/](assets/spandrel-content-model.png)
+
+*The browser viewer at `localhost:4000` — and at [spandrel.org/content-model/](https://spandrel.org/content-model/) — renders any node as readable markdown plus its typed edges, with a clickable d3-force graph alongside.*
+
+**See it running.** [spandrel.org](https://spandrel.org) is itself a Spandrel graph — point your agent at it before installing anything locally:
 
 ```bash
 claude mcp add spandrel https://mcp.spandrel.org/mcp --transport http --scope user
 ```
 
-Then ask Claude: *"Use the spandrel MCP to orient me — start at `/` and walk me through the philosophy and content model."* You'll see progressive disclosure in action: the agent navigates by following edges, reading descriptions to decide where to go next, loading content only when needed. The docs graph at [spandrel.org](https://spandrel.org) is itself a Spandrel graph; `mcp.spandrel.org` serves it as MCP.
+Then ask Claude: *"Use the spandrel MCP to orient me — start at `/` and walk me through the philosophy and content model."* You'll see progressive disclosure in action: the agent navigates by following edges, reading descriptions to decide where to go next, loading content only when needed.
 
-When you're ready to build your own, continue below.
+## Architecture
 
-## Who this is for
+![Spandrel architecture — markdown tree compiles into a graph governed by a single AccessPolicy, served over MCP and REST to Claude Code, the browser viewer, and HTTP/SDK clients](assets/architecture.png)
 
-If you use Claude Code and your CLAUDE.md is sprawling, your skills are multiplying, your rules are scattered across repos — Spandrel is the substrate. Your agent makes better decisions when it can navigate typed relationships and cite specific nodes. Your work is more consistent when the rules it follows are validated and versioned. Your knowledge is shareable across projects when it lives at a stable address rather than buried in a file tree.
+Markdown is the source of truth. The compiler builds a graph in memory; the same `AccessPolicy` instance gates every wire surface; MCP and REST are siblings, not a stack.
 
-Starting points for common scenarios: [docs/onboarding/templates/](docs/onboarding/templates/).
+## A toolchain, not a service
 
-## Quickstart
+A three-layer toolchain produces the artifact above:
+
+- **Compile** — `spandrel compile` or `spandrel dev` turns a markdown tree into a graph. Deterministic, fast, watches for changes.
+- **Serve** — REST + MCP through one `AccessPolicy`. Same data, two surfaces, one access contract.
+- **Govern** — `_links/config.yaml` (link vocabulary), `_access/config.yaml` (per-path roles), `DESIGN.md` (collection schemas).
+
+## Measure the graph
+
+Spandrel ships with tools to evaluate graph quality, so you can answer *"is this graph good?"* rather than guess.
+
+- **`spandrel audit`** — cheap heuristics flag low-signal descriptions, stub markers, thin bodies, weak edges.
+- **`spandrel audit --semantic`** — embeddings surface missing links between concepts that read like neighbors but aren't connected.
+- **Task-fidelity harness** (`test/fidelity/`) — runs curated questions through a Claude Code subprocess against your graph's MCP and scores answers with an LLM judge. Measures whether a structural change improved or degraded agent performance on real tasks.
+
+Calibration on our own graphs: a mature graph scored **0.91** baseline on a 10-task set; structural cleanup (filling load-bearing descriptions, restructuring node bodies) moved it to **0.96**. The sample is small and local to that graph — the point is you can run the same harness against yours.
+
+## Get started
 
 Zero to a local MCP endpoint in five steps. For a guided walkthrough of designing a real graph, see [ONBOARDING.md](ONBOARDING.md).
 
@@ -34,14 +71,14 @@ Zero to a local MCP endpoint in five steps. For a guided walkthrough of designin
 npm install -g spandrel
 ```
 
-**2. Create a graph.** Scaffolds the root node plus a `/linkTypes` collection seeded with the baseline vocabulary (`owns`, `depends-on`, `relates-to`, …).
+**2. Create a graph.** Scaffolds the root node plus a `_links/config.yaml` seeded with the baseline vocabulary (`owns`, `depends-on`, `relates-to`, …).
 
 ```bash
 spandrel init my-graph --name "My Graph" --description "Trying Spandrel out."
 cd my-graph
 ```
 
-**3. Add content.** Create `clients/acme.md`:
+**3. Add a node.** Create `clients/acme.md`:
 
 ```markdown
 ---
@@ -51,26 +88,26 @@ links:
   - to: /
     type: relates-to
 ---
-Main engagement this quarter. See also [the linking pattern](/linkTypes/owns).
+Main engagement this quarter.
 ```
 
 See [docs/patterns/linking.md](docs/patterns/linking.md) for frontmatter vs. inline links.
 
-**4. Compile and serve.** Starts the REST + MCP surface and the visual viewer at `localhost:4000`, plus a file watcher that reloads both on save.
+**4. Compile and serve.** Starts REST + MCP and a visual viewer at `localhost:4000`, plus a file watcher that reloads both on save.
 
 ```bash
 spandrel dev .
 ```
 
-Open `localhost:4000` in a browser to navigate the graph visually — rendered markdown, clickable d3-force graph, typed relationships, and authoring warnings, all in a limestone-styled reading surface.
+Open `localhost:4000` to navigate the graph visually — rendered markdown, clickable d3-force graph, typed relationships, authoring warnings.
 
-**5. Connect Claude Desktop.** Get the MCP snippet and paste it into `~/Library/Application Support/Claude/claude_desktop_config.json`:
+**5. Connect Claude Desktop.** Get the MCP snippet:
 
 ```bash
 spandrel init-mcp .
 ```
 
-Restart Claude Desktop. The graph is live — ask it to start at `/` and navigate.
+Paste the output into `~/Library/Application Support/Claude/claude_desktop_config.json` and restart Claude Desktop. Ask it to start at `/` and navigate.
 
 ## Repo structure
 
@@ -80,13 +117,14 @@ A knowledge repo is pure content — no framework code, no system files:
 my-knowledge/
 ├── index.md                  Root — what this graph is about
 ├── _access/config.yaml       Access control (optional)
+├── _links/config.yaml        Link-type vocabulary
 ├── skills/                   Agent roles (compiled into graph)
 │   └── context-engineer/
 │       ├── index.md          Discoverable node
 │       └── SKILL.md          Operational instructions
 ├── clients/                  A collection...
 │   ├── index.md              Collection description
-│   ├── design.md             What a well-formed member looks like
+│   ├── DESIGN.md             What a well-formed member looks like
 │   ├── acme-corp.md          Leaf node — a simple Thing
 │   └── globex/               Directory node — a Thing with children
 │       └── index.md
@@ -94,14 +132,14 @@ my-knowledge/
     └── jane.md               Leaf node
 ```
 
-Two ways to create a Thing: **`foo.md`** (leaf at `/parent/foo`) or **`foo/index.md`** (composite at `/parent/foo`, can have children). If both exist, the directory wins. `design.md`, `SKILL.md`, `AGENT.md`, and `README.md` are companion files — never compiled as nodes.
+Two ways to create a Thing: **`foo.md`** (leaf at `/parent/foo`) or **`foo/index.md`** (composite at `/parent/foo`, can have children). If both exist, the directory wins. `DESIGN.md`, `SKILL.md`, `AGENT.md`, and `README.md` are companion files — never compiled as nodes.
 
-## How it serves
+## Deployment modes
 
 Three modes, one compiled graph:
 
 - **Local dev** — `spandrel dev` runs REST + MCP + a visual viewer on localhost. The authoring loop.
-- **Static + MCP adapter** — `spandrel publish --static` emits a self-contained bundle; a thin serverless function adapts MCP over it. Read-only, hostable anywhere. This is the recommended production pattern. `mcp.spandrel.org` is a running example; source at [trevorfox/spandrel-mcp](https://github.com/trevorfox/spandrel-mcp).
+- **Static + MCP adapter** — `spandrel publish --static` emits a self-contained bundle; a thin serverless function adapts MCP over it. Read-only, hostable anywhere. The recommended production pattern. [mcp.spandrel.org](https://mcp.spandrel.org) is a running example; source at [trevorfox/spandrel-mcp](https://github.com/trevorfox/spandrel-mcp).
 - **Live backend** — a Postgres-backed `GraphStore` for graphs that need writes, identity-aware reads, or federation.
 
 Full walkthrough: [docs/deployment/](docs/deployment/).

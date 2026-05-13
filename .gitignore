@@ -13,3 +13,4 @@ _audit/embeddings.db
 _audit/embeddings.db-journal
 _audit/embeddings.db-wal
 _audit/embeddings.db-shm
+scripts/fonts/
