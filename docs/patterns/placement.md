@@ -1,10 +1,10 @@
 ---
 name: Placement
-description: Place by inbound-link count — 1 referrer nests under that context, 2-3 deserves its own collection or top-level spot, many goes top-level. When in doubt start high; nesting later is cheaper than promoting. `kind: document` + `navigable: false` demotes reference material out of default listings without losing searchability or linkability.
+description: "Place by inbound-link count — 1 referrer nests under that context, 2-3 deserves its own collection or top-level spot, many goes top-level. When in doubt start high; nesting later is cheaper than promoting. `kind: document` + `navigable: false` demotes reference material out of default listings without losing searchability or linkability."
 links:
   - to: /content-model/paths
     type: relates-to
-    description: Placement is the authoring discipline; paths are the addressing mechanic — moving a file changes its address, so placement decisions create durable identities
+    description: "Placement is the authoring discipline; paths are the addressing mechanic — moving a file changes its address, so placement decisions create durable identities"
 ---
 
 # Placement Pattern

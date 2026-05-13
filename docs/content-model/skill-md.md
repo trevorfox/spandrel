@@ -1,10 +1,10 @@
 ---
 name: SKILL.md
-description: Agent skill loading specs — capability context for working in a domain. Compiled as a document node alongside its containing composite.
+description: "Agent skill loading specs — capability context for working in a domain. Compiled as a document node alongside its containing composite."
 links:
   - to: /content-model/design-md
     type: relates-to
-    description: Sibling companion file form — both compile as `kind: document, navigable: false`; DESIGN.md describes intent, SKILL.md describes agent capabilities for the same composite
+    description: "Sibling companion file form — both compile as `kind: document, navigable: false`; DESIGN.md describes intent, SKILL.md describes agent capabilities for the same composite"
 ---
 
 # SKILL.md

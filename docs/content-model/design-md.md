@@ -1,16 +1,16 @@
 ---
 name: DESIGN.md
-description: Design documents as companion files — intent over configuration, compiled as document nodes alongside their containing composite
+description: "Design documents as companion files — intent over configuration, compiled as document nodes alongside their containing composite"
 links:
   - to: /philosophy
     type: relates-to
-    description: DESIGN.md is the operational form of "intent over configuration" — markdown describing decisions instead of YAML parameterizing behavior
+    description: 'DESIGN.md is the operational form of "intent over configuration" — markdown describing decisions instead of YAML parameterizing behavior'
   - to: /content-model/nodes
     type: relates-to
-    description: A DESIGN.md compiles as a `kind: document, navigable: false` child of its containing composite — same node model, different default visibility
+    description: "A DESIGN.md compiles as a `kind: document, navigable: false` child of its containing composite — same node model, different default visibility"
   - to: /patterns/collections
     type: relates-to
-    description: A collection's DESIGN.md is where its member shape lives — required frontmatter fields, expected sub-Things, and (optionally) `schema:` + `graph:` blocks the audit pass validates
+    description: "A collection's DESIGN.md is where its member shape lives — required frontmatter fields, expected sub-Things, and (optionally) `schema:` + `graph:` blocks the audit pass validates"
 ---
 
 # DESIGN.md
