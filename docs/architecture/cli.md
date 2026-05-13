@@ -1,19 +1,19 @@
 ---
 name: CLI
-description: Entry point that wires compiler, storage, access policy, and wire surfaces
+description: "Entry point that wires compiler, storage, access policy, and wire surfaces"
 links:
   - to: /architecture/compiler
     type: depends-on
-    description: Every command except `init` runs the compiler at boot — a graph is recompiled each time a CLI command starts
+    description: "Every command except `init` runs the compiler at boot — a graph is recompiled each time a CLI command starts"
   - to: /architecture/access-policy
     type: depends-on
-    description: `dev` and `mcp` construct the policy at boot and hand it to the wire surface they serve; `publish` skips this since its output is read-only
+    description: "`dev` and `mcp` construct the policy at boot and hand it to the wire surface they serve; `publish` skips this since its output is read-only"
   - to: /architecture/mcp
     type: depends-on
-    description: `spandrel mcp` is the CLI command that boots the MCP server over stdio; `mv` and `rm` are CLI peers of MCP write tools
+    description: "`spandrel mcp` is the CLI command that boots the MCP server over stdio; `mv` and `rm` are CLI peers of MCP write tools"
   - to: /architecture/rest
     type: depends-on
-    description: `spandrel dev` boots the REST surface plus the watch loop and per-node static routes
+    description: "`spandrel dev` boots the REST surface plus the watch loop and per-node static routes"
 ---
 
 # CLI
